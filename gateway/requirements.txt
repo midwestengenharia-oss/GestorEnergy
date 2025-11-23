@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+playwright
+requests
+pydantic
+python-jose[cryptography]
+python-dotenv
+python-multipart

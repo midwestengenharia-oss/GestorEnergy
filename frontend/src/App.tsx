@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { api, Empresa, UnidadeConsumidora, Fatura } from './lib/api';
+import { useToast } from './components/Toast';
+import { useAuth } from './contexts/AuthContext';
 import {
-  Activity, Plug, Plus, RefreshCw, ArrowLeft, Home, FileText, Download, Loader2, Sun, BatteryCharging, ChevronDown, ChevronUp, Barcode, QrCode, X, Share2
+  Activity, Plug, Plus, RefreshCw, ArrowLeft, Home, FileText, Download, Loader2, Sun, BatteryCharging, ChevronDown, ChevronUp, Barcode, QrCode, X, Share2, LogOut, User
 } from 'lucide-react';
 
 // Função auxiliar para converter Base64 em Download
@@ -16,9 +18,14 @@ const downloadBase64File = (base64Data: string, fileName: string) => {
 };
 
 function App() {
+  // --- HOOKS ---
+  const toast = useToast();
+  const { usuario, logout } = useAuth();
+
   // --- ESTADOS ---
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingEmpresas, setLoadingEmpresas] = useState(true);
 
   // Navegação e Abas
   const [vendoEmpresa, setVendoEmpresa] = useState<Empresa | null>(null);
@@ -42,15 +49,25 @@ function App() {
   const [novoTel, setNovoTel] = useState("");
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<number | null>(null);
   const [smsCode, setSmsCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [validatingSms, setValidatingSms] = useState(false);
 
   useEffect(() => { fetchEmpresas(); }, []);
 
   // --- API ACTIONS ---
   const fetchEmpresas = async () => {
-    try { const res = await api.get('/empresas'); setEmpresas(res.data); } catch (e) { }
+    setLoadingEmpresas(true);
+    try {
+      const res = await api.get('/empresas');
+      setEmpresas(res.data);
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao carregar empresas');
+    } finally {
+      setLoadingEmpresas(false);
+    }
   };
 
-  // Função para recarregar tudo da empresa atual (Botão Refresh)
+  // Funcao para recarregar tudo da empresa atual (Botao Refresh)
   const refreshDadosEmpresa = async () => {
     if (!vendoEmpresa) return;
     setLoading(true);
@@ -65,29 +82,43 @@ function App() {
         setUsinasDoCliente(resUsinas.data);
       }
 
-      // Limpa caches para forçar atualização das faturas se abrir de novo
+      // Limpa caches para forcar atualizacao das faturas se abrir de novo
       setFaturasPorUc({});
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+      toast.success('Dados atualizados com sucesso');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao atualizar dados');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const abrirDetalhesEmpresa = async (empresa: Empresa) => {
     setVendoEmpresa(empresa);
     setAbaAtiva('geral');
     setUcsDoCliente([]); setFaturasPorUc({}); setExpandedUcs({});
+    setLoading(true);
     try {
       const res = await api.get(`/empresas/${empresa.id}/ucs`);
       setUcsDoCliente(res.data);
-    } catch (e) { alert("Erro ao carregar UCs"); }
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao carregar UCs');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const carregarUsinas = async () => {
     if (!vendoEmpresa) return;
     setAbaAtiva('usinas');
+    setLoading(true);
     try {
       const res = await api.get(`/empresas/${vendoEmpresa.id}/usinas`);
       setUsinasDoCliente(res.data);
-    } catch (e) { alert("Erro ao carregar usinas"); }
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao carregar usinas');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleFaturas = async (ucId: number) => {
@@ -100,8 +131,12 @@ function App() {
       try {
         const res = await api.get(`/ucs/${ucId}/faturas`);
         setFaturasPorUc(prev => ({ ...prev, [ucId]: res.data }));
-      } catch (e) { alert("Erro ao baixar faturas"); return; }
-      finally { setLoadingUcs(prev => ({ ...prev, [ucId]: false })); }
+      } catch (e: any) {
+        toast.error(e.message || 'Erro ao carregar faturas');
+        return;
+      } finally {
+        setLoadingUcs(prev => ({ ...prev, [ucId]: false }));
+      }
     }
     setExpandedUcs(prev => ({ ...prev, [ucId]: true }));
   };
@@ -110,10 +145,17 @@ function App() {
     setDownloadingId(faturaId);
     try {
       const res = await api.get(`/faturas/${faturaId}/download`);
-      if (res.data.file_base64) downloadBase64File(res.data.file_base64, res.data.filename);
-      else alert("Arquivo vazio.");
-    } catch (e) { alert("Erro ao baixar PDF."); }
-    finally { setDownloadingId(null); }
+      if (res.data.file_base64) {
+        downloadBase64File(res.data.file_base64, res.data.filename);
+        toast.success('PDF baixado com sucesso');
+      } else {
+        toast.warning('Arquivo vazio ou indisponivel');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao baixar PDF');
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   // --- HELPERS ---
@@ -124,23 +166,63 @@ function App() {
     return 'bg-slate-50 text-slate-700 border-slate-200';
   };
 
-  // --- HANDLERS (Cadastro/Login) MANTIDOS IGUAIS ---
+  // --- HANDLERS (Cadastro/Login) ---
   const handleRegister = async () => {
-    if (!novoNome || !novoCpf) return;
-    await api.post('/empresas/novo', null, { params: { nome: novoNome, cpf: novoCpf, telefone_final: novoTel } });
-    fetchEmpresas(); setNovoNome(""); setNovoCpf(""); setNovoTel("");
+    if (!novoNome || !novoCpf) {
+      toast.warning('Preencha nome e CPF');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.post('/empresas/novo', null, { params: { nome: novoNome, cpf: novoCpf, telefone_final: novoTel } });
+      toast.success('Empresa cadastrada com sucesso');
+      fetchEmpresas();
+      setNovoNome(""); setNovoCpf(""); setNovoTel("");
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao cadastrar empresa');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
   const handleConnect = async (id: number) => {
     setLoading(true);
-    try { await api.post(`/empresas/${id}/conectar`); setSelectedEmpresaId(id); setSmsModalOpen(true); }
-    catch (e) { alert("Erro conexão"); } finally { setLoading(false); }
+    try {
+      await api.post(`/empresas/${id}/conectar`);
+      setSelectedEmpresaId(id);
+      setSmsModalOpen(true);
+      toast.info('SMS enviado! Digite o codigo recebido');
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao conectar');
+    } finally {
+      setLoading(false);
+    }
   };
+
   const handleValidateSms = async () => {
     if (!selectedEmpresaId) return;
-    await api.post(`/empresas/${selectedEmpresaId}/validar-sms`, null, { params: { codigo_sms: smsCode } });
-    setSmsModalOpen(false); fetchEmpresas(); alert("Conectado! Os dados aparecerão em breve.");
+    if (!smsCode || smsCode.length < 4) {
+      toast.warning('Digite o codigo SMS completo');
+      return;
+    }
+    setValidatingSms(true);
+    try {
+      await api.post(`/empresas/${selectedEmpresaId}/validar-sms`, null, { params: { codigo_sms: smsCode } });
+      setSmsModalOpen(false);
+      setSmsCode("");
+      fetchEmpresas();
+      toast.success('Conectado com sucesso! Os dados serao sincronizados em breve');
+    } catch (e: any) {
+      toast.error(e.message || 'Codigo SMS invalido');
+    } finally {
+      setValidatingSms(false);
+    }
   };
-  const copyToClipboard = (text: string) => { navigator.clipboard.writeText(text); alert("Copiado!"); };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copiado para a area de transferencia');
+  };
 
   // --- COMPONENTE DA TABELA DE FATURAS (REUTILIZÁVEL) ---
   const TabelaFaturas = ({ ucId }: { ucId: number }) => {
@@ -175,11 +257,33 @@ function App() {
 
   return (
     <div className="min-h-screen flex bg-slate-100 font-sans text-slate-900">
-      <aside className="w-64 bg-[#0f172a] text-white p-6 hidden md:block fixed h-full">
-        <div className="text-2xl font-bold text-[#00A3E0] mb-10 flex items-center gap-2">⚡ GestorEnergy</div>
-        <nav className="space-y-4">
-          <button onClick={() => setVendoEmpresa(null)} className="flex w-full items-center gap-3 text-slate-300 hover:text-white transition px-2 py-2 rounded hover:bg-slate-800"><Activity size={20} /> Dashboard Geral</button>
+      <aside className="w-64 bg-[#0f172a] text-white p-6 hidden md:block fixed h-full flex flex-col">
+        <div className="text-2xl font-bold text-[#00A3E0] mb-8 flex items-center gap-2">⚡ GestorEnergy</div>
+
+        {/* Info do usuario */}
+        <div className="bg-slate-800/50 rounded-lg p-3 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#00A3E0] rounded-full flex items-center justify-center">
+              <User size={20} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{usuario?.nome_completo.split(' ')[0]}</p>
+              <p className="text-xs text-slate-400 truncate">{usuario?.email}</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="space-y-2 flex-1">
+          <button onClick={() => setVendoEmpresa(null)} className="flex w-full items-center gap-3 text-slate-300 hover:text-white transition px-3 py-2.5 rounded-lg hover:bg-slate-800"><Activity size={20} /> Dashboard</button>
         </nav>
+
+        {/* Botao Logout */}
+        <button
+          onClick={logout}
+          className="flex w-full items-center gap-3 text-slate-400 hover:text-red-400 transition px-3 py-2.5 rounded-lg hover:bg-slate-800/50 mt-auto"
+        >
+          <LogOut size={20} /> Sair
+        </button>
       </aside>
 
       <main className="flex-1 p-8 ml-0 md:ml-64 overflow-auto">
@@ -288,16 +392,29 @@ function App() {
                 <div className="md:col-span-4"><label className="text-xs font-bold text-slate-500 uppercase ml-1">Nome</label><input value={novoNome} className="w-full border p-2.5 rounded-lg mt-1" onChange={e => setNovoNome(e.target.value)} /></div>
                 <div className="md:col-span-4"><label className="text-xs font-bold text-slate-500 uppercase ml-1">CPF</label><input value={novoCpf} className="w-full border p-2.5 rounded-lg mt-1" onChange={e => setNovoCpf(e.target.value)} /></div>
                 <div className="md:col-span-2"><label className="text-xs font-bold text-slate-500 uppercase ml-1">Tel</label><input value={novoTel} className="w-full border p-2.5 rounded-lg mt-1" onChange={e => setNovoTel(e.target.value)} /></div>
-                <div className="md:col-span-2"><button onClick={handleRegister} className="w-full bg-[#00A3E0] text-white px-4 py-2.5 rounded-lg font-bold">Salvar</button></div>
+                <div className="md:col-span-2"><button onClick={handleRegister} disabled={submitting} className="w-full bg-[#00A3E0] text-white px-4 py-2.5 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">{submitting ? <><Loader2 size={18} className="animate-spin" /> Salvando...</> : 'Salvar'}</button></div>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {empresas.map(emp => (
-                <div key={emp.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-lg transition-shadow duration-300 flex flex-col justify-between h-48">
-                  <div><div className="flex justify-between items-start mb-2"><h3 className="font-bold text-lg text-slate-800 line-clamp-1" title={emp.nome_empresa}>{emp.nome_empresa}</h3><Plug size={20} className={emp.status_conexao === 'CONECTADO' ? "text-green-500" : "text-slate-300"} /></div><span className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider inline-block ${emp.status_conexao === 'CONECTADO' ? 'bg-green-100 text-green-700' : emp.status_conexao === 'AGUARDANDO_SMS' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{emp.status_conexao}</span></div>
-                  <div className="mt-4">{emp.status_conexao === 'CONECTADO' ? (<button onClick={() => abrirDetalhesEmpresa(emp)} className="w-full border border-[#00A3E0] text-[#00A3E0] py-2.5 rounded-lg hover:bg-blue-50 transition text-sm font-bold flex items-center justify-center gap-2"><FileText size={18} /> Gerenciar Faturas</button>) : (<button onClick={() => handleConnect(emp.id)} disabled={loading} className="w-full bg-slate-900 text-white py-2.5 rounded-lg hover:bg-slate-800 transition text-sm font-bold flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin" size={18} /> : <Plug size={18} />} {loading ? "Conectando..." : "Conectar Energisa"}</button>)}</div>
+              {loadingEmpresas ? (
+                <div className="col-span-full flex flex-col items-center justify-center py-12 text-slate-500">
+                  <Loader2 size={32} className="animate-spin text-[#00A3E0] mb-3" />
+                  <p>Carregando empresas...</p>
                 </div>
-              ))}
+              ) : empresas.length === 0 ? (
+                <div className="col-span-full text-center py-12 text-slate-500 bg-white rounded-xl border border-dashed border-slate-300">
+                  <Activity size={40} className="mx-auto mb-3 text-slate-300" />
+                  <p>Nenhuma empresa cadastrada</p>
+                  <p className="text-sm text-slate-400 mt-1">Cadastre uma empresa acima para comecar</p>
+                </div>
+              ) : (
+                empresas.map(emp => (
+                  <div key={emp.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-lg transition-shadow duration-300 flex flex-col justify-between h-48">
+                    <div><div className="flex justify-between items-start mb-2"><h3 className="font-bold text-lg text-slate-800 line-clamp-1" title={emp.nome_empresa}>{emp.nome_empresa}</h3><Plug size={20} className={emp.status_conexao === 'CONECTADO' ? "text-green-500" : "text-slate-300"} /></div><span className={`text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider inline-block ${emp.status_conexao === 'CONECTADO' ? 'bg-green-100 text-green-700' : emp.status_conexao === 'AGUARDANDO_SMS' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{emp.status_conexao}</span></div>
+                    <div className="mt-4">{emp.status_conexao === 'CONECTADO' ? (<button onClick={() => abrirDetalhesEmpresa(emp)} className="w-full border border-[#00A3E0] text-[#00A3E0] py-2.5 rounded-lg hover:bg-blue-50 transition text-sm font-bold flex items-center justify-center gap-2"><FileText size={18} /> Gerenciar Faturas</button>) : (<button onClick={() => handleConnect(emp.id)} disabled={loading} className="w-full bg-slate-900 text-white py-2.5 rounded-lg hover:bg-slate-800 transition text-sm font-bold flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin" size={18} /> : <Plug size={18} />} {loading ? "Conectando..." : "Conectar Energisa"}</button>)}</div>
+                  </div>
+                ))
+              )}
             </div>
           </>
         )}
@@ -317,7 +434,32 @@ function App() {
           </div>
         </div>
       )}
-      {smsModalOpen && <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"><div className="bg-white p-8 rounded-2xl w-full max-w-sm shadow-2xl"><h2 className="text-2xl font-bold mb-2 text-center">SMS</h2><input className="w-full text-center text-3xl border-2 p-3 mb-6" maxLength={6} onChange={e => setSmsCode(e.target.value)} /><button onClick={handleValidateSms} className="w-full bg-green-500 text-white py-3 rounded font-bold">OK</button></div></div>}
+      {smsModalOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white p-8 rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Codigo SMS</h2>
+              <button onClick={() => { setSmsModalOpen(false); setSmsCode(""); }} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+            </div>
+            <p className="text-slate-500 text-sm mb-4">Digite o codigo de 6 digitos enviado por SMS</p>
+            <input
+              className="w-full text-center text-3xl border-2 p-3 mb-6 rounded-lg tracking-widest font-mono"
+              maxLength={6}
+              value={smsCode}
+              onChange={e => setSmsCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              autoFocus
+            />
+            <button
+              onClick={handleValidateSms}
+              disabled={validatingSms || smsCode.length < 4}
+              className="w-full bg-green-500 text-white py-3 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:bg-green-600 transition"
+            >
+              {validatingSms ? <><Loader2 size={20} className="animate-spin" /> Validando...</> : 'Confirmar'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

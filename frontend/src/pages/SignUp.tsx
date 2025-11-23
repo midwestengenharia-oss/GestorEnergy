@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../components/Toast';
-import { Loader2, Mail, Lock, User, Phone, CreditCard, Zap, ArrowLeft } from 'lucide-react';
+import { Loader2, Mail, Lock, User, Phone, CreditCard, Zap, ArrowLeft, Moon, SunMedium } from 'lucide-react';
 
 interface SignUpProps {
     onSwitchToSignIn: () => void;
@@ -31,6 +32,7 @@ const formatPhone = (value: string) => {
 
 export function SignUp({ onSwitchToSignIn }: SignUpProps) {
     const { signup } = useAuth();
+    const { isDark, toggleTheme } = useTheme();
     const toast = useToast();
 
     const [formData, setFormData] = useState({
@@ -96,32 +98,43 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
         }
     };
 
+    const inputClass = `w-full pl-10 pr-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition text-sm ${isDark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900'}`;
+    const labelClass = `block text-sm font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`;
+
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 py-8">
+        <div className={`min-h-screen flex items-center justify-center p-4 py-8 transition-colors duration-300 ${isDark ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900' : 'bg-gradient-to-br from-slate-100 via-white to-slate-200'}`}>
+            {/* Toggle Theme Button */}
+            <button
+                onClick={toggleTheme}
+                className={`absolute top-4 right-4 p-3 rounded-full transition ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-white hover:bg-slate-100 text-slate-600 shadow-md'}`}
+            >
+                {isDark ? <SunMedium size={20} /> : <Moon size={20} />}
+            </button>
+
             <div className="w-full max-w-md">
                 {/* Logo */}
                 <div className="text-center mb-6">
                     <div className="inline-flex items-center justify-center w-14 h-14 bg-[#00A3E0] rounded-2xl mb-3 shadow-lg shadow-blue-500/30">
                         <Zap className="text-white" size={28} />
                     </div>
-                    <h1 className="text-2xl font-bold text-white">GestorEnergy</h1>
+                    <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>GestorEnergy</h1>
                 </div>
 
                 {/* Card de Cadastro */}
-                <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8">
+                <div className={`rounded-2xl shadow-2xl p-6 sm:p-8 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
                     <div className="flex items-center gap-3 mb-6">
                         <button
                             onClick={onSwitchToSignIn}
-                            className="p-2 hover:bg-slate-100 rounded-lg transition"
+                            className={`p-2 rounded-lg transition ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
                         >
-                            <ArrowLeft size={20} className="text-slate-600" />
+                            <ArrowLeft size={20} className={isDark ? 'text-slate-400' : 'text-slate-600'} />
                         </button>
-                        <h2 className="text-xl font-bold text-slate-800">Criar conta</h2>
+                        <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Criar conta</h2>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <label className={labelClass}>
                                 Nome completo
                             </label>
                             <div className="relative">
@@ -130,14 +143,14 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
                                     type="text"
                                     value={formData.nome_completo}
                                     onChange={(e) => handleChange('nome_completo', e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition text-sm"
+                                    className={inputClass}
                                     placeholder="Seu nome completo"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <label className={labelClass}>
                                 Email
                             </label>
                             <div className="relative">
@@ -146,7 +159,7 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
                                     type="email"
                                     value={formData.email}
                                     onChange={(e) => handleChange('email', e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition text-sm"
+                                    className={inputClass}
                                     placeholder="seu@email.com"
                                 />
                             </div>
@@ -154,7 +167,7 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <label className={labelClass}>
                                     CPF
                                 </label>
                                 <div className="relative">
@@ -163,14 +176,14 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
                                         type="text"
                                         value={formData.cpf}
                                         onChange={(e) => handleChange('cpf', e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition text-sm"
+                                        className={inputClass}
                                         placeholder="000.000.000-00"
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <label className={labelClass}>
                                     Telefone
                                 </label>
                                 <div className="relative">
@@ -179,7 +192,7 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
                                         type="text"
                                         value={formData.telefone}
                                         onChange={(e) => handleChange('telefone', e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition text-sm"
+                                        className={inputClass}
                                         placeholder="(00) 00000-0000"
                                     />
                                 </div>
@@ -187,7 +200,7 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <label className={labelClass}>
                                 Senha
                             </label>
                             <div className="relative">
@@ -196,14 +209,14 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
                                     type="password"
                                     value={formData.senha}
                                     onChange={(e) => handleChange('senha', e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition text-sm"
+                                    className={inputClass}
                                     placeholder="Minimo 6 caracteres"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                            <label className={labelClass}>
                                 Confirmar senha
                             </label>
                             <div className="relative">
@@ -212,7 +225,7 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
                                     type="password"
                                     value={formData.confirmarSenha}
                                     onChange={(e) => handleChange('confirmarSenha', e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition text-sm"
+                                    className={inputClass}
                                     placeholder="Repita a senha"
                                 />
                             </div>
@@ -235,7 +248,7 @@ export function SignUp({ onSwitchToSignIn }: SignUpProps) {
                     </form>
 
                     <div className="mt-4 text-center">
-                        <p className="text-slate-600 text-sm">
+                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                             Ja tem uma conta?{' '}
                             <button
                                 onClick={onSwitchToSignIn}

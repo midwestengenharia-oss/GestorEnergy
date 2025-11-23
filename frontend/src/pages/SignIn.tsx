@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../components/Toast';
-import { Loader2, Mail, Lock, Zap } from 'lucide-react';
+import { Loader2, Mail, Lock, Zap, Moon, SunMedium } from 'lucide-react';
 
 interface SignInProps {
     onSwitchToSignUp: () => void;
@@ -9,6 +10,7 @@ interface SignInProps {
 
 export function SignIn({ onSwitchToSignUp }: SignInProps) {
     const { login } = useAuth();
+    const { isDark, toggleTheme } = useTheme();
     const toast = useToast();
 
     const [email, setEmail] = useState('');
@@ -35,24 +37,32 @@ export function SignIn({ onSwitchToSignUp }: SignInProps) {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
+        <div className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-300 ${isDark ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900' : 'bg-gradient-to-br from-slate-100 via-white to-slate-200'}`}>
+            {/* Toggle Theme Button */}
+            <button
+                onClick={toggleTheme}
+                className={`absolute top-4 right-4 p-3 rounded-full transition ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-white hover:bg-slate-100 text-slate-600 shadow-md'}`}
+            >
+                {isDark ? <SunMedium size={20} /> : <Moon size={20} />}
+            </button>
+
             <div className="w-full max-w-md">
                 {/* Logo */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-[#00A3E0] rounded-2xl mb-4 shadow-lg shadow-blue-500/30">
                         <Zap className="text-white" size={32} />
                     </div>
-                    <h1 className="text-3xl font-bold text-white">GestorEnergy</h1>
-                    <p className="text-slate-400 mt-2">Gerencie suas faturas de energia</p>
+                    <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>GestorEnergy</h1>
+                    <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>Gerencie suas faturas de energia</p>
                 </div>
 
                 {/* Card de Login */}
-                <div className="bg-white rounded-2xl shadow-2xl p-8">
-                    <h2 className="text-2xl font-bold text-slate-800 mb-6">Entrar</h2>
+                <div className={`rounded-2xl shadow-2xl p-8 ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+                    <h2 className={`text-2xl font-bold mb-6 ${isDark ? 'text-white' : 'text-slate-800'}`}>Entrar</h2>
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                            <label className={`block text-sm font-medium mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                                 Email
                             </label>
                             <div className="relative">
@@ -61,14 +71,14 @@ export function SignIn({ onSwitchToSignUp }: SignInProps) {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition"
+                                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition ${isDark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900'}`}
                                     placeholder="seu@email.com"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                            <label className={`block text-sm font-medium mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                                 Senha
                             </label>
                             <div className="relative">
@@ -77,7 +87,7 @@ export function SignIn({ onSwitchToSignUp }: SignInProps) {
                                     type="password"
                                     value={senha}
                                     onChange={(e) => setSenha(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition"
+                                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent outline-none transition ${isDark ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900'}`}
                                     placeholder="Digite sua senha"
                                 />
                             </div>
@@ -100,7 +110,7 @@ export function SignIn({ onSwitchToSignUp }: SignInProps) {
                     </form>
 
                     <div className="mt-6 text-center">
-                        <p className="text-slate-600">
+                        <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
                             Nao tem uma conta?{' '}
                             <button
                                 onClick={onSwitchToSignUp}
@@ -112,7 +122,7 @@ export function SignIn({ onSwitchToSignUp }: SignInProps) {
                     </div>
                 </div>
 
-                <p className="text-center text-slate-500 text-sm mt-6">
+                <p className={`text-center text-sm mt-6 ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
                     Plataforma segura para gestao de faturas de energia
                 </p>
             </div>

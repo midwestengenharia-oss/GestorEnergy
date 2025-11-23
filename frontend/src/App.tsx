@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { api, Empresa, UnidadeConsumidora, Fatura, GDDetailsResponse, HistoricoMensalGD, DiscriminacaoEnergia, ComposicaoEnergia } from './lib/api';
 import { useToast } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
+import { useTheme } from './contexts/ThemeContext';
 import {
-  Activity, Plug, Plus, RefreshCw, ArrowLeft, Home, FileText, Download, Loader2, Sun, BatteryCharging, ChevronDown, ChevronUp, Barcode, QrCode, X, Share2, LogOut, User, Building2, Zap, AlertCircle, CheckCircle2, Clock, DollarSign, BarChart3, PieChart, Eye, GitBranch, Move, ZoomIn, ZoomOut, Maximize2, TrendingUp, TrendingDown, Calendar, ArrowRightLeft, Layers, Timer, MapPin, ChevronRight
+  Activity, Plug, Plus, RefreshCw, ArrowLeft, Home, FileText, Download, Loader2, Sun, BatteryCharging, ChevronDown, ChevronUp, Barcode, QrCode, X, Share2, LogOut, User, Building2, Zap, AlertCircle, CheckCircle2, Clock, DollarSign, BarChart3, PieChart, Eye, GitBranch, Move, ZoomIn, ZoomOut, Maximize2, TrendingUp, TrendingDown, Calendar, ArrowRightLeft, Layers, Timer, MapPin, ChevronRight, Menu, ChevronLeft, Moon, SunMedium, PanelLeftClose, PanelLeft
 } from 'lucide-react';
 
 // Função auxiliar para converter Base64 em Download
@@ -30,6 +31,11 @@ function App() {
   // --- HOOKS ---
   const toast = useToast();
   const { usuario, logout } = useAuth();
+  const { theme, toggleTheme, isDark } = useTheme();
+
+  // --- ESTADOS DE LAYOUT ---
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // --- ESTADOS ---
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -1137,84 +1143,84 @@ function App() {
   // --- RENDER DASHBOARD ---
   const renderDashboard = () => (
     <div className="animate-fade-in">
-      <header className="mb-8 flex items-center justify-between">
+      <header className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">Dashboard</h1>
-          <p className="text-slate-500 mt-1">Visão geral do seu sistema de gestão de energia</p>
+          <h1 className={`text-2xl sm:text-3xl font-bold ${textPrimary}`}>Dashboard</h1>
+          <p className={`${textMuted} mt-1`}>Visão geral do seu sistema de gestão de energia</p>
         </div>
         <button
           onClick={() => fetchDadosDashboard(empresas)}
           disabled={loadingDashboard}
-          className="p-2 hover:bg-slate-200 rounded-full text-slate-600 transition"
+          className={`p-2 rounded-full transition ${isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-600'}`}
         >
           <RefreshCw size={20} className={loadingDashboard ? "animate-spin" : ""} />
         </button>
       </header>
 
       {loadingDashboard && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-blue-700 text-sm">
+        <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 text-sm ${isDark ? 'bg-blue-900/30 border border-blue-800 text-blue-300' : 'bg-blue-50 border border-blue-200 text-blue-700'}`}>
           <Loader2 size={16} className="animate-spin" />
           Carregando dados do dashboard...
         </div>
       )}
 
       {/* Cards de Métricas Principais */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+        <div className={`rounded-xl p-4 sm:p-6 shadow-sm border hover:shadow-md transition-shadow ${cardStyle}`}>
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${isDark ? 'bg-blue-900/50' : 'bg-blue-100'}`}>
               <Building2 className="text-[#00A3E0]" size={24} />
             </div>
-            <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full">
+            <span className={`text-xs font-bold px-2 py-1 rounded-full ${isDark ? 'text-green-400 bg-green-900/30' : 'text-green-600 bg-green-50'}`}>
               {metricas.empresasConectadas} conectadas
             </span>
           </div>
-          <h3 className="text-3xl font-bold text-slate-800">{metricas.totalEmpresas}</h3>
-          <p className="text-slate-500 text-sm mt-1">Empresas cadastradas</p>
+          <h3 className={`text-2xl sm:text-3xl font-bold ${textPrimary}`}>{metricas.totalEmpresas}</h3>
+          <p className={`${textMuted} text-sm mt-1`}>Empresas cadastradas</p>
         </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+        <div className={`rounded-xl p-4 sm:p-6 shadow-sm border hover:shadow-md transition-shadow ${cardStyle}`}>
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${isDark ? 'bg-purple-900/50' : 'bg-purple-100'}`}>
               <Home className="text-purple-600" size={24} />
             </div>
-            <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+            <span className={`text-xs font-bold px-2 py-1 rounded-full ${isDark ? 'text-purple-400 bg-purple-900/30' : 'text-purple-600 bg-purple-50'}`}>
               {metricas.totalUsinas} usinas
             </span>
           </div>
-          <h3 className="text-3xl font-bold text-slate-800">{metricas.totalUcs}</h3>
-          <p className="text-slate-500 text-sm mt-1">Unidades Consumidoras</p>
+          <h3 className={`text-2xl sm:text-3xl font-bold ${textPrimary}`}>{metricas.totalUcs}</h3>
+          <p className={`${textMuted} text-sm mt-1`}>Unidades Consumidoras</p>
         </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+        <div className={`rounded-xl p-4 sm:p-6 shadow-sm border hover:shadow-md transition-shadow ${cardStyle}`}>
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${isDark ? 'bg-amber-900/50' : 'bg-amber-100'}`}>
               <FileText className="text-amber-600" size={24} />
             </div>
             {metricas.faturasPendentes > 0 && (
-              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full animate-pulse">
+              <span className={`text-xs font-bold px-2 py-1 rounded-full animate-pulse ${isDark ? 'text-amber-400 bg-amber-900/30' : 'text-amber-600 bg-amber-50'}`}>
                 {metricas.faturasPendentes} pendentes
               </span>
             )}
           </div>
-          <h3 className="text-3xl font-bold text-slate-800">{metricas.totalFaturas}</h3>
-          <p className="text-slate-500 text-sm mt-1">Faturas registradas</p>
+          <h3 className={`text-2xl sm:text-3xl font-bold ${textPrimary}`}>{metricas.totalFaturas}</h3>
+          <p className={`${textMuted} text-sm mt-1`}>Faturas registradas</p>
         </div>
 
-        <div className="bg-gradient-to-br from-[#00A3E0] to-blue-600 rounded-xl p-6 shadow-sm text-white hover:shadow-md transition-shadow">
+        <div className="bg-gradient-to-br from-[#00A3E0] to-blue-600 rounded-xl p-4 sm:p-6 shadow-sm text-white hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 rounded-xl flex items-center justify-center">
               <DollarSign className="text-white" size={24} />
             </div>
           </div>
-          <h3 className="text-3xl font-bold">R$ {metricas.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+          <h3 className="text-2xl sm:text-3xl font-bold">R$ {metricas.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
           <p className="text-blue-100 text-sm mt-1">Valor total em faturas</p>
         </div>
       </div>
 
       {/* Segunda linha */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl p-6 shadow-sm text-white">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
+        <div className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl p-4 sm:p-6 shadow-sm text-white">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
               <Sun className="text-white" size={24} />
@@ -1228,65 +1234,65 @@ function App() {
           <p className="text-orange-100 text-sm mt-1">kWh disponíveis para compensação</p>
         </div>
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 lg:col-span-2">
+        <div className={`rounded-xl p-4 sm:p-6 shadow-sm border lg:col-span-2 ${cardStyle}`}>
           <div className="flex items-center justify-between mb-4">
-            <h4 className="font-bold text-slate-800 flex items-center gap-2">
+            <h4 className={`font-bold ${textPrimary} flex items-center gap-2`}>
               <PieChart size={20} className="text-[#00A3E0]" /> Status das Conexões
             </h4>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center p-4 bg-green-50 rounded-xl border border-green-100">
-              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                <CheckCircle2 className="text-white" size={20} />
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
+            <div className={`text-center p-2 sm:p-4 rounded-xl border ${isDark ? 'bg-green-900/30 border-green-800' : 'bg-green-50 border-green-100'}`}>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                <CheckCircle2 className="text-white" size={18} />
               </div>
-              <h5 className="text-2xl font-bold text-green-700">{metricas.empresasConectadas}</h5>
-              <p className="text-xs text-green-600">Conectadas</p>
+              <h5 className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-green-400' : 'text-green-700'}`}>{metricas.empresasConectadas}</h5>
+              <p className={`text-xs ${isDark ? 'text-green-400' : 'text-green-600'}`}>Conectadas</p>
             </div>
-            <div className="text-center p-4 bg-amber-50 rounded-xl border border-amber-100">
-              <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                <Clock className="text-white" size={20} />
+            <div className={`text-center p-2 sm:p-4 rounded-xl border ${isDark ? 'bg-amber-900/30 border-amber-800' : 'bg-amber-50 border-amber-100'}`}>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-amber-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                <Clock className="text-white" size={18} />
               </div>
-              <h5 className="text-2xl font-bold text-amber-700">
+              <h5 className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
                 {empresas.filter(e => e.status_conexao === 'AGUARDANDO_SMS').length}
               </h5>
-              <p className="text-xs text-amber-600">Aguardando</p>
+              <p className={`text-xs ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Aguardando</p>
             </div>
-            <div className="text-center p-4 bg-red-50 rounded-xl border border-red-100">
-              <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                <AlertCircle className="text-white" size={20} />
+            <div className={`text-center p-2 sm:p-4 rounded-xl border ${isDark ? 'bg-red-900/30 border-red-800' : 'bg-red-50 border-red-100'}`}>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                <AlertCircle className="text-white" size={18} />
               </div>
-              <h5 className="text-2xl font-bold text-red-700">
+              <h5 className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-red-400' : 'text-red-700'}`}>
                 {empresas.filter(e => !['CONECTADO', 'AGUARDANDO_SMS'].includes(e.status_conexao || '')).length}
               </h5>
-              <p className="text-xs text-red-600">Desconectadas</p>
+              <p className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>Desconectadas</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Lista de empresas */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <h4 className="font-bold text-slate-800 flex items-center gap-2">
+      <div className={`rounded-xl shadow-sm border overflow-hidden ${cardStyle}`}>
+        <div className={`p-4 sm:p-6 border-b flex items-center justify-between ${isDark ? 'border-slate-700' : 'border-slate-100'}`}>
+          <h4 className={`font-bold ${textPrimary} flex items-center gap-2`}>
             <BarChart3 size={20} className="text-[#00A3E0]" /> Suas Empresas
           </h4>
           <button onClick={() => setPaginaAtual('empresas')} className="text-sm text-[#00A3E0] hover:text-blue-700 font-medium">
             Ver todas
           </button>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className={`divide-y ${isDark ? 'divide-slate-700' : 'divide-slate-100'}`}>
           {empresas.slice(0, 5).map(emp => (
-            <div key={emp.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+            <div key={emp.id} className={`p-4 flex items-center justify-between transition-colors ${isDark ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'}`}>
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${emp.status_conexao === 'CONECTADO' ? 'bg-green-100' : 'bg-slate-100'}`}>
-                  <Plug size={18} className={emp.status_conexao === 'CONECTADO' ? 'text-green-600' : 'text-slate-400'} />
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${emp.status_conexao === 'CONECTADO' ? (isDark ? 'bg-green-900/50' : 'bg-green-100') : (isDark ? 'bg-slate-700' : 'bg-slate-100')}`}>
+                  <Plug size={18} className={emp.status_conexao === 'CONECTADO' ? 'text-green-500' : 'text-slate-400'} />
                 </div>
                 <div>
-                  <h5 className="font-medium text-slate-800">{emp.nome_empresa}</h5>
-                  <p className="text-xs text-slate-500">CPF: {emp.responsavel_cpf}</p>
+                  <h5 className={`font-medium ${textPrimary}`}>{emp.nome_empresa}</h5>
+                  <p className={`text-xs ${textMuted}`}>CPF: {emp.responsavel_cpf}</p>
                 </div>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-bold ${emp.status_conexao === 'CONECTADO' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              <span className={`text-xs px-2 py-1 rounded-full font-bold ${emp.status_conexao === 'CONECTADO' ? (isDark ? 'bg-green-900/50 text-green-400' : 'bg-green-100 text-green-700') : (isDark ? 'bg-red-900/50 text-red-400' : 'bg-red-100 text-red-700')}`}>
                 {emp.status_conexao || 'PENDENTE'}
               </span>
             </div>
@@ -1536,58 +1542,111 @@ function App() {
     </div>
   );
 
+  // Sidebar width based on collapsed state
+  const sidebarWidth = sidebarCollapsed ? 'w-20' : 'w-64';
+  const mainMargin = sidebarCollapsed ? 'md:ml-20' : 'md:ml-64';
+
+  // Dark mode styles
+  const cardStyle = isDark
+    ? 'bg-slate-800 border-slate-700 text-slate-100'
+    : 'bg-white border-slate-200 text-slate-900';
+  const inputStyle = isDark
+    ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400'
+    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-500';
+  const textMuted = isDark ? 'text-slate-400' : 'text-slate-500';
+  const textPrimary = isDark ? 'text-slate-100' : 'text-slate-800';
+
   return (
-    <div className="min-h-screen flex bg-slate-100 font-sans text-slate-900">
-      <aside className="w-64 bg-[#0f172a] text-white p-6 hidden md:flex flex-col fixed h-full">
-        <div className="text-2xl font-bold text-[#00A3E0] mb-8 flex items-center gap-2"><Zap size={28} /> GestorEnergy</div>
+    <div className={`min-h-screen flex font-sans transition-colors duration-300 ${isDark ? 'bg-slate-900 text-slate-100' : 'bg-slate-100 text-slate-900'}`}>
+      {/* Overlay mobile */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`${sidebarWidth} bg-[#0f172a] text-white flex flex-col fixed h-full z-50 transition-all duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+        {/* Header da Sidebar */}
+        <div className={`p-4 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} border-b border-slate-800`}>
+          <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+            <div className="w-10 h-10 bg-[#00A3E0] rounded-xl flex items-center justify-center shrink-0">
+              <Zap size={22} className="text-white" />
+            </div>
+            {!sidebarCollapsed && <span className="text-xl font-bold text-white">GestorEnergy</span>}
+          </div>
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="hidden md:flex p-2 hover:bg-slate-800 rounded-lg transition text-slate-400 hover:text-white"
+            title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          >
+            {sidebarCollapsed ? <PanelLeft size={20} /> : <PanelLeftClose size={20} />}
+          </button>
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="md:hidden p-2 hover:bg-slate-800 rounded-lg transition text-slate-400 hover:text-white"
+          >
+            <X size={20} />
+          </button>
+        </div>
 
         {/* Info do usuario */}
-        <div className="bg-slate-800/50 rounded-lg p-3 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#00A3E0] rounded-full flex items-center justify-center">
-              <User size={20} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{usuario?.nome_completo.split(' ')[0]}</p>
-              <p className="text-xs text-slate-400 truncate">{usuario?.email}</p>
+        <div className={`${sidebarCollapsed ? 'p-2' : 'p-4'}`}>
+          <div className={`bg-slate-800/50 rounded-lg ${sidebarCollapsed ? 'p-2' : 'p-3'}`}>
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+              <div className="w-10 h-10 bg-[#00A3E0] rounded-full flex items-center justify-center shrink-0">
+                <User size={18} />
+              </div>
+              {!sidebarCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{usuario?.nome_completo.split(' ')[0]}</p>
+                  <p className="text-xs text-slate-400 truncate">{usuario?.email}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        <nav className="space-y-1 flex-1">
+        {/* Navigation */}
+        <nav className={`flex-1 overflow-y-auto ${sidebarCollapsed ? 'px-2' : 'px-4'} space-y-1`}>
           {/* Dashboard */}
           <button
-            onClick={() => { setPaginaAtual('dashboard'); setVendoEmpresa(null); }}
-            className={`flex w-full items-center gap-3 transition px-3 py-2.5 rounded-lg ${
+            onClick={() => { setPaginaAtual('dashboard'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
+            className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} transition px-3 py-2.5 rounded-lg ${
               paginaAtual === 'dashboard' && !vendoEmpresa
                 ? 'bg-[#00A3E0] text-white'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
+            title={sidebarCollapsed ? "Dashboard" : ""}
           >
-            <Activity size={20} /> Dashboard
+            <Activity size={20} />
+            {!sidebarCollapsed && <span>Dashboard</span>}
           </button>
 
           {/* Empresas com submenu */}
           <div>
             <button
               onClick={() => setMenuEmpresasAberto(!menuEmpresasAberto)}
-              className={`flex w-full items-center justify-between transition px-3 py-2.5 rounded-lg ${
+              className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} transition px-3 py-2.5 rounded-lg ${
                 (paginaAtual === 'empresas' || paginaAtual === 'usinas') && !vendoEmpresa
                   ? 'bg-slate-800 text-white'
                   : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
+              title={sidebarCollapsed ? "Empresas" : ""}
             >
-              <span className="flex items-center gap-3">
-                <Building2 size={20} /> Empresas
+              <span className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
+                <Building2 size={20} />
+                {!sidebarCollapsed && <span>Empresas</span>}
               </span>
-              <ChevronDown size={16} className={`transition-transform ${menuEmpresasAberto ? 'rotate-180' : ''}`} />
+              {!sidebarCollapsed && <ChevronDown size={16} className={`transition-transform ${menuEmpresasAberto ? 'rotate-180' : ''}`} />}
             </button>
 
             {/* Submenu */}
-            {menuEmpresasAberto && (
+            {menuEmpresasAberto && !sidebarCollapsed && (
               <div className="ml-4 mt-1 space-y-1 border-l-2 border-slate-700 pl-4">
                 <button
-                  onClick={() => { setPaginaAtual('empresas'); setVendoEmpresa(null); }}
+                  onClick={() => { setPaginaAtual('empresas'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
                   className={`flex w-full items-center gap-3 transition px-3 py-2 rounded-lg text-sm ${
                     paginaAtual === 'empresas' && !vendoEmpresa
                       ? 'bg-[#00A3E0] text-white'
@@ -1597,7 +1656,7 @@ function App() {
                   <Plug size={16} /> Gerenciar
                 </button>
                 <button
-                  onClick={() => { setPaginaAtual('usinas'); setVendoEmpresa(null); }}
+                  onClick={() => { setPaginaAtual('usinas'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
                   className={`flex w-full items-center gap-3 transition px-3 py-2 rounded-lg text-sm ${
                     paginaAtual === 'usinas' && !vendoEmpresa
                       ? 'bg-[#00A3E0] text-white'
@@ -1611,16 +1670,56 @@ function App() {
           </div>
         </nav>
 
-        {/* Botao Logout */}
-        <button
-          onClick={logout}
-          className="flex w-full items-center gap-3 text-slate-400 hover:text-red-400 transition px-3 py-2.5 rounded-lg hover:bg-slate-800/50 mt-auto"
-        >
-          <LogOut size={20} /> Sair
-        </button>
+        {/* Footer da Sidebar */}
+        <div className={`border-t border-slate-800 ${sidebarCollapsed ? 'p-2' : 'p-4'} space-y-2`}>
+          {/* Toggle Dark Mode */}
+          <button
+            onClick={toggleTheme}
+            className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-slate-400 hover:text-white transition px-3 py-2.5 rounded-lg hover:bg-slate-800/50`}
+            title={sidebarCollapsed ? (isDark ? "Modo claro" : "Modo escuro") : ""}
+          >
+            {isDark ? <SunMedium size={20} /> : <Moon size={20} />}
+            {!sidebarCollapsed && <span>{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>}
+          </button>
+
+          {/* Logout */}
+          <button
+            onClick={logout}
+            className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} text-slate-400 hover:text-red-400 transition px-3 py-2.5 rounded-lg hover:bg-slate-800/50`}
+            title={sidebarCollapsed ? "Sair" : ""}
+          >
+            <LogOut size={20} />
+            {!sidebarCollapsed && <span>Sair</span>}
+          </button>
+        </div>
       </aside>
 
-      <main className="flex-1 p-8 ml-0 md:ml-64 overflow-auto">
+      {/* Main Content */}
+      <div className={`flex-1 ${mainMargin} flex flex-col min-h-screen transition-all duration-300`}>
+        {/* Header Mobile */}
+        <header className={`md:hidden sticky top-0 z-30 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} border-b px-4 py-3 flex items-center justify-between`}>
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className={`p-2 rounded-lg ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'} transition`}
+          >
+            <Menu size={24} />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-[#00A3E0] rounded-lg flex items-center justify-center">
+              <Zap size={18} className="text-white" />
+            </div>
+            <span className="font-bold">GestorEnergy</span>
+          </div>
+          <button
+            onClick={toggleTheme}
+            className={`p-2 rounded-lg ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-100'} transition`}
+          >
+            {isDark ? <SunMedium size={20} /> : <Moon size={20} />}
+          </button>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 p-4 md:p-8 overflow-auto">
         {vendoEmpresa ? (
           <div className="animate-fade-in">
             <button onClick={() => setVendoEmpresa(null)} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-6 font-medium"><ArrowLeft size={20} /> Voltar</button>
@@ -1707,7 +1806,8 @@ function App() {
         ) : (
           paginaAtual === 'dashboard' ? renderDashboard() : paginaAtual === 'usinas' ? renderUsinas() : renderEmpresas()
         )}
-      </main>
+        </main>
+      </div>
 
       {/* Modais */}
       {faturaDetalhe && (

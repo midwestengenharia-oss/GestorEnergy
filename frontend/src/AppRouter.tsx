@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from './contexts/AuthContext';
+import { useTheme } from './contexts/ThemeContext';
 import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
 import App from './App';
@@ -9,17 +10,18 @@ type AuthPage = 'signin' | 'signup';
 
 export function AppRouter() {
     const { isAuthenticated, isLoading } = useAuth();
+    const { isDark } = useTheme();
     const [authPage, setAuthPage] = useState<AuthPage>('signin');
 
     // Tela de loading inicial
     if (isLoading) {
         return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+            <div className={`min-h-screen flex flex-col items-center justify-center ${isDark ? 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900' : 'bg-gradient-to-br from-slate-100 via-white to-slate-100'}`}>
                 <div className="inline-flex items-center justify-center w-20 h-20 bg-[#00A3E0] rounded-2xl mb-6 shadow-lg shadow-blue-500/30 animate-pulse">
                     <Zap className="text-white" size={40} />
                 </div>
                 <Loader2 size={32} className="text-[#00A3E0] animate-spin mb-4" />
-                <p className="text-slate-400">Carregando...</p>
+                <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>Carregando...</p>
             </div>
         );
     }

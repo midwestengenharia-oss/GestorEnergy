@@ -115,3 +115,23 @@ class EnergisaGatewayClient:
         if resp.status_code == 200:
             return resp.json()
         return None
+
+    def get_gd_details(self, cpf, uc_data):
+        """
+        Obtém detalhes completos de Geração Distribuída (histórico mensal).
+        Retorna dados de produção, transferências, saldo e composição.
+        """
+        payload = {
+            "cpf": cpf,
+            "cdc": uc_data['cdc'],
+            "codigoEmpresaWeb": uc_data['empresa_web'],
+            "digitoVerificadorCdc": self._get_digito(uc_data)
+        }
+        resp = requests.post(
+            f"{self.base_url}/gd/details",
+            json=payload,
+            headers=self._get_headers()
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        return None

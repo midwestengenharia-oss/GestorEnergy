@@ -142,6 +142,86 @@ def listar_usinas_arvore(
         raise HTTPException(500, f"Erro ao consultar banco de dados: {str(e)}")
 
 
+@app.get("/usinas/{usina_id}/gd-details")
+def obter_detalhes_gd(
+    usina_id: int,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtém detalhes completos de Geração Distribuída de uma usina.
+    Retorna histórico mensal de produção, transferências, saldo e composição.
+    """
+    try:
+        # 1. Verifica se a usina existe e pertence ao usuário
+        usina = db.query(UnidadeConsumidora).join(Cliente).filter(
+            UnidadeConsumidora.id == usina_id,
+            UnidadeConsumidora.is_geradora == True,
+            Cliente.usuario_id == usuario.id
+        ).first()
+
+        if not usina:
+            raise HTTPException(404, "Usina não encontrada ou acesso negado")
+
+        # 2. Obtém o cliente para pegar o CPF
+        cliente = usina.cliente
+
+        # 3. Busca dados detalhados do Gateway
+        gd_details = gateway.get_gd_details(cliente.responsavel_cpf, {
+            "cdc": usina.cdc,
+            "empresa_web": usina.empresa_web,
+            "digito_verificador": usina.digito_verificador
+        })
+
+        if not gd_details:
+            # Se não conseguir do gateway, retorna dados básicos do banco
+            return {
+                "usina": {
+                    "id": usina.id,
+                    "codigo_uc": usina.codigo_uc,
+                    "cdc": usina.cdc,
+                    "endereco": usina.endereco,
+                    "saldo_atual": usina.saldo_acumulado,
+                    "tipo_geracao": usina.tipo_geracao
+                },
+                "historico_mensal": [],
+                "fonte": "banco_local"
+            }
+
+        # 4. Processa e retorna os dados
+        infos = gd_details.get("infos", [])
+
+        # Ordena por ano/mês decrescente
+        if isinstance(infos, list):
+            infos_ordenadas = sorted(
+                infos,
+                key=lambda x: (x.get('anoReferencia', 0), x.get('mesReferencia', 0)),
+                reverse=True
+            )
+        else:
+            infos_ordenadas = []
+
+        return {
+            "usina": {
+                "id": usina.id,
+                "codigo_uc": usina.codigo_uc,
+                "cdc": usina.cdc,
+                "endereco": usina.endereco,
+                "saldo_atual": usina.saldo_acumulado,
+                "tipo_geracao": usina.tipo_geracao,
+                "empresa_nome": cliente.nome_empresa
+            },
+            "historico_mensal": infos_ordenadas,
+            "fonte": "gateway"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Erro ao buscar detalhes GD: {e}")
+        raise HTTPException(500, f"Erro ao buscar detalhes: {str(e)}")
+
+
 @app.get("/ucs/{uc_id}/faturas")
 def listar_faturas_uc(
     uc_id: int,

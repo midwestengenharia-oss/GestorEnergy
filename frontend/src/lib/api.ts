@@ -69,3 +69,65 @@ export interface SyncStatus {
     ultimo_sync?: string;
     mensagem?: string;
 }
+
+// Interfaces para Geração Distribuída (GD)
+export interface DiscriminacaoEnergia {
+    cdc: number;
+    anoReferencia: number;
+    mesReferencia: number;
+    numUcMovimento: number;
+    consumoRecebidoOuTransferido: number;
+    consumoConvMovimentado: number;
+    consumoConvMovimentadoRecebidoOuTranferido: number;
+    consumoConvMovimentadoTransferidoPercentual: number;
+    endereco: string;
+    numeroImovel: string;
+    complemento: string;
+    uf: string;
+    nomeMunicipio: string;
+    bairro: string;
+    codigoEmpresaWeb: number;
+    digitoVerificador: number;
+}
+
+export interface ComposicaoEnergia {
+    cdc: number;
+    anoReferencia: number;
+    mesReferencia: number;
+    saldoAnteriorConv: number;
+}
+
+export interface HistoricoMensalGD {
+    cdc: number;
+    anoReferencia: number;
+    mesReferencia: number;
+    saldoAnteriorConv: number;
+    injetadoConv: number;
+    totalRecebidoRede: number;
+    consumoRecebidoConv: number;
+    consumoInjetadoCompensadoConv: number;
+    consumoRecebidoCompensadoConv: number;
+    consumoTransferidoConv: number;
+    consumoCompensadoConv: number;
+    estornoConvecional: number;
+    composicaoEnergiaInjetadas: ComposicaoEnergia[];
+    discriminacaoEnergiaInjetadas: DiscriminacaoEnergia[];
+    chavePrimaria: string;
+    dataModificacaoRegistro: string;
+}
+
+export interface UsinaDetalhes {
+    id: number;
+    codigo_uc: number;
+    cdc: number;
+    endereco: string;
+    saldo_atual: number;
+    tipo_geracao?: string;
+    empresa_nome?: string;
+}
+
+export interface GDDetailsResponse {
+    usina: UsinaDetalhes;
+    historico_mensal: HistoricoMensalGD[];
+    fonte: 'gateway' | 'banco_local';
+}

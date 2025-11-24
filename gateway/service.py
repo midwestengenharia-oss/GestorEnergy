@@ -915,12 +915,23 @@ class EnergisaService:
 
         headers = self._get_headers(json_content=False)
         headers["Referer"] = f"{self.base_url}/home"
-        
-        print(f"   🔗 Acessando contexto Adicionar Gerente (GET) UC {cdc}...")
+
+        print(f"\n{'='*70}")
+        print(f"[SERVICE] adicionar_gerente_get - Chamando Energisa")
+        print(f"{'='*70}")
+        print(f"URL: {url}")
+        print(f"Params: {params}")
+        print(f"Headers: {dict(list(headers.items())[:5])}...")  # Mostra alguns headers
+        print(f"{'='*70}\n")
 
         try:
             # GET REQUEST
             resp = self.session.get(url, params=params, headers=headers)
+
+            print(f"[SERVICE] Resposta da Energisa:")
+            print(f"Status Code: {resp.status_code}")
+            print(f"Response (primeiros 300 chars): {resp.text[:300]}")
+            print(f"{'='*70}\n")
             
             # Verifica e salva os novos cookies recebidos (bm_sz, bm_sv)
             if resp.cookies:
@@ -944,4 +955,77 @@ class EnergisaService:
 
         except Exception as e:
             print(f"   ❌ Erro adicionar_gerente_get: {e}")
+            return {"errored": True, "message": str(e)}
+    
+    # Adicione este método na classe EnergisaService, logo após o adicionar_gerente_get
+    
+    def autorizacao_pendente_get(self, dados: dict):
+        """
+        Executa a rota GET /gerenciar-imoveis/autorizacao-pendente.
+        Geralmente usada para confirmar vinculações ou aceitar convites de gestão.
+        """
+        try:
+            empresa = int(dados.get('codigoEmpresaWeb', 6))
+            # Mapeia unidadeConsumidora ou cdc para o parametro da URL
+            uc = int(dados.get('unidadeConsumidora') or dados.get('cdc'))
+            codigo = int(dados.get('codigo'))
+        except (ValueError, TypeError):
+            return {"errored": True, "message": "Dados inválidos. Campos obrigatórios: codigoEmpresaWeb, unidadeConsumidora (ou cdc) e codigo."}
+
+        # Endpoint
+        url = f"{self.base_url}/gerenciar-imoveis/autorizacao-pendente"
+        
+        # Parâmetros da Query String
+        params = {
+            "codigoEmpresaWeb": empresa,
+            "unidadeConsumidora": uc,
+            "codigo": codigo
+        }
+
+        # Headers (simulando navegação real para aceitar HTML)
+        headers = self._get_headers(json_content=False)
+        headers.update({
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Referer": f"{self.base_url}/home"
+        })
+
+        print(f"\n{'='*70}")
+        print(f"[SERVICE] autorizacao_pendente_get - Chamando Energisa")
+        print(f"{'='*70}")
+        print(f"URL: {url}")
+        print(f"Params: {params}")
+        print(f"Headers: {dict(list(headers.items())[:5])}...")  # Mostra alguns headers
+        print(f"{'='*70}\n")
+
+        try:
+            # GET REQUEST
+            resp = self.session.get(url, params=params, headers=headers)
+
+            print(f"[SERVICE] Resposta da Energisa:")
+            print(f"Status Code: {resp.status_code}")
+            print(f"Response (primeiros 300 chars): {resp.text[:300]}")
+            print(f"{'='*70}\n")
+            
+            # Verifica e salva cookies de sessão atualizados (crucial para manter o login vivo)
+            if resp.cookies:
+                self._apply_cookies(resp.cookies.get_dict())
+                SessionManager.save_session(self.cpf, self.cookies)
+
+            if resp.status_code == 200:
+                return {
+                    "status": "success", 
+                    "message": "Requisição de autorização realizada com sucesso.",
+                    "http_code": 200,
+                    # Se quiser, pode retornar o HTML ou verificar se deu certo via texto
+                    # "html_preview": resp.text[:100] 
+                }
+            
+            # Retry automático se o token expirou (401)
+            if resp.status_code == 401 and self._refresh_token():
+                 return self.autorizacao_pendente_get(dados)
+
+            return {"errored": True, "status": resp.status_code, "message": f"Falha na requisição: {resp.text[:200]}"}
+
+        except Exception as e:
+            print(f"   ❌ Erro autorizacao_pendente_get: {e}")
             return {"errored": True, "message": str(e)}

@@ -131,3 +131,57 @@ export interface GDDetailsResponse {
     historico_mensal: HistoricoMensalGD[];
     fonte: 'gateway' | 'banco_local';
 }
+
+// Interfaces para Gestores de UC
+export interface SolicitacaoGestor {
+    id: number;
+    cliente_id: number;
+    uc_id?: number;
+    cdc: number;
+    digito_verificador: number;
+    empresa_web: number;
+    cpf_gestor: string;
+    nome_gestor?: string;
+    status: 'PENDENTE' | 'AGUARDANDO_CODIGO' | 'CONCLUIDA' | 'EXPIRADA' | 'CANCELADA' | 'ERRO';
+    criado_em: string;
+    expira_em?: string;
+    concluido_em?: string;
+    mensagem?: string;
+    endereco_uc?: string;
+    nome_empresa?: string;
+}
+
+export interface SolicitarGestorPayload {
+    cliente_id: number;
+    uc_id?: number;
+    cdc: number;
+    digito_verificador: number;
+    empresa_web?: number;
+    cpf_gestor: string;
+    nome_gestor?: string;
+    is_proprietario: boolean;
+}
+
+export interface ValidarCodigoPayload {
+    solicitacao_id: number;
+    codigo: string;
+}
+
+// Funcoes de API para Gestores
+export const gestoresApi = {
+    // Criar solicitacao de gestor
+    solicitar: (payload: SolicitarGestorPayload) =>
+        api.post<SolicitacaoGestor>('/gestores/solicitar', payload),
+
+    // Listar solicitacoes pendentes
+    listarPendentes: () =>
+        api.get<SolicitacaoGestor[]>('/gestores/pendentes'),
+
+    // Validar codigo de autorizacao
+    validarCodigo: (payload: ValidarCodigoPayload) =>
+        api.post<SolicitacaoGestor>('/gestores/validar-codigo', payload),
+
+    // Cancelar solicitacao
+    cancelar: (solicitacaoId: number) =>
+        api.delete(`/gestores/pendentes/${solicitacaoId}`)
+};

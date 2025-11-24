@@ -135,3 +135,56 @@ class EnergisaGatewayClient:
         if resp.status_code == 200:
             return resp.json()
         return None
+
+    def adicionar_gerente(self, cpf, dados):
+        """
+        Adiciona um gestor a uma UC (quando o usuario e proprietario).
+        Chama o endpoint /imoveis/gerente/contexto do gateway.
+        """
+        payload = {
+            "cpf": cpf,
+            "codigoEmpresaWeb": dados.get('codigoEmpresaWeb', 6),
+            "cdc": dados['cdc'],
+            "digitoVerificador": dados['digitoVerificador'],
+            "numeroCpfCnpjCliente": dados.get('numeroCpfCnpjCliente')
+        }
+
+        url = f"{self.base_url}/imoveis/gerente/contexto"
+        print(f"\n[EnergisaClient] Adicionar Gerente")
+        print(f"URL: {url}")
+        print(f"Payload: {payload}")
+
+        resp = requests.post(url, json=payload, headers=self._get_headers())
+
+        print(f"Status Code: {resp.status_code}")
+        print(f"Response: {resp.text[:500]}\n")
+
+        if resp.status_code == 200:
+            return resp.json()
+        raise Exception(f"Erro ao adicionar gerente: {resp.text}")
+
+    def autorizacao_pendente(self, cpf, dados):
+        """
+        Valida codigo de autorizacao pendente (quando o usuario nao e proprietario).
+        Chama o endpoint /imoveis/autorizacao-pendente do gateway.
+        """
+        payload = {
+            "cpf": cpf,
+            "codigoEmpresaWeb": dados.get('codigoEmpresaWeb', 6),
+            "unidadeConsumidora": dados['unidadeConsumidora'],
+            "codigo": dados['codigo']
+        }
+
+        url = f"{self.base_url}/imoveis/autorizacao-pendente"
+        print(f"\n[EnergisaClient] Autorizacao Pendente")
+        print(f"URL: {url}")
+        print(f"Payload: {payload}")
+
+        resp = requests.post(url, json=payload, headers=self._get_headers())
+
+        print(f"Status Code: {resp.status_code}")
+        print(f"Response: {resp.text[:500]}\n")
+
+        if resp.status_code == 200:
+            return resp.json()
+        raise Exception(f"Erro ao validar autorizacao: {resp.text}")

@@ -108,6 +108,46 @@ class Fatura(Base):
     uc = relationship("UnidadeConsumidora", back_populates="faturas")
 
 
+class SolicitacaoGestor(Base):
+    """Solicitacoes de acesso como gestor de UC"""
+    __tablename__ = 'solicitacoes_gestor'
+
+    id = Column(Integer, primary_key=True)
+
+    # Quem esta solicitando
+    usuario_id = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
+    cliente_id = Column(Integer, ForeignKey('clientes.id'), nullable=False)
+
+    # UC alvo
+    uc_id = Column(Integer, ForeignKey('unidades.id'), nullable=True)
+    cdc = Column(Integer, nullable=False)
+    digito_verificador = Column(Integer, nullable=False)
+    empresa_web = Column(Integer, default=6)
+
+    # Dados do gestor a ser adicionado
+    cpf_gestor = Column(String, nullable=False)
+    nome_gestor = Column(String, nullable=True)
+
+    # Status: PENDENTE (proprietario adiciona direto), AGUARDANDO_CODIGO (gestor espera codigo), CONCLUIDA, EXPIRADA, CANCELADA
+    status = Column(String, default="PENDENTE")
+
+    # Codigo de autorizacao (preenchido quando gestor insere o codigo recebido)
+    codigo_autorizacao = Column(String, nullable=True)
+
+    # Controle de tempo
+    criado_em = Column(DateTime, default=datetime.utcnow)
+    expira_em = Column(DateTime, nullable=True)
+    concluido_em = Column(DateTime, nullable=True)
+
+    # Mensagem de erro/sucesso
+    mensagem = Column(String, nullable=True)
+
+    # Relacionamentos
+    usuario = relationship("Usuario")
+    cliente = relationship("Cliente")
+    uc = relationship("UnidadeConsumidora")
+
+
 # Configuracao
 engine = create_engine('sqlite:///gestor_faturas.db', connect_args={"check_same_thread": False})
 Base.metadata.create_all(engine)

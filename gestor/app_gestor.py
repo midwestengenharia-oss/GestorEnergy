@@ -3,16 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import ValidationError
-from database import SessionLocal, Cliente, UnidadeConsumidora, Fatura, Usuario
+from database import SessionLocal, Cliente, UnidadeConsumidora, Fatura, Usuario, SolicitacaoGestor
 from energisa_client import EnergisaGatewayClient
 from auth import get_usuario_atual, get_db
-from schemas import ClienteCreate, ValidarSmsRequest, MensagemResponse, SyncStatusResponse
+from schemas import (
+    ClienteCreate, ValidarSmsRequest, MensagemResponse, SyncStatusResponse,
+    SolicitarGestorRequest, ValidarCodigoGestorRequest, SolicitacaoGestorResponse
+)
 from routes_auth import router as auth_router
 import base64
 import json
 import os
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 
 app = FastAPI(title="Gestor de Faturas SaaS - Enterprise Edition")
@@ -620,3 +623,275 @@ def sincronizar_dados_cliente(cliente_id: int):
             pass
     finally:
         db.close()
+
+
+# ==========================================
+# 4. ROTAS DE GESTORES DE UC
+# ==========================================
+
+@app.post("/gestores/solicitar", response_model=SolicitacaoGestorResponse)
+def solicitar_gestor(
+    req: SolicitarGestorRequest,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """
+    Solicita adicao de gestor a uma UC.
+    - Se is_proprietario=True: Chama o gateway direto para adicionar (status PENDENTE -> CONCLUIDA)
+    - Se is_proprietario=False: Cria solicitacao aguardando codigo (status AGUARDANDO_CODIGO)
+    """
+    try:
+        # Verifica se o cliente pertence ao usuario
+        cliente = db.query(Cliente).filter(
+            Cliente.id == req.cliente_id,
+            Cliente.usuario_id == usuario.id
+        ).first()
+        if not cliente:
+            raise HTTPException(404, "Cliente nao encontrado")
+
+        # Busca a UC se informada
+        uc = None
+        if req.uc_id:
+            uc = db.query(UnidadeConsumidora).filter(
+                UnidadeConsumidora.id == req.uc_id,
+                UnidadeConsumidora.cliente_id == cliente.id
+            ).first()
+
+        # Cria a solicitacao
+        solicitacao = SolicitacaoGestor(
+            usuario_id=usuario.id,
+            cliente_id=cliente.id,
+            uc_id=req.uc_id,
+            cdc=req.cdc,
+            digito_verificador=req.digito_verificador,
+            empresa_web=req.empresa_web,
+            cpf_gestor=req.cpf_gestor,
+            nome_gestor=req.nome_gestor,
+            status="PENDENTE" if req.is_proprietario else "AGUARDANDO_CODIGO",
+            expira_em=datetime.utcnow() + timedelta(days=5) if not req.is_proprietario else None
+        )
+        db.add(solicitacao)
+        db.commit()
+        db.refresh(solicitacao)
+
+        # Se e proprietario, chama o gateway para adicionar direto
+        if req.is_proprietario:
+            try:
+                payload_gateway = {
+                    "codigoEmpresaWeb": req.empresa_web,
+                    "cdc": req.cdc,
+                    "digitoVerificador": req.digito_verificador,
+                    "numeroCpfCnpjCliente": req.cpf_gestor
+                }
+                print(f"\n{'='*60}")
+                print(f"ADICIONAR GERENTE - Enviando para Gateway")
+                print(f"{'='*60}")
+                print(f"CPF Sessao: {cliente.responsavel_cpf}")
+                print(f"Payload: {payload_gateway}")
+                print(f"{'='*60}\n")
+
+                resultado = gateway.adicionar_gerente(
+                    cliente.responsavel_cpf,
+                    payload_gateway
+                )
+                solicitacao.status = "CONCLUIDA"
+                solicitacao.concluido_em = datetime.utcnow()
+                solicitacao.mensagem = "Gestor adicionado com sucesso"
+                db.commit()
+            except Exception as e:
+                solicitacao.status = "ERRO"
+                solicitacao.mensagem = str(e)[:200]
+                db.commit()
+                raise HTTPException(500, f"Erro ao adicionar gestor: {str(e)}")
+
+        # Prepara resposta
+        return SolicitacaoGestorResponse(
+            id=solicitacao.id,
+            cliente_id=solicitacao.cliente_id,
+            uc_id=solicitacao.uc_id,
+            cdc=solicitacao.cdc,
+            digito_verificador=solicitacao.digito_verificador,
+            empresa_web=solicitacao.empresa_web,
+            cpf_gestor=solicitacao.cpf_gestor,
+            nome_gestor=solicitacao.nome_gestor,
+            status=solicitacao.status,
+            criado_em=solicitacao.criado_em,
+            expira_em=solicitacao.expira_em,
+            concluido_em=solicitacao.concluido_em,
+            mensagem=solicitacao.mensagem,
+            endereco_uc=uc.endereco if uc else None,
+            nome_empresa=cliente.nome_empresa
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Erro ao criar solicitacao: {str(e)}")
+
+
+@app.get("/gestores/pendentes", response_model=List[SolicitacaoGestorResponse])
+def listar_solicitacoes_pendentes(
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """Lista todas as solicitacoes pendentes do usuario (AGUARDANDO_CODIGO)"""
+    try:
+        # Atualiza status de expiradas
+        db.query(SolicitacaoGestor).filter(
+            SolicitacaoGestor.usuario_id == usuario.id,
+            SolicitacaoGestor.status == "AGUARDANDO_CODIGO",
+            SolicitacaoGestor.expira_em < datetime.utcnow()
+        ).update({"status": "EXPIRADA"})
+        db.commit()
+
+        # Busca pendentes
+        solicitacoes = db.query(SolicitacaoGestor).filter(
+            SolicitacaoGestor.usuario_id == usuario.id,
+            SolicitacaoGestor.status.in_(["AGUARDANDO_CODIGO", "PENDENTE"])
+        ).order_by(SolicitacaoGestor.criado_em.desc()).all()
+
+        resultado = []
+        for sol in solicitacoes:
+            cliente = db.query(Cliente).filter(Cliente.id == sol.cliente_id).first()
+            uc = db.query(UnidadeConsumidora).filter(UnidadeConsumidora.id == sol.uc_id).first() if sol.uc_id else None
+
+            resultado.append(SolicitacaoGestorResponse(
+                id=sol.id,
+                cliente_id=sol.cliente_id,
+                uc_id=sol.uc_id,
+                cdc=sol.cdc,
+                digito_verificador=sol.digito_verificador,
+                empresa_web=sol.empresa_web,
+                cpf_gestor=sol.cpf_gestor,
+                nome_gestor=sol.nome_gestor,
+                status=sol.status,
+                criado_em=sol.criado_em,
+                expira_em=sol.expira_em,
+                concluido_em=sol.concluido_em,
+                mensagem=sol.mensagem,
+                endereco_uc=uc.endereco if uc else None,
+                nome_empresa=cliente.nome_empresa if cliente else None
+            ))
+
+        return resultado
+
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao listar solicitacoes: {str(e)}")
+
+
+@app.post("/gestores/validar-codigo", response_model=SolicitacaoGestorResponse)
+def validar_codigo_gestor(
+    req: ValidarCodigoGestorRequest,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """Valida codigo de autorizacao e finaliza a solicitacao de gestor"""
+    try:
+        # Busca a solicitacao
+        solicitacao = db.query(SolicitacaoGestor).filter(
+            SolicitacaoGestor.id == req.solicitacao_id,
+            SolicitacaoGestor.usuario_id == usuario.id
+        ).first()
+
+        if not solicitacao:
+            raise HTTPException(404, "Solicitacao nao encontrada")
+
+        if solicitacao.status != "AGUARDANDO_CODIGO":
+            raise HTTPException(400, f"Solicitacao nao esta aguardando codigo (status: {solicitacao.status})")
+
+        if solicitacao.expira_em and solicitacao.expira_em < datetime.utcnow():
+            solicitacao.status = "EXPIRADA"
+            db.commit()
+            raise HTTPException(400, "Solicitacao expirada")
+
+        # Busca o cliente para obter CPF
+        cliente = db.query(Cliente).filter(Cliente.id == solicitacao.cliente_id).first()
+        if not cliente:
+            raise HTTPException(404, "Cliente nao encontrado")
+
+        # Chama o gateway para validar o codigo
+        try:
+            payload_gateway = {
+                "codigoEmpresaWeb": solicitacao.empresa_web,
+                "unidadeConsumidora": solicitacao.cdc,
+                "codigo": int(req.codigo)
+            }
+            print(f"\n{'='*60}")
+            print(f"VALIDAR CODIGO - Enviando para Gateway")
+            print(f"{'='*60}")
+            print(f"CPF Sessao: {cliente.responsavel_cpf}")
+            print(f"Payload: {payload_gateway}")
+            print(f"{'='*60}\n")
+
+            resultado = gateway.autorizacao_pendente(
+                cliente.responsavel_cpf,
+                payload_gateway
+            )
+
+            solicitacao.status = "CONCLUIDA"
+            solicitacao.concluido_em = datetime.utcnow()
+            solicitacao.codigo_autorizacao = req.codigo
+            solicitacao.mensagem = "Autorizacao validada com sucesso"
+            db.commit()
+
+        except Exception as e:
+            solicitacao.mensagem = f"Erro na validacao: {str(e)[:100]}"
+            db.commit()
+            raise HTTPException(400, f"Erro ao validar codigo: {str(e)}")
+
+        # Busca dados para resposta
+        uc = db.query(UnidadeConsumidora).filter(UnidadeConsumidora.id == solicitacao.uc_id).first() if solicitacao.uc_id else None
+
+        return SolicitacaoGestorResponse(
+            id=solicitacao.id,
+            cliente_id=solicitacao.cliente_id,
+            uc_id=solicitacao.uc_id,
+            cdc=solicitacao.cdc,
+            digito_verificador=solicitacao.digito_verificador,
+            empresa_web=solicitacao.empresa_web,
+            cpf_gestor=solicitacao.cpf_gestor,
+            nome_gestor=solicitacao.nome_gestor,
+            status=solicitacao.status,
+            criado_em=solicitacao.criado_em,
+            expira_em=solicitacao.expira_em,
+            concluido_em=solicitacao.concluido_em,
+            mensagem=solicitacao.mensagem,
+            endereco_uc=uc.endereco if uc else None,
+            nome_empresa=cliente.nome_empresa
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao validar codigo: {str(e)}")
+
+
+@app.delete("/gestores/pendentes/{solicitacao_id}")
+def cancelar_solicitacao(
+    solicitacao_id: int,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """Cancela uma solicitacao pendente"""
+    try:
+        solicitacao = db.query(SolicitacaoGestor).filter(
+            SolicitacaoGestor.id == solicitacao_id,
+            SolicitacaoGestor.usuario_id == usuario.id
+        ).first()
+
+        if not solicitacao:
+            raise HTTPException(404, "Solicitacao nao encontrada")
+
+        if solicitacao.status not in ["AGUARDANDO_CODIGO", "PENDENTE"]:
+            raise HTTPException(400, "Apenas solicitacoes pendentes podem ser canceladas")
+
+        solicitacao.status = "CANCELADA"
+        db.commit()
+
+        return {"msg": "Solicitacao cancelada com sucesso"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao cancelar solicitacao: {str(e)}")

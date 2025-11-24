@@ -3,8 +3,9 @@ import { api, Empresa, UnidadeConsumidora, Fatura, GDDetailsResponse, HistoricoM
 import { useToast } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import { useTheme } from './contexts/ThemeContext';
+import { GestoresPage } from './pages/GestoresPage';
 import {
-  Activity, Plug, Plus, RefreshCw, ArrowLeft, Home, FileText, Download, Loader2, Sun, BatteryCharging, ChevronDown, ChevronUp, Barcode, QrCode, X, Share2, LogOut, User, Building2, Zap, AlertCircle, CheckCircle2, Clock, DollarSign, BarChart3, PieChart, Eye, GitBranch, Move, ZoomIn, ZoomOut, Maximize2, TrendingUp, TrendingDown, Calendar, ArrowRightLeft, Layers, Timer, MapPin, ChevronRight, Menu, ChevronLeft, Moon, SunMedium, PanelLeftClose, PanelLeft
+  Activity, Plug, Plus, RefreshCw, ArrowLeft, Home, FileText, Download, Loader2, Sun, BatteryCharging, ChevronDown, ChevronUp, Barcode, QrCode, X, Share2, LogOut, User, Building2, Zap, AlertCircle, CheckCircle2, Clock, DollarSign, BarChart3, PieChart, Eye, GitBranch, Move, ZoomIn, ZoomOut, Maximize2, TrendingUp, TrendingDown, Calendar, ArrowRightLeft, Layers, Timer, MapPin, ChevronRight, Menu, ChevronLeft, Moon, SunMedium, PanelLeftClose, PanelLeft, UserCog
 } from 'lucide-react';
 
 // Função auxiliar para converter Base64 em Download
@@ -19,7 +20,7 @@ const downloadBase64File = (base64Data: string, fileName: string) => {
 };
 
 // Tipo para navegação
-type NavPage = 'dashboard' | 'empresas' | 'usinas';
+type NavPage = 'dashboard' | 'empresas' | 'usinas' | 'gestores';
 
 // Interface para usina com empresa
 interface UsinaComEmpresa extends UnidadeConsumidora {
@@ -1668,6 +1669,20 @@ function App() {
               </div>
             )}
           </div>
+
+          {/* Gestores */}
+          <button
+            onClick={() => { setPaginaAtual('gestores'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
+            className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} transition px-3 py-2.5 rounded-lg ${
+              paginaAtual === 'gestores' && !vendoEmpresa
+                ? 'bg-[#00A3E0] text-white'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title={sidebarCollapsed ? "Gestores" : ""}
+          >
+            <UserCog size={20} />
+            {!sidebarCollapsed && <span>Gestores</span>}
+          </button>
         </nav>
 
         {/* Footer da Sidebar */}
@@ -1804,7 +1819,10 @@ function App() {
             )}
           </div>
         ) : (
-          paginaAtual === 'dashboard' ? renderDashboard() : paginaAtual === 'usinas' ? renderUsinas() : renderEmpresas()
+          paginaAtual === 'dashboard' ? renderDashboard() :
+          paginaAtual === 'usinas' ? renderUsinas() :
+          paginaAtual === 'gestores' ? <GestoresPage empresas={empresas} /> :
+          renderEmpresas()
         )}
         </main>
       </div>

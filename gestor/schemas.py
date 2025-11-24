@@ -295,3 +295,68 @@ class AlterarSenhaRequest(BaseModel):
         if len(v) < 6:
             raise ValueError('Nova senha deve ter pelo menos 6 caracteres')
         return v
+
+
+# ==========================================
+# SCHEMAS DE GESTORES DE UC
+# ==========================================
+
+class SolicitarGestorRequest(BaseModel):
+    """Schema para solicitar/adicionar gestor a uma UC"""
+    cliente_id: int  # Empresa/Cliente
+    uc_id: Optional[int] = None  # ID da UC no banco local (opcional)
+    cdc: int
+    digito_verificador: int
+    empresa_web: int = 6
+    cpf_gestor: str  # CPF de quem sera o gestor
+    nome_gestor: Optional[str] = None
+    is_proprietario: bool  # True = adiciona direto, False = cria solicitacao pendente
+
+    @field_validator('cpf_gestor')
+    @classmethod
+    def validar_cpf(cls, v: str) -> str:
+        cpf_limpo = re.sub(r'[.\-\s]', '', v)
+        if not cpf_limpo.isdigit():
+            raise ValueError('CPF deve conter apenas numeros')
+        if len(cpf_limpo) != 11:
+            raise ValueError('CPF deve ter exatamente 11 digitos')
+        return cpf_limpo
+
+
+class ValidarCodigoGestorRequest(BaseModel):
+    """Schema para validar codigo de autorizacao"""
+    solicitacao_id: int
+    codigo: str
+
+    @field_validator('codigo')
+    @classmethod
+    def validar_codigo(cls, v: str) -> str:
+        codigo = v.strip()
+        if not codigo:
+            raise ValueError('Codigo nao pode estar vazio')
+        if not codigo.isdigit():
+            raise ValueError('Codigo deve conter apenas numeros')
+        return codigo
+
+
+class SolicitacaoGestorResponse(BaseModel):
+    """Schema de resposta para solicitacao de gestor"""
+    id: int
+    cliente_id: int
+    uc_id: Optional[int] = None
+    cdc: int
+    digito_verificador: int
+    empresa_web: int
+    cpf_gestor: str
+    nome_gestor: Optional[str] = None
+    status: str
+    criado_em: datetime
+    expira_em: Optional[datetime] = None
+    concluido_em: Optional[datetime] = None
+    mensagem: Optional[str] = None
+    # Dados extras para exibicao
+    endereco_uc: Optional[str] = None
+    nome_empresa: Optional[str] = None
+
+    class Config:
+        from_attributes = True

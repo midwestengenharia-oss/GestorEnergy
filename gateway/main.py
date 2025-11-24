@@ -75,6 +75,14 @@ class GerenteContextoRequest(BaseModel):
     descricaoComplementarImovel: Optional[str] = ""
     dataUltimoAcesso: Optional[str] = "" # Ex: "Fri Nov 21 2025..."
 
+# Adicione junto com os outros modelos (Classes BaseModel)
+
+class AutorizacaoPendenteRequest(BaseModel):
+    cpf: str # Necessário para carregar a sessão
+    codigoEmpresaWeb: int = 6
+    unidadeConsumidora: int # Corresponde ao parâmetro da URL (pode ser o CDC)
+    codigo: int # O código da autorização (ex: 5002)
+
 # --- FUNÇÕES AUXILIARES DE AUTH ---
 
 def create_access_token(data: dict):
@@ -548,17 +556,64 @@ def contexto_adicionar_gerente(req: GerenteContextoRequest):
     Útil para 'aquecer' a sessão e obter cookies de segurança antes de gerenciar imóveis.
     """
     try:
+        print(f"\n{'='*60}")
+        print(f"[GATEWAY] Endpoint: /imoveis/gerente/contexto")
+        print(f"{'='*60}")
+        print(f"Request recebido: {req.model_dump()}")
+        print(f"{'='*60}\n")
+
         svc = EnergisaService(req.cpf)
         if not svc.is_authenticated():
              raise HTTPException(401, "Não autenticado na Energisa. Faça login primeiro.")
-        
+
         dados = req.model_dump()
         del dados['cpf'] # Remove para não ir nos params
-        
+
+        print(f"Dados que serao enviados para service: {dados}\n")
+
         result = svc.adicionar_gerente_get(dados)
+
+        print(f"Resultado recebido do service: {result}\n")
+
         return result
-        
+
     except Exception as e:
+        print(f"ERRO no endpoint: {str(e)}\n")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Adicione no final do arquivo main.py, antes do if __name__ == "__main__":
+
+@app.post("/imoveis/autorizacao-pendente", dependencies=[Depends(verify_token)])
+def autorizacao_pendente(req: AutorizacaoPendenteRequest):
+    """
+    Rota para processar autorizações pendentes de gerenciamento de imóveis.
+    Realiza um GET autenticado em /gerenciar-imoveis/autorizacao-pendente.
+    """
+    try:
+        print(f"\n{'='*60}")
+        print(f"[GATEWAY] Endpoint: /imoveis/autorizacao-pendente")
+        print(f"{'='*60}")
+        print(f"Request recebido: {req.model_dump()}")
+        print(f"{'='*60}\n")
+
+        svc = EnergisaService(req.cpf)
+        if not svc.is_authenticated():
+             raise HTTPException(401, "Não autenticado na Energisa. Faça login primeiro.")
+
+        # Prepara os dados
+        dados = req.model_dump()
+        del dados['cpf'] # Remove CPF para não enviar na query string
+
+        print(f"Dados que serao enviados para service: {dados}\n")
+
+        result = svc.autorizacao_pendente_get(dados)
+
+        print(f"Resultado recebido do service: {result}\n")
+
+        return result
+
+    except Exception as e:
+        print(f"ERRO no endpoint: {str(e)}\n")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

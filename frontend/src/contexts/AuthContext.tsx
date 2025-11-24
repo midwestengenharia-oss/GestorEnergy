@@ -189,7 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Timer de refresh automático (verifica a cada 1 minuto)
     useEffect(() => {
-        if (!isAuthenticated) return;
+        if (!usuario) return;
 
         const checkTokenExpiry = async () => {
             if (isTokenExpiringSoon() && !isRefreshing) {
@@ -202,7 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const interval = setInterval(checkTokenExpiry, 60 * 1000);
 
         return () => clearInterval(interval);
-    }, [isAuthenticated, refreshAuth, isRefreshing]);
+    }, [usuario, refreshAuth, isRefreshing]);
 
     // Interceptor de REQUEST - verifica se token está expirando antes de fazer requisição
     useEffect(() => {

@@ -132,13 +132,22 @@ export function GestoresPage({ empresas }: Props) {
             const res = await gestoresApi.solicitar(payload);
 
             if (res.data.status === 'CONCLUIDA') {
-                toast.success('Gestor adicionado com sucesso!');
+                toast.success('Gestor adicionado com sucesso! Atualizando dados...');
+                setModalAberto(false);
+
+                // Aguarda 2 segundos e recarrega (backend sincroniza automaticamente)
+                setTimeout(async () => {
+                    await carregarDados();
+                    toast.success('Dados atualizados!');
+                }, 2000);
+
             } else if (res.data.status === 'AGUARDANDO_CODIGO') {
                 toast.success('Solicitacao criada! Aguarde o codigo do proprietario.');
                 setSolicitacoesPendentes(prev => [res.data, ...prev]);
+                setModalAberto(false);
+            } else {
+                setModalAberto(false);
             }
-
-            setModalAberto(false);
         } catch (e: any) {
             toast.error(e.message || 'Erro ao enviar solicitacao');
         } finally {
@@ -188,11 +197,19 @@ export function GestoresPage({ empresas }: Props) {
             if (res.data.status === 'AGUARDANDO_CODIGO') {
                 toast.success('Solicitacao criada! Aguarde o codigo do proprietario.');
                 setSolicitacoesPendentes(prev => [res.data, ...prev]);
+                setModalSolicitarManual(false);
             } else if (res.data.status === 'CONCLUIDA') {
-                toast.success('Acesso concedido!');
-            }
+                toast.success('Acesso concedido! Atualizando dados...');
+                setModalSolicitarManual(false);
 
-            setModalSolicitarManual(false);
+                // Aguarda 2 segundos e recarrega
+                setTimeout(async () => {
+                    await carregarDados();
+                    toast.success('Dados atualizados!');
+                }, 2000);
+            } else {
+                setModalSolicitarManual(false);
+            }
         } catch (e: any) {
             toast.error(e.message || 'Erro ao enviar solicitacao');
         } finally {
@@ -221,11 +238,22 @@ export function GestoresPage({ empresas }: Props) {
                 codigo: codigoAutorizacao
             });
 
-            toast.success('Codigo validado com sucesso!');
+            toast.success('Codigo validado! Atualizando suas UCs...');
+
+            // Remove da lista de pendentes
             setSolicitacoesPendentes(prev =>
                 prev.filter(s => s.id !== solicitacaoSelecionada.id)
             );
+
             setModalCodigoAberto(false);
+
+            // Aguarda 2 segundos para o backend sincronizar e recarrega
+            setTimeout(async () => {
+                toast.success('Recarregando unidades consumidoras...');
+                await carregarDados();
+                toast.success('Acesso concedido! Voce ja pode gerenciar esta UC.');
+            }, 2000);
+
         } catch (e: any) {
             toast.error(e.message || 'Codigo invalido');
         } finally {

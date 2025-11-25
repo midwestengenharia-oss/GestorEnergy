@@ -664,7 +664,7 @@ def solicitar_gestor(
                 UnidadeConsumidora.cliente_id == cliente.id
             ).first()
 
-        # Cria a solicitacao
+        # Cria a solicitacao (sempre PENDENTE inicialmente)
         solicitacao = SolicitacaoGestor(
             usuario_id=usuario.id,
             cliente_id=cliente.id,
@@ -674,42 +674,66 @@ def solicitar_gestor(
             empresa_web=req.empresa_web,
             cpf_gestor=req.cpf_gestor,
             nome_gestor=req.nome_gestor,
-            status="PENDENTE" if req.is_proprietario else "AGUARDANDO_CODIGO",
-            expira_em=datetime.utcnow() + timedelta(days=5) if not req.is_proprietario else None
+            status="PENDENTE",
+            expira_em=datetime.utcnow() + timedelta(days=5)  # Sempre 5 dias
         )
         db.add(solicitacao)
         db.commit()
         db.refresh(solicitacao)
 
-        # Se e proprietario, chama o gateway para adicionar direto
-        if req.is_proprietario:
-            try:
-                payload_gateway = {
-                    "codigoEmpresaWeb": req.empresa_web,
-                    "cdc": req.cdc,
-                    "digitoVerificador": req.digito_verificador,
-                    "numeroCpfCnpjCliente": req.cpf_gestor
-                }
-                print(f"\n{'='*60}")
-                print(f"ADICIONAR GERENTE - Enviando para Gateway")
-                print(f"{'='*60}")
-                print(f"CPF Sessao: {cliente.responsavel_cpf}")
-                print(f"Payload: {payload_gateway}")
-                print(f"{'='*60}\n")
+        # SEMPRE chama o gateway para adicionar gerente (tanto proprietario quanto nao-proprietario)
+        try:
+            payload_gateway = {
+                "codigoEmpresaWeb": req.empresa_web,
+                "cdc": req.cdc,
+                "digitoVerificador": req.digito_verificador,
+                "numeroCpfCnpjCliente": req.cpf_gestor
+            }
+            print(f"\n{'='*60}")
+            print(f"ADICIONAR GERENTE - Enviando para Gateway")
+            print(f"{'='*60}")
+            print(f"CPF Sessao: {cliente.responsavel_cpf}")
+            print(f"CPF Gestor: {req.cpf_gestor}")
+            print(f"Is Proprietario: {req.is_proprietario}")
+            print(f"Payload: {payload_gateway}")
+            print(f"{'='*60}\n")
 
-                resultado = gateway.adicionar_gerente(
-                    cliente.responsavel_cpf,
-                    payload_gateway
-                )
+            resultado = gateway.adicionar_gerente(
+                cliente.responsavel_cpf,
+                payload_gateway
+            )
+
+            print(f"Resultado do Gateway: {resultado}\n")
+
+            # Se for proprietario e deu sucesso, marca como CONCLUIDA
+            if req.is_proprietario and resultado.get('status') == 'success':
                 solicitacao.status = "CONCLUIDA"
                 solicitacao.concluido_em = datetime.utcnow()
                 solicitacao.mensagem = "Gestor adicionado com sucesso"
                 db.commit()
-            except Exception as e:
-                solicitacao.status = "ERRO"
-                solicitacao.mensagem = str(e)[:200]
+
+                # Dispara sincronizacao automatica para atualizar as UCs
+                print(f"[GESTOR] Gestor adicionado com sucesso! Disparando sincronizacao do cliente {cliente.id}...")
+                try:
+                    from threading import Thread
+                    sync_thread = Thread(target=sincronizar_dados_cliente, args=(cliente.id,), daemon=True)
+                    sync_thread.start()
+                    print(f"[GESTOR] Sincronizacao iniciada em background")
+                except Exception as sync_error:
+                    print(f"[GESTOR] Aviso: Erro ao iniciar sincronizacao: {sync_error}")
+
+            else:
+                # Nao e proprietario OU deu algum erro - fica AGUARDANDO_CODIGO
+                solicitacao.status = "AGUARDANDO_CODIGO"
+                solicitacao.mensagem = "Solicitacao criada na Energisa. Aguardando codigo do proprietario."
                 db.commit()
-                raise HTTPException(500, f"Erro ao adicionar gestor: {str(e)}")
+
+        except Exception as e:
+            print(f"ERRO ao chamar gateway: {str(e)}\n")
+            solicitacao.status = "ERRO"
+            solicitacao.mensagem = str(e)[:200]
+            db.commit()
+            raise HTTPException(500, f"Erro ao solicitar acesso: {str(e)}")
 
         # Prepara resposta
         return SolicitacaoGestorResponse(
@@ -841,6 +865,17 @@ def validar_codigo_gestor(
             solicitacao.codigo_autorizacao = req.codigo
             solicitacao.mensagem = "Autorizacao validada com sucesso"
             db.commit()
+
+            # Dispara sincronizacao automatica para buscar a nova UC
+            print(f"[GESTOR] Codigo validado! Disparando sincronizacao do cliente {cliente.id}...")
+            try:
+                from threading import Thread
+                sync_thread = Thread(target=sincronizar_dados_cliente, args=(cliente.id,), daemon=True)
+                sync_thread.start()
+                print(f"[GESTOR] Sincronizacao iniciada em background")
+            except Exception as sync_error:
+                print(f"[GESTOR] Aviso: Erro ao iniciar sincronizacao: {sync_error}")
+                # Nao falha a validacao por causa disso
 
         except Exception as e:
             solicitacao.mensagem = f"Erro na validacao: {str(e)[:100]}"

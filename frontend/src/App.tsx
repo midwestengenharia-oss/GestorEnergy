@@ -1891,6 +1891,14 @@ function App() {
                         <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
                           {uc.is_geradora ? <Sun className="text-orange-500" size={24} /> : <Home className="text-slate-400" size={20} />} UC: {uc.codigo_uc}
                           {uc.is_geradora && <span className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">USINA</span>}
+                          {/* Badge Ativo/Inativo */}
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                            (uc.ucAtiva === false || uc.ucAtiva === 'false' || uc.ucAtiva === 'False' || uc.ucAtiva === 0)
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                            {(uc.ucAtiva === false || uc.ucAtiva === 'false' || uc.ucAtiva === 'False' || uc.ucAtiva === 0) ? 'INATIVA' : 'ATIVA'}
+                          </span>
                         </h3>
                         <p className="text-slate-500 text-sm ml-8">{uc.endereco}</p>
                       </div>
@@ -1917,7 +1925,17 @@ function App() {
                         <div className="flex gap-4">
                           <div className="bg-orange-100 p-3 rounded-full h-14 w-14 flex items-center justify-center"><Sun className="text-orange-500" size={32} /></div>
                           <div>
-                            <h3 className="text-xl font-bold text-slate-800">Usina {usina.codigo_uc}</h3>
+                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                              Usina {usina.codigo_uc}
+                              {/* Badge Ativo/Inativo */}
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
+                                (usina.ucAtiva === false || usina.ucAtiva === 'false' || usina.ucAtiva === 'False' || usina.ucAtiva === 0)
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-green-100 text-green-700'
+                              }`}>
+                                {(usina.ucAtiva === false || usina.ucAtiva === 'false' || usina.ucAtiva === 'False' || usina.ucAtiva === 0) ? 'INATIVA' : 'ATIVA'}
+                              </span>
+                            </h3>
                             <p className="text-slate-500 text-sm">{usina.endereco}</p>
                             <div className="mt-3 flex gap-3">
                               <div className="bg-white px-3 py-1 rounded border border-orange-200 text-xs font-bold text-orange-700 flex items-center gap-1"><BatteryCharging size={14} /> Saldo: {usina.saldo_acumulado} kWh</div>

@@ -49,6 +49,10 @@ export interface UnidadeConsumidora {
     percentual_rateio: number;
     tipo_geracao?: string;
     beneficiarias?: UnidadeConsumidora[];
+    ucAtiva?: boolean;
+    digito_verificador?: number;
+    empresa_web?: number;
+    usuarioGerenciandoCdcs?: any[];  // Se existe, usuário é proprietário
 }
 
 export interface Empresa {
@@ -124,6 +128,7 @@ export interface UsinaDetalhes {
     saldo_atual: number;
     tipo_geracao?: string;
     empresa_nome?: string;
+    ucAtiva?: boolean;
 }
 
 export interface GDDetailsResponse {

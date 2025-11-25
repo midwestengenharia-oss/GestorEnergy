@@ -63,12 +63,16 @@ export function GestoresPage({ empresas }: Props) {
                     const ucsEmpresa = res.data || [];
 
                     for (const uc of ucsEmpresa) {
-                        // Verifica se tem usuarioGerenciandoCdcs (indica que e proprietario)
-                        // Por enquanto, vamos assumir que todas sao do proprietario
-                        // A verificacao real seria feita comparando o CPF logado com o titular
+                        // Se tem usuarioGerenciandoCdcs, usuario e PROPRIETARIO
+                        // Se NAO tem, usuario e apenas GESTOR
+                        const isProprietario = uc.usuarioGerenciandoCdcs !== undefined && uc.usuarioGerenciandoCdcs !== null;
+
+                        // Debug: verificar o valor de ucAtiva
+                        console.log(`UC ${uc.cdc} - ucAtiva:`, uc.ucAtiva, typeof uc.ucAtiva);
+
                         todasUcs.push({
                             ...uc,
-                            is_proprietario: true, // TODO: verificar com dados reais
+                            is_proprietario: isProprietario,
                             empresa_id: emp.id,
                             empresa_nome: emp.nome_empresa
                         });
@@ -492,11 +496,22 @@ export function GestoresPage({ empresas }: Props) {
                                                     {uc.endereco}
                                                 </div>
                                             </div>
-                                            <div className={`px-2 py-1 rounded text-xs ${uc.is_proprietario
-                                                ? 'bg-green-100 text-green-700'
-                                                : 'bg-amber-100 text-amber-700'
+                                            <div className="flex flex-col gap-1.5 items-end">
+                                                {/* Badge Ativo/Inativo */}
+                                                <div className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                    (uc.ucAtiva === false || uc.ucAtiva === 'false' || uc.ucAtiva === 'False' || uc.ucAtiva === 0)
+                                                        ? 'bg-red-100 text-red-700'
+                                                        : 'bg-green-100 text-green-700'
                                                 }`}>
-                                                {uc.is_proprietario ? 'Proprietario' : 'Gestor'}
+                                                    {(uc.ucAtiva === false || uc.ucAtiva === 'false' || uc.ucAtiva === 'False' || uc.ucAtiva === 0) ? 'Inativa' : 'Ativa'}
+                                                </div>
+                                                {/* Badge Proprietário/Gestor */}
+                                                <div className={`px-2 py-1 rounded text-xs ${uc.is_proprietario
+                                                    ? 'bg-blue-100 text-blue-700'
+                                                    : 'bg-amber-100 text-amber-700'
+                                                    }`}>
+                                                    {uc.is_proprietario ? 'Proprietario' : 'Gestor'}
+                                                </div>
                                             </div>
                                         </div>
                                         <button className={`mt-3 w-full ${btnPrimaryClass} justify-center`}>

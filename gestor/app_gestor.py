@@ -640,6 +640,13 @@ def solicitar_gestor(
     - Se is_proprietario=True: Chama o gateway direto para adicionar (status PENDENTE -> CONCLUIDA)
     - Se is_proprietario=False: Cria solicitacao aguardando codigo (status AGUARDANDO_CODIGO)
     """
+    print(f"\n{'#'*70}")
+    print(f"[GESTOR] Endpoint /gestores/solicitar CHAMADO")
+    print(f"Request: {req.model_dump()}")
+    print(f"Usuario: {usuario.email}")
+    print(f"is_proprietario: {req.is_proprietario}")
+    print(f"{'#'*70}\n")
+
     try:
         # Verifica se o cliente pertence ao usuario
         cliente = db.query(Cliente).filter(

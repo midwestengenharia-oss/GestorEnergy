@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import or_, and_
 from pydantic import ValidationError
 from database import SessionLocal, Cliente, UnidadeConsumidora, Fatura, Usuario, SolicitacaoGestor
 from energisa_client import EnergisaGatewayClient
@@ -776,10 +777,18 @@ def listar_solicitacoes_pendentes(
         ).update({"status": "EXPIRADA"})
         db.commit()
 
-        # Busca pendentes
+        # Busca pendentes E concluidas (últimas 30 dias)
+        trinta_dias_atras = datetime.utcnow() - timedelta(days=30)
+
         solicitacoes = db.query(SolicitacaoGestor).filter(
             SolicitacaoGestor.usuario_id == usuario.id,
-            SolicitacaoGestor.status.in_(["AGUARDANDO_CODIGO", "PENDENTE"])
+            or_(
+                SolicitacaoGestor.status.in_(["AGUARDANDO_CODIGO", "PENDENTE"]),
+                and_(
+                    SolicitacaoGestor.status == "CONCLUIDA",
+                    SolicitacaoGestor.concluido_em >= trinta_dias_atras
+                )
+            )
         ).order_by(SolicitacaoGestor.criado_em.desc()).all()
 
         resultado = []

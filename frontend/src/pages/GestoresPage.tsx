@@ -352,62 +352,92 @@ export function GestoresPage({ empresas }: Props) {
                         {solicitacoesPendentes.length === 0 ? (
                             <div className={`text-center py-6 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                 <Clock size={40} className="mx-auto mb-3 opacity-40" />
-                                <p>Voce nao tem solicitacoes pendentes</p>
+                                <p>Voce nao tem solicitacoes</p>
                                 <p className="text-sm mt-1">
                                     Quando voce solicitar acesso a uma UC como gestor,<br/>
-                                    a solicitacao aparecera aqui aguardando o codigo do proprietario.
+                                    a solicitacao aparecera aqui.
                                 </p>
                             </div>
-                        ) : solicitacoesPendentes.map(sol => (
+                        ) : solicitacoesPendentes.map(sol => {
+                            const isConcluida = sol.status === 'CONCLUIDA';
+                            const isAguardando = sol.status === 'AGUARDANDO_CODIGO';
+
+                            return (
                                 <div
                                     key={sol.id}
-                                    className={`p-4 rounded-lg border ${isDark ? 'bg-slate-700/50 border-slate-600' : 'bg-slate-50 border-slate-200'}`}
+                                    className={`p-4 rounded-lg border ${isConcluida
+                                        ? isDark ? 'bg-green-900/20 border-green-700' : 'bg-green-50 border-green-200'
+                                        : isDark ? 'bg-slate-700/50 border-slate-600' : 'bg-slate-50 border-slate-200'
+                                    }`}
                                 >
                                     <div className="flex items-start justify-between">
-                                        <div className="space-y-1">
+                                        <div className="space-y-1 flex-1">
                                             <div className="flex items-center gap-2">
                                                 <Building2 size={16} className={isDark ? 'text-slate-400' : 'text-slate-500'} />
                                                 <span className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
                                                     {sol.nome_empresa}
                                                 </span>
+                                                {/* Badge de status */}
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                    isConcluida ? 'bg-green-100 text-green-700' :
+                                                    isAguardando ? 'bg-amber-100 text-amber-700' :
+                                                    'bg-blue-100 text-blue-700'
+                                                }`}>
+                                                    {isConcluida ? 'Concluída' : isAguardando ? 'Aguardando Código' : 'Pendente'}
+                                                </span>
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <MapPin size={16} className={isDark ? 'text-slate-400' : 'text-slate-500'} />
                                                 <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                                                    CDC: {sol.cdc} | {sol.endereco_uc || 'Endereco nao informado'}
+                                                    CDC: {sol.cdc} | {sol.endereco_uc || 'Endereço não informado'}
                                                 </span>
                                             </div>
                                             <div className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                                 CPF Gestor: {formatarCPF(sol.cpf_gestor)}
                                                 {sol.nome_gestor && ` (${sol.nome_gestor})`}
                                             </div>
-                                            {sol.expira_em && (
+                                            {sol.expira_em && !isConcluida && (
                                                 <div className="flex items-center gap-1 text-sm text-amber-500">
                                                     <AlertCircle size={14} />
                                                     Expira em {diasRestantes(sol.expira_em)} dias
                                                 </div>
                                             )}
+                                            {isConcluida && sol.concluido_em && (
+                                                <div className="flex items-center gap-1 text-sm text-green-600">
+                                                    <CheckCircle2 size={14} />
+                                                    Concluída em {new Date(sol.concluido_em).toLocaleDateString()}
+                                                </div>
+                                            )}
+                                            {sol.mensagem && (
+                                                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'} italic`}>
+                                                    {sol.mensagem}
+                                                </p>
+                                            )}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => abrirModalCodigo(sol)}
-                                                className={btnPrimaryClass}
-                                            >
-                                                <Key size={16} />
-                                                Inserir Codigo
-                                            </button>
-                                            <button
-                                                onClick={() => cancelarSolicitacao(sol.id)}
-                                                className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
-                                                title="Cancelar"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
+                                        {!isConcluida && (
+                                            <div className="flex items-center gap-2">
+                                                {isAguardando && (
+                                                    <button
+                                                        onClick={() => abrirModalCodigo(sol)}
+                                                        className={btnPrimaryClass}
+                                                    >
+                                                        <Key size={16} />
+                                                        Inserir Código
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => cancelarSolicitacao(sol.id)}
+                                                    className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
+                                                    title="Cancelar"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            ))
-                        }
+                            );
+                        })}
                     </div>
                 )}
             </div>

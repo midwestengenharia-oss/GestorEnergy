@@ -65,6 +65,10 @@ function App() {
   const [expandedUcs, setExpandedUcs] = useState<Record<number, boolean>>({});
   const [loadingUcs, setLoadingUcs] = useState<Record<number, boolean>>({});
 
+  // Seleção múltipla de faturas
+  const [faturasSelecionadas, setFaturasSelecionadas] = useState<Record<number, Set<number>>>({});
+  const [downloadingMultiple, setDownloadingMultiple] = useState(false);
+
   // Modais e Inputs
   const [faturaDetalhe, setFaturaDetalhe] = useState<Fatura | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -281,6 +285,74 @@ function App() {
     }
   };
 
+  // --- SELEÇÃO MÚLTIPLA DE FATURAS ---
+  const toggleFaturaSelecionada = (ucId: number, faturaId: number) => {
+    setFaturasSelecionadas(prev => {
+      const ucSelecionadas = new Set(prev[ucId] || []);
+      if (ucSelecionadas.has(faturaId)) {
+        ucSelecionadas.delete(faturaId);
+      } else {
+        ucSelecionadas.add(faturaId);
+      }
+      return { ...prev, [ucId]: ucSelecionadas };
+    });
+  };
+
+  const toggleTodasFaturas = (ucId: number) => {
+    const faturas = faturasPorUc[ucId] || [];
+    const selecionadas = faturasSelecionadas[ucId] || new Set();
+
+    if (selecionadas.size === faturas.length) {
+      // Desseleciona todas
+      setFaturasSelecionadas(prev => ({ ...prev, [ucId]: new Set() }));
+    } else {
+      // Seleciona todas
+      setFaturasSelecionadas(prev => ({
+        ...prev,
+        [ucId]: new Set(faturas.map(f => f.id))
+      }));
+    }
+  };
+
+  const downloadFaturasSelecionadas = async (ucId: number) => {
+    const selecionadas = faturasSelecionadas[ucId];
+    if (!selecionadas || selecionadas.size === 0) {
+      toast.warning('Selecione pelo menos uma fatura');
+      return;
+    }
+
+    setDownloadingMultiple(true);
+    let sucessos = 0;
+    let erros = 0;
+
+    for (const faturaId of Array.from(selecionadas)) {
+      try {
+        const res = await api.get(`/faturas/${faturaId}/download`);
+        if (res.data.file_base64) {
+          downloadBase64File(res.data.file_base64, res.data.filename);
+          sucessos++;
+          // Pequeno delay entre downloads
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } else {
+          erros++;
+        }
+      } catch (e) {
+        erros++;
+      }
+    }
+
+    setDownloadingMultiple(false);
+
+    if (sucessos > 0) {
+      toast.success(`${sucessos} fatura(s) baixada(s) com sucesso${erros > 0 ? `, ${erros} erro(s)` : ''}`);
+    } else {
+      toast.error('Erro ao baixar faturas');
+    }
+
+    // Limpa seleção após download
+    setFaturasSelecionadas(prev => ({ ...prev, [ucId]: new Set() }));
+  };
+
   // --- HELPERS ---
   const getStatusColor = (status: string) => {
     const s = status?.toLowerCase() || '';
@@ -389,16 +461,71 @@ function App() {
     if (loadingUcs[ucId]) return <div className="p-8 text-center text-slate-500 bg-slate-50/30 border-t border-slate-100"><Loader2 className="animate-spin mx-auto mb-2 text-[#00A3E0]" size={24} /><p className="text-sm">Buscando faturas...</p></div>;
     if (!expandedUcs[ucId] || !faturasPorUc[ucId]) return null;
 
+    const faturas = faturasPorUc[ucId];
+    const selecionadas = faturasSelecionadas[ucId] || new Set();
+    const todasSelecionadas = faturas.length > 0 && selecionadas.size === faturas.length;
+
     return (
       <div className="border-t border-slate-100 animate-fade-in-down">
+        {/* Barra de ações de seleção múltipla */}
+        {faturas.length > 0 && (
+          <div className={`flex items-center justify-between px-4 py-3 ${isDark ? 'bg-slate-800/50 border-b border-slate-700' : 'bg-slate-50 border-b border-slate-200'}`}>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={todasSelecionadas}
+                  onChange={() => toggleTodasFaturas(ucId)}
+                  className="w-4 h-4 text-[#00A3E0] border-slate-300 rounded focus:ring-[#00A3E0]"
+                />
+                <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                  {todasSelecionadas ? 'Desselecionar todas' : 'Selecionar todas'}
+                </span>
+              </label>
+              {selecionadas.size > 0 && (
+                <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {selecionadas.size} selecionada{selecionadas.size !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            {selecionadas.size > 0 && (
+              <button
+                onClick={() => downloadFaturasSelecionadas(ucId)}
+                disabled={downloadingMultiple}
+                className="flex items-center gap-2 px-4 py-2 bg-[#00A3E0] text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {downloadingMultiple ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Baixando...
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} />
+                    Baixar Selecionadas ({selecionadas.size})
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-            <tr><th className="p-3 pl-6">Mês/Ano</th><th className="p-3">Vencimento</th><th className="p-3">Valor</th><th className="p-3">Status</th><th className="p-3 text-right pr-6">Ações</th></tr>
+            <tr><th className="p-3 pl-6 w-10"></th><th className="p-3">Mês/Ano</th><th className="p-3">Vencimento</th><th className="p-3">Valor</th><th className="p-3">Status</th><th className="p-3 text-right pr-6">Ações</th></tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {faturasPorUc[ucId].map(fat => (
+            {faturas.map(fat => (
               <tr key={fat.id} className="hover:bg-slate-50 transition-colors group">
-                <td className="p-3 pl-6 font-medium text-slate-700">{fat.mes}/{fat.ano}</td>
+                <td className="p-3 pl-6">
+                  <input
+                    type="checkbox"
+                    checked={selecionadas.has(fat.id)}
+                    onChange={() => toggleFaturaSelecionada(ucId, fat.id)}
+                    className="w-4 h-4 text-[#00A3E0] border-slate-300 rounded focus:ring-[#00A3E0]"
+                  />
+                </td>
+                <td className="p-3 font-medium text-slate-700">{fat.mes}/{fat.ano}</td>
                 <td className="p-3 text-slate-600">{fat.vencimento || '-'}</td>
                 <td className="p-3 font-bold text-slate-800">R$ {fat.valor.toFixed(2)}</td>
                 <td className="p-3"><span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusColor(fat.status)}`}>{fat.status}</span></td>
@@ -408,7 +535,7 @@ function App() {
                 </td>
               </tr>
             ))}
-            {faturasPorUc[ucId].length === 0 && <tr><td colSpan={5} className="p-6 text-center text-slate-400 italic">Nenhuma fatura encontrada.</td></tr>}
+            {faturas.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-slate-400 italic">Nenhuma fatura encontrada.</td></tr>}
           </tbody>
         </table>
       </div>

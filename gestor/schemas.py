@@ -104,6 +104,15 @@ class UnidadeConsumidoraResponse(BaseModel):
     empresa_web: int
     endereco: str
     nome_titular: Optional[str] = None
+    numero_imovel: Optional[str] = None
+    complemento: Optional[str] = None
+    bairro: Optional[str] = None
+    nome_municipio: Optional[str] = None
+    uf: Optional[str] = None
+    uc_ativa: Optional[bool] = None
+    uc_cortada: Optional[bool] = None
+    uc_desligada: Optional[bool] = None
+    contrato_ativo: Optional[bool] = None
     is_geradora: bool
     saldo_acumulado: float
     tipo_geracao: Optional[str] = None

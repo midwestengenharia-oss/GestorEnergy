@@ -32,9 +32,14 @@ services:
       - ./gestor_faturas:/app/faturas_storage
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_URL=http://localhost:8000
+        - VITE_GATEWAY_URL=http://localhost:3000
     container_name: energisa_frontend
     ports:
       - "80:80" # Roda na porta 80 padrão
     depends_on:
       - gestor
+      - gateway

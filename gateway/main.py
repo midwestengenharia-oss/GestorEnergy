@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Response, Depends, status, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional
@@ -18,6 +19,16 @@ import time
 _login_sessions = {}  # transaction_id -> {"thread": thread, "cmd_queue": queue, "result_queue": queue}
 
 app = FastAPI(title="Energisa API Segura", version="2.1.0")
+
+# Configuração de CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Em produção, especifique as origens permitidas
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # --- CONFIGURAÇÃO DE SEGURANÇA ---
 
 # Chave secreta para assinar o token (Em produção, use variável de ambiente!)
@@ -614,6 +625,222 @@ def autorizacao_pendente(req: AutorizacaoPendenteRequest):
 
     except Exception as e:
         print(f"ERRO no endpoint: {str(e)}\n")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- ROTAS PÚBLICAS PARA SIMULAÇÃO (LANDING PAGE) ---
+# Estas rotas não requerem token de autenticação da API
+
+class PublicSimulationStart(BaseModel):
+    cpf: str
+    telefone: str
+
+class PublicSimulationSms(BaseModel):
+    sessionId: str
+    codigo: str
+
+@app.post("/public/simulacao/iniciar")
+def public_simulation_start(req: PublicSimulationStart):
+    """
+    Endpoint público para iniciar simulação na landing page.
+    Inicia autenticação com a Energisa via SMS.
+    """
+    try:
+        # Remove formatação do CPF e telefone
+        cpf_clean = req.cpf.replace(".", "").replace("-", "")
+        tel_clean = req.telefone.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+
+        # Pega os últimos 4 dígitos do telefone
+        final_telefone = tel_clean[-4:]
+
+        # Inicia o login usando a mesma lógica do endpoint protegido
+        transaction_id = f"simulation_{cpf_clean}_{int(time.time())}"
+
+        # Cria filas de comunicação
+        cmd_queue = queue.Queue()
+        result_queue = queue.Queue()
+
+        # Inicia thread do worker
+        worker_thread = threading.Thread(
+            target=_login_worker_thread,
+            args=(cpf_clean, final_telefone, cmd_queue, result_queue),
+            daemon=True
+        )
+        worker_thread.start()
+
+        # Aguarda resultado do start_login
+        try:
+            result = result_queue.get(timeout=180)  # 3 minutos
+        except queue.Empty:
+            raise HTTPException(
+                status_code=500,
+                detail="Timeout aguardando start_login"
+            )
+
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+
+        # Armazena a sessão
+        _login_sessions[transaction_id] = {
+            "thread": worker_thread,
+            "cmd_queue": cmd_queue,
+            "result_queue": result_queue,
+            "cpf": cpf_clean,
+            "telefone": tel_clean,
+            "created_at": time.time()
+        }
+
+        return {
+            "success": True,
+            "sessionId": transaction_id,
+            "message": "SMS enviado com sucesso"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERRO no endpoint público iniciar: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/public/simulacao/validar-sms")
+def public_simulation_validate_sms(req: PublicSimulationSms):
+    """
+    Endpoint público para validar código SMS da simulação.
+    """
+    try:
+        session_id = req.sessionId
+
+        if session_id not in _login_sessions:
+            raise HTTPException(status_code=404, detail="Sessão não encontrada ou expirada")
+
+        session_data = _login_sessions[session_id]
+        cmd_queue = session_data["cmd_queue"]
+        result_queue = session_data["result_queue"]
+
+        # Envia comando para finalizar login
+        cmd_queue.put({"action": "finish", "sms_code": req.codigo})
+
+        # Aguarda resultado
+        try:
+            result = result_queue.get(timeout=120)
+        except queue.Empty:
+            raise HTTPException(status_code=500, detail="Timeout aguardando finish_login")
+
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+        # Armazena dados adicionais na sessão
+        _login_sessions[session_id]["authenticated"] = True
+        _login_sessions[session_id]["session_file"] = result.get("session_file")
+
+        return {
+            "success": True,
+            "message": "Autenticação realizada com sucesso"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERRO no endpoint validar SMS: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/public/simulacao/ucs/{session_id}")
+def public_simulation_get_ucs(session_id: str):
+    """
+    Endpoint público para buscar UCs após autenticação.
+    """
+    try:
+        if session_id not in _login_sessions:
+            raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+        session_data = _login_sessions[session_id]
+
+        if not session_data.get("authenticated"):
+            raise HTTPException(status_code=401, detail="Sessão não autenticada")
+
+        cpf = session_data["cpf"]
+
+        # Cria uma instância do EnergisaService (que carrega a sessão automaticamente)
+        svc = EnergisaService(cpf)
+
+        if not svc.is_authenticated():
+            raise HTTPException(status_code=401, detail="Sessão expirada")
+
+        # Busca as UCs
+        ucs_data = svc.listar_ucs()
+
+        return {
+            "success": True,
+            "ucs": ucs_data
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERRO ao buscar UCs: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/public/simulacao/faturas/{session_id}/{numero_uc}")
+def public_simulation_get_faturas(session_id: str, numero_uc: int):
+    """
+    Endpoint público para buscar faturas de uma UC específica.
+    Retorna faturas dos últimos 12 meses.
+    """
+    try:
+        if session_id not in _login_sessions:
+            raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+        session_data = _login_sessions[session_id]
+
+        if not session_data.get("authenticated"):
+            raise HTTPException(status_code=401, detail="Sessão não autenticada")
+
+        cpf = session_data["cpf"]
+
+        # Cria uma instância do EnergisaService (que carrega a sessão automaticamente)
+        svc = EnergisaService(cpf)
+
+        if not svc.is_authenticated():
+            raise HTTPException(status_code=401, detail="Sessão expirada")
+
+        # Busca todas as UCs para encontrar a UC específica
+        ucs_data = svc.listar_ucs()
+
+        # Encontra a UC pelo numeroUc
+        uc_encontrada = None
+        for uc in ucs_data:
+            if uc.get('numeroUc') == numero_uc:
+                uc_encontrada = uc
+                break
+
+        if not uc_encontrada:
+            raise HTTPException(status_code=404, detail=f"UC {numero_uc} não encontrada")
+
+        # Prepara os dados da UC no formato esperado pelo listar_faturas
+        uc_para_faturas = {
+            'cdc': uc_encontrada.get('numeroUc'),
+            'digitoVerificadorCdc': uc_encontrada.get('digitoVerificador'),
+            'codigoEmpresaWeb': uc_encontrada.get('codigoEmpresaWeb', 6)
+        }
+
+        # Busca as faturas da UC
+        faturas_data = svc.listar_faturas(uc_para_faturas)
+
+        # Limita aos últimos 12 meses
+        faturas_12_meses = faturas_data[-12:] if len(faturas_data) > 12 else faturas_data
+
+        # Log da primeira fatura para debug
+        if faturas_12_meses:
+            print(f"📋 Exemplo de fatura: {faturas_12_meses[0]}")
+
+        return {
+            "success": True,
+            "faturas": faturas_12_meses
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERRO ao buscar faturas: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

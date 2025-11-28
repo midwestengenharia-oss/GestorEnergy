@@ -44,12 +44,21 @@ export interface UnidadeConsumidora {
     cdc: number;
     endereco: string;
     nome_titular?: string;
+    numero_imovel?: string;
+    complemento?: string;
+    bairro?: string;
+    nome_municipio?: string;
+    uf?: string;
+    uc_ativa?: boolean;
+    uc_cortada?: boolean;
+    uc_desligada?: boolean;
+    contrato_ativo?: boolean;
     is_geradora: boolean;
     saldo_acumulado: number;
     percentual_rateio: number;
     tipo_geracao?: string;
     beneficiarias?: UnidadeConsumidora[];
-    ucAtiva?: boolean;
+    ucAtiva?: boolean;  // Alias para compatibilidade com API Energisa
     digito_verificador?: number;
     empresa_web?: number;
     usuarioGerenciandoCdcs?: any[];  // Se existe, usuário é proprietário

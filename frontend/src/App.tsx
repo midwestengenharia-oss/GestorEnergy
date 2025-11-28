@@ -249,6 +249,15 @@ function App() {
   };
 
   const toggleFaturas = async (ucId: number) => {
+    // Verifica se a UC está ativa
+    const uc = ucsDoCliente.find(u => u.id === ucId);
+    const isUcAtiva = uc && uc.uc_ativa === true && uc.contrato_ativo === true;
+
+    if (!isUcAtiva) {
+      toast.warning('Não é possível buscar faturas de UCs inativas');
+      return;
+    }
+
     if (expandedUcs[ucId]) {
       setExpandedUcs(prev => ({ ...prev, [ucId]: false }));
       return;
@@ -1884,34 +1893,50 @@ function App() {
 
             {abaAtiva === 'geral' && (
               <div className="space-y-6">
-                {ucsDoCliente.map(uc => (
-                  <div key={uc.id} className={`bg-white rounded-xl shadow-sm border overflow-hidden ${uc.is_geradora ? 'border-orange-200' : 'border-slate-200'}`}>
-                    <div className={`p-5 flex flex-wrap justify-between items-center gap-4 ${uc.is_geradora ? 'bg-orange-50/50' : 'bg-slate-50/50'}`}>
-                      <div>
-                        <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
-                          {uc.is_geradora ? <Sun className="text-orange-500" size={24} /> : <Home className="text-slate-400" size={20} />} UC: {uc.codigo_uc}
-                          {uc.is_geradora && <span className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">USINA</span>}
-                          {/* Badge Ativo/Inativo */}
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
-                            (uc.ucAtiva === false || uc.ucAtiva === 'false' || uc.ucAtiva === 'False' || uc.ucAtiva === 0)
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-green-100 text-green-700'
-                          }`}>
-                            {(uc.ucAtiva === false || uc.ucAtiva === 'false' || uc.ucAtiva === 'False' || uc.ucAtiva === 0) ? 'INATIVA' : 'ATIVA'}
-                          </span>
-                        </h3>
-                        <p className="text-slate-500 text-sm ml-8">{uc.endereco}</p>
+                {ucsDoCliente.map(uc => {
+                  const isUcAtiva = uc.uc_ativa === true && uc.contrato_ativo === true;
+                  const enderecoCompleto = uc.numero_imovel && uc.bairro && uc.nome_municipio && uc.uf
+                    ? `${uc.endereco}, ${uc.numero_imovel}${uc.complemento ? ' - ' + uc.complemento : ''} - ${uc.bairro}, ${uc.nome_municipio}/${uc.uf}`
+                    : uc.endereco;
+
+                  return (
+                    <div key={uc.id} className={`bg-white rounded-xl shadow-sm border overflow-hidden ${uc.is_geradora ? 'border-orange-200' : 'border-slate-200'} ${!isUcAtiva ? 'opacity-75' : ''}`}>
+                      <div className={`p-5 flex flex-wrap justify-between items-center gap-4 ${uc.is_geradora ? 'bg-orange-50/50' : 'bg-slate-50/50'}`}>
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
+                            {uc.is_geradora ? <Sun className="text-orange-500" size={24} /> : <Home className="text-slate-400" size={20} />} UC: {uc.codigo_uc}
+                            {uc.is_geradora && <span className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">USINA</span>}
+                            <span className={`text-xs px-2 py-1 rounded font-semibold ${
+                              isUcAtiva
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {isUcAtiva ? 'Ativa' : 'Inativa'}
+                            </span>
+                          </h3>
+                          <p className="text-slate-500 text-sm ml-8">{enderecoCompleto}</p>
+                          {uc.nome_titular && <p className="text-slate-400 text-xs ml-8 mt-1">Titular: {uc.nome_titular}</p>}
+                        </div>
+                        <div className="flex items-center gap-4">
+                          {uc.is_geradora && <div className="flex items-center gap-1 text-orange-600 font-bold"><BatteryCharging size={18} /> {uc.saldo_acumulado} kWh</div>}
+                          <button
+                            onClick={() => toggleFaturas(uc.id)}
+                            disabled={!isUcAtiva}
+                            className={`flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium ${
+                              isUcAtiva
+                                ? 'hover:bg-slate-50 cursor-pointer'
+                                : 'opacity-50 cursor-not-allowed'
+                            }`}
+                            title={!isUcAtiva ? 'UC inativa - faturas não disponíveis' : ''}
+                          >
+                            {expandedUcs[uc.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {expandedUcs[uc.id] ? 'Ocultar' : 'Ver Faturas'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        {uc.is_geradora && <div className="flex items-center gap-1 text-orange-600 font-bold"><BatteryCharging size={18} /> {uc.saldo_acumulado} kWh</div>}
-                        <button onClick={() => toggleFaturas(uc.id)} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 text-sm font-medium">
-                          {expandedUcs[uc.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {expandedUcs[uc.id] ? 'Ocultar' : 'Ver Faturas'}
-                        </button>
-                      </div>
+                      {renderTabelaFaturas(uc.id)}
                     </div>
-                    {renderTabelaFaturas(uc.id)}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -1919,34 +1944,26 @@ function App() {
               <div className="space-y-8">
                 {usinasDoCliente.length === 0 && <div className="text-center p-10 bg-white rounded-xl text-slate-500 border border-dashed border-slate-300">Nenhuma usina identificada.</div>}
                 {usinasDoCliente.map(usina => (
-                  <div key={usina.id} className="bg-white rounded-xl shadow-md border border-orange-100 overflow-hidden">
-                    <div className="bg-gradient-to-r from-orange-50 to-white p-6 border-b border-orange-100">
-                      <div className="flex justify-between items-start">
-                        <div className="flex gap-4">
-                          <div className="bg-orange-100 p-3 rounded-full h-14 w-14 flex items-center justify-center"><Sun className="text-orange-500" size={32} /></div>
-                          <div>
-                            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                              Usina {usina.codigo_uc}
-                              {/* Badge Ativo/Inativo */}
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
-                                (usina.ucAtiva === false || usina.ucAtiva === 'false' || usina.ucAtiva === 'False' || usina.ucAtiva === 0)
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-green-100 text-green-700'
-                              }`}>
-                                {(usina.ucAtiva === false || usina.ucAtiva === 'false' || usina.ucAtiva === 'False' || usina.ucAtiva === 0) ? 'INATIVA' : 'ATIVA'}
-                              </span>
-                            </h3>
-                            <p className="text-slate-500 text-sm">{usina.endereco}</p>
-                            <div className="mt-3 flex gap-3">
-                              <div className="bg-white px-3 py-1 rounded border border-orange-200 text-xs font-bold text-orange-700 flex items-center gap-1"><BatteryCharging size={14} /> Saldo: {usina.saldo_acumulado} kWh</div>
+                    <div key={usina.id} className="bg-white rounded-xl shadow-md border border-orange-100 overflow-hidden">
+                      <div className="bg-gradient-to-r from-orange-50 to-white p-6 border-b border-orange-100">
+                        <div className="flex justify-between items-start">
+                          <div className="flex gap-4">
+                            <div className="bg-orange-100 p-3 rounded-full h-14 w-14 flex items-center justify-center"><Sun className="text-orange-500" size={32} /></div>
+                            <div>
+                              <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                Usina {usina.codigo_uc}
+                              </h3>
+                              <p className="text-slate-500 text-sm">{usina.endereco}</p>
+                              <div className="mt-3 flex gap-3">
+                                <div className="bg-white px-3 py-1 rounded border border-orange-200 text-xs font-bold text-orange-700 flex items-center gap-1"><BatteryCharging size={14} /> Saldo: {usina.saldo_acumulado} kWh</div>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="p-6 bg-slate-50">
-                      <h4 className="text-sm font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><Share2 size={16} /> Rateio de Créditos</h4>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="p-6 bg-slate-50">
+                        <h4 className="text-sm font-bold text-slate-500 uppercase mb-4 flex items-center gap-2"><Share2 size={16} /> Rateio de Créditos</h4>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {usina.beneficiarias?.map(ben => (
                           <div key={ben.id} className="bg-white p-4 rounded-lg border border-slate-200 flex items-center justify-between">
                             <div>
@@ -1956,9 +1973,9 @@ function App() {
                             <span className="text-2xl font-bold text-slate-700">{ben.percentual_rateio}%</span>
                           </div>
                         ))}
+                        </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
                 ))}
               </div>
             )}

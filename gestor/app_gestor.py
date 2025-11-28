@@ -508,12 +508,32 @@ def sincronizar_dados_cliente(cliente_id: int):
                     empresa_web=uc_data.get('codigoEmpresaWeb', 6),
                     endereco=endereco_final,
                     nome_titular=uc_data.get('nomeTitular'),
+                    numero_imovel=uc_data.get('numeroImovel'),
+                    complemento=uc_data.get('complemento'),
+                    bairro=uc_data.get('bairro'),
+                    nome_municipio=uc_data.get('nomeMunicipio'),
+                    uf=uc_data.get('uf'),
+                    uc_ativa=uc_data.get('ucAtiva'),
+                    uc_cortada=uc_data.get('ucCortada'),
+                    uc_desligada=uc_data.get('ucDesligada'),
+                    contrato_ativo=uc_data.get('contratoAtivo'),
                     is_geradora=eh_geradora,
                     saldo_acumulado=saldo_kwh,
                     tipo_geracao=tipo_geracao
                 )
                 db.add(uc_local)
             else:
+                uc_local.endereco = endereco_final
+                uc_local.nome_titular = uc_data.get('nomeTitular')
+                uc_local.numero_imovel = uc_data.get('numeroImovel')
+                uc_local.complemento = uc_data.get('complemento')
+                uc_local.bairro = uc_data.get('bairro')
+                uc_local.nome_municipio = uc_data.get('nomeMunicipio')
+                uc_local.uf = uc_data.get('uf')
+                uc_local.uc_ativa = uc_data.get('ucAtiva')
+                uc_local.uc_cortada = uc_data.get('ucCortada')
+                uc_local.uc_desligada = uc_data.get('ucDesligada')
+                uc_local.contrato_ativo = uc_data.get('contratoAtivo')
                 uc_local.is_geradora = eh_geradora
                 uc_local.saldo_acumulado = saldo_kwh
                 uc_local.tipo_geracao = tipo_geracao
@@ -540,9 +560,31 @@ def sincronizar_dados_cliente(cliente_id: int):
                             empresa_web=ben.get('codigoEmpresaWeb', 6),
                             endereco=ben.get('endereco', 'Endereco Beneficiaria'),
                             nome_titular=ben.get('nome'),
+                            numero_imovel=ben.get('numeroImovel'),
+                            complemento=ben.get('complemento'),
+                            bairro=ben.get('bairro'),
+                            nome_municipio=ben.get('nomeMunicipio'),
+                            uf=ben.get('uf'),
+                            uc_ativa=ben.get('ucAtiva'),
+                            uc_cortada=ben.get('ucCortada'),
+                            uc_desligada=ben.get('ucDesligada'),
+                            contrato_ativo=ben.get('contratoAtivo'),
                             is_geradora=False
                         )
                         db.add(uc_filha)
+                    else:
+                        # Atualiza dados da beneficiária se já existe
+                        uc_filha.endereco = ben.get('endereco', uc_filha.endereco)
+                        uc_filha.nome_titular = ben.get('nome', uc_filha.nome_titular)
+                        uc_filha.numero_imovel = ben.get('numeroImovel')
+                        uc_filha.complemento = ben.get('complemento')
+                        uc_filha.bairro = ben.get('bairro')
+                        uc_filha.nome_municipio = ben.get('nomeMunicipio')
+                        uc_filha.uf = ben.get('uf')
+                        uc_filha.uc_ativa = ben.get('ucAtiva')
+                        uc_filha.uc_cortada = ben.get('ucCortada')
+                        uc_filha.uc_desligada = ben.get('ucDesligada')
+                        uc_filha.contrato_ativo = ben.get('contratoAtivo')
 
                     # VINCULA AO PAI
                     uc_filha.geradora_id = uc_local.id

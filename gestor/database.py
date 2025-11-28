@@ -70,6 +70,19 @@ class UnidadeConsumidora(Base):
     endereco = Column(String)
     nome_titular = Column(String, nullable=True)
 
+    # Detalhes do endereço
+    numero_imovel = Column(String, nullable=True)
+    complemento = Column(String, nullable=True)
+    bairro = Column(String, nullable=True)
+    nome_municipio = Column(String, nullable=True)
+    uf = Column(String, nullable=True)
+
+    # Status da UC
+    uc_ativa = Column(Boolean, nullable=True)
+    uc_cortada = Column(Boolean, nullable=True)
+    uc_desligada = Column(Boolean, nullable=True)
+    contrato_ativo = Column(Boolean, nullable=True)
+
     # Dados Solar
     is_geradora = Column(Boolean, default=False)
     saldo_acumulado = Column(Float, default=0.0)

@@ -113,11 +113,9 @@ function App() {
                 todasFaturasTemp.push(...resFat.data);
               }
             } catch (err) {
-              console.log(`Erro ao buscar faturas da UC ${uc.id}:`, err);
             }
           }
         } catch (err) {
-          console.log(`Erro ao buscar UCs da empresa ${emp.id}:`, err);
         }
       }
 
@@ -148,7 +146,6 @@ function App() {
             });
           });
         } catch (err) {
-          console.log(`Erro ao buscar usinas da empresa ${emp.id}:`, err);
         }
       }
 
@@ -432,21 +429,16 @@ function App() {
   const handleConnect = async (id: number) => {
     setLoading(true);
     try {
-      console.log('🔵 [CONECTAR] Iniciando conexão para empresa ID:', id);
       const response = await api.post(`/empresas/${id}/conectar`);
-      console.log('🔵 [CONECTAR] Resposta do backend:', response.data);
 
       setSelectedEmpresaId(id);
 
       if (response.data.listaTelefone && response.data.listaTelefone.length > 0) {
-        console.log('🔵 [CONECTAR] Lista de telefones recebida:', response.data.listaTelefone);
         // Novo fluxo: mostra lista de telefones
         setListaTelefone(response.data.listaTelefone);
         setPhoneSelectModalOpen(true);
-        console.log('🔵 [CONECTAR] Modal de telefone aberto');
         toast.info('Selecione o telefone para receber o SMS');
       } else {
-        console.log('⚠️ [CONECTAR] Nenhuma lista de telefone, abrindo modal SMS direto');
         // Fallback: caso não tenha lista, abre direto o modal de SMS
         setSmsModalOpen(true);
         toast.info('SMS enviado! Digite o codigo recebido');
@@ -467,14 +459,11 @@ function App() {
 
     setLoading(true);
     try {
-      console.log('📞 [ENVIAR SMS] Telefone selecionado:', selectedPhone);
-      console.log('📞 [ENVIAR SMS] Empresa ID:', selectedEmpresaId);
 
       await api.post(`/empresas/${selectedEmpresaId}/enviar-sms`, null, {
         params: { telefone: selectedPhone }
       });
 
-      console.log('📞 [ENVIAR SMS] SMS enviado com sucesso');
 
       setPhoneSelectModalOpen(false);
       setSmsModalOpen(true);
@@ -1112,14 +1101,14 @@ function App() {
                               <div
                                 key={i}
                                 className={`flex items-center justify-between p-3 rounded-lg border ${c.expirado ? 'bg-red-50 border-red-200' :
-                                    c.expirando ? 'bg-amber-50 border-amber-200' :
-                                      'bg-slate-50 border-slate-200'
+                                  c.expirando ? 'bg-amber-50 border-amber-200' :
+                                    'bg-slate-50 border-slate-200'
                                   }`}
                               >
                                 <div className="flex items-center gap-3">
                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${c.expirado ? 'bg-red-100' :
-                                      c.expirando ? 'bg-amber-100' :
-                                        'bg-green-100'
+                                    c.expirando ? 'bg-amber-100' :
+                                      'bg-green-100'
                                     }`}>
                                     {c.expirado ? <AlertCircle size={16} className="text-red-600" /> :
                                       c.expirando ? <Timer size={16} className="text-amber-600" /> :
@@ -1130,8 +1119,8 @@ function App() {
                                       {getNomeMes(c.mesReferencia)}/{c.anoReferencia}
                                     </p>
                                     <p className={`text-xs ${c.expirado ? 'text-red-600 font-bold' :
-                                        c.expirando ? 'text-amber-600 font-bold' :
-                                          'text-slate-500'
+                                      c.expirando ? 'text-amber-600 font-bold' :
+                                        'text-slate-500'
                                       }`}>
                                       {c.expirado ? 'EXPIRADO!' :
                                         c.expirando ? `Expira em ${c.mesesRestantes} meses` :
@@ -1795,8 +1784,8 @@ function App() {
           <button
             onClick={() => { setPaginaAtual('dashboard'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
             className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} transition px-3 py-2.5 rounded-lg ${paginaAtual === 'dashboard' && !vendoEmpresa
-                ? 'bg-[#00A3E0] text-white'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              ? 'bg-[#00A3E0] text-white'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             title={sidebarCollapsed ? "Dashboard" : ""}
           >
@@ -1809,8 +1798,8 @@ function App() {
             <button
               onClick={() => setMenuEmpresasAberto(!menuEmpresasAberto)}
               className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} transition px-3 py-2.5 rounded-lg ${(paginaAtual === 'empresas' || paginaAtual === 'usinas') && !vendoEmpresa
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                ? 'bg-slate-800 text-white'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               title={sidebarCollapsed ? "Empresas" : ""}
             >
@@ -1827,8 +1816,8 @@ function App() {
                 <button
                   onClick={() => { setPaginaAtual('empresas'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
                   className={`flex w-full items-center gap-3 transition px-3 py-2 rounded-lg text-sm ${paginaAtual === 'empresas' && !vendoEmpresa
-                      ? 'bg-[#00A3E0] text-white'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    ? 'bg-[#00A3E0] text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
                     }`}
                 >
                   <Plug size={16} /> Gerenciar
@@ -1836,8 +1825,8 @@ function App() {
                 <button
                   onClick={() => { setPaginaAtual('usinas'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
                   className={`flex w-full items-center gap-3 transition px-3 py-2 rounded-lg text-sm ${paginaAtual === 'usinas' && !vendoEmpresa
-                      ? 'bg-[#00A3E0] text-white'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    ? 'bg-[#00A3E0] text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
                     }`}
                 >
                   <Sun size={16} /> Usinas
@@ -1850,8 +1839,8 @@ function App() {
           <button
             onClick={() => { setPaginaAtual('gestores'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
             className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} transition px-3 py-2.5 rounded-lg ${paginaAtual === 'gestores' && !vendoEmpresa
-                ? 'bg-[#00A3E0] text-white'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              ? 'bg-[#00A3E0] text-white'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800'
               }`}
             title={sidebarCollapsed ? "Gestores" : ""}
           >
@@ -1946,8 +1935,8 @@ function App() {
                               {uc.is_geradora ? <Sun className="text-orange-500" size={24} /> : <Home className="text-slate-400" size={20} />} UC: {uc.codigo_uc}
                               {uc.is_geradora && <span className="bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">USINA</span>}
                               <span className={`text-xs px-2 py-1 rounded font-semibold ${isUcAtiva
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-red-100 text-red-700'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-red-100 text-red-700'
                                 }`}>
                                 {isUcAtiva ? 'Ativa' : 'Inativa'}
                               </span>
@@ -1961,8 +1950,8 @@ function App() {
                               onClick={() => toggleFaturas(uc.id)}
                               disabled={!isUcAtiva}
                               className={`flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm font-medium ${isUcAtiva
-                                  ? 'hover:bg-slate-50 cursor-pointer'
-                                  : 'opacity-50 cursor-not-allowed'
+                                ? 'hover:bg-slate-50 cursor-pointer'
+                                : 'opacity-50 cursor-not-allowed'
                                 }`}
                               title={!isUcAtiva ? 'UC inativa - faturas não disponíveis' : ''}
                             >
@@ -2080,8 +2069,8 @@ function App() {
                   key={index}
                   onClick={() => setSelectedPhone(phone.celular)}
                   className={`w-full p-4 rounded-lg border-2 text-left transition-all ${selectedPhone === phone.celular
-                      ? 'border-[#00A3E0] bg-blue-50'
-                      : 'border-slate-200 hover:border-slate-300'
+                    ? 'border-[#00A3E0] bg-blue-50'
+                    : 'border-slate-200 hover:border-slate-300'
                     }`}
                 >
                   <div className="flex items-center justify-between">

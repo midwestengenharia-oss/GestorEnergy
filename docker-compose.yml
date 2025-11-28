@@ -1,45 +1,39 @@
 version: '3.8'
 
 services:
-  # --- Serviço 1: Sua API Original (Playwright) ---
   gateway:
     build: ./gateway
     container_name: energisa_gateway
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - API_SECRET_KEY=sua_chave_secreta_segura
       - CRM_SECRET=cnOOJJCg8VK3W11xOo6vhaHd4RNTP-ALT06#cs#I #
-    # Aumenta memória compartilhada para o Chrome não quebrar
     shm_size: '2gb'
     restart: always
 
-  # --- Serviço 2: O Novo Gerenciador ---
   gestor:
     build: ./gestor
     container_name: energisa_gestor
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
-      # Aqui dizemos para o Gestor onde está o Gateway
       - GATEWAY_URL=http://gateway:3000
     depends_on:
       - gateway
     volumes:
-      # Persistência do Banco de Dados (SQLite)
       - ./gestor_dados:/app/dados
-      # Persistência dos PDFs baixados
       - ./gestor_faturas:/app/faturas_storage
 
   frontend:
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=http://localhost:8000
-        - VITE_GATEWAY_URL=http://localhost:3000
+        - VITE_API_URL=/api
+        - VITE_GATEWAY_URL=/gateway
     container_name: energisa_frontend
     ports:
-      - "80:80" # Roda na porta 80 padrão
+      - "3000:80"
     depends_on:
       - gestor
       - gateway

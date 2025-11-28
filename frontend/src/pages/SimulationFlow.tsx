@@ -190,12 +190,6 @@ export function SimulationFlow() {
 
       const faturas = faturasResponse.data.faturas || [];
 
-      // Log para debug
-      console.log('Faturas recebidas:', faturas);
-      if (faturas.length > 0) {
-        console.log('Primeira fatura:', faturas[0]);
-      }
-
       // Calculate total paid and estimated savings
       const total = faturas.reduce((sum: number, f: any) => {
         return sum + (f.valorFatura || 0);
@@ -249,8 +243,8 @@ export function SimulationFlow() {
               <button
                 onClick={handleBack}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${isDark
-                    ? 'text-slate-300 hover:bg-slate-800'
-                    : 'text-slate-700 hover:bg-slate-100'
+                  ? 'text-slate-300 hover:bg-slate-800'
+                  : 'text-slate-700 hover:bg-slate-100'
                   }`}
               >
                 <ArrowLeft size={20} />
@@ -274,27 +268,27 @@ export function SimulationFlow() {
                 <div className="flex flex-col items-center flex-1">
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${isCompleted
-                        ? 'bg-green-500 text-white'
-                        : isActive
-                          ? 'bg-[#00A3E0] text-white'
-                          : isDark
-                            ? 'bg-slate-700 text-slate-400'
-                            : 'bg-slate-200 text-slate-500'
+                      ? 'bg-green-500 text-white'
+                      : isActive
+                        ? 'bg-[#00A3E0] text-white'
+                        : isDark
+                          ? 'bg-slate-700 text-slate-400'
+                          : 'bg-slate-200 text-slate-500'
                       }`}
                   >
                     {isCompleted ? <CheckCircle2 size={20} /> : index + 1}
                   </div>
                   <span className={`text-xs mt-2 ${isActive
-                      ? isDark ? 'text-white' : 'text-slate-900'
-                      : isDark ? 'text-slate-500' : 'text-slate-400'
+                    ? isDark ? 'text-white' : 'text-slate-900'
+                    : isDark ? 'text-slate-500' : 'text-slate-400'
                     }`}>
                     {label}
                   </span>
                 </div>
                 {index < 3 && (
                   <div className={`h-1 flex-1 mx-2 rounded ${isCompleted
-                      ? 'bg-green-500'
-                      : isDark ? 'bg-slate-700' : 'bg-slate-200'
+                    ? 'bg-green-500'
+                    : isDark ? 'bg-slate-700' : 'bg-slate-200'
                     }`} />
                 )}
               </div>
@@ -331,8 +325,8 @@ export function SimulationFlow() {
                   onChange={(e) => setCpf(formatCPF(e.target.value))}
                   placeholder="000.000.000-00"
                   className={`w-full px-4 py-3 rounded-lg border text-lg ${isDark
-                      ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
-                      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                    ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
                     } focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent transition-all`}
                   autoFocus
                 />
@@ -388,10 +382,10 @@ export function SimulationFlow() {
                     key={`${phone.cdc}-${phone.digitoVerificador}-${phone.posicao}`}
                     onClick={() => setSelectedPhone(phone)}
                     className={`w-full p-4 rounded-lg border-2 text-left transition-all ${selectedPhone?.cdc === phone.cdc && selectedPhone?.posicao === phone.posicao
-                        ? 'border-[#00A3E0] bg-[#00A3E0]/10'
-                        : isDark
-                          ? 'border-slate-700 hover:border-slate-600 bg-slate-900'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      ? 'border-[#00A3E0] bg-[#00A3E0]/10'
+                      : isDark
+                        ? 'border-slate-700 hover:border-slate-600 bg-slate-900'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
                       }`}
                   >
                     <div className="flex items-center justify-between">
@@ -466,8 +460,8 @@ export function SimulationFlow() {
                   onChange={(e) => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
                   className={`w-full px-4 py-3 rounded-lg border text-lg text-center tracking-widest font-mono ${isDark
-                      ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
-                      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                    ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
                     } focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
                   maxLength={6}
                   autoFocus
@@ -496,8 +490,8 @@ export function SimulationFlow() {
                 onClick={handleSubmitCpf}
                 disabled={loading}
                 className={`w-full px-4 py-3 rounded-lg transition-colors ${isDark
-                    ? 'text-slate-400 hover:bg-slate-900'
-                    : 'text-slate-600 hover:bg-slate-50'
+                  ? 'text-slate-400 hover:bg-slate-900'
+                  : 'text-slate-600 hover:bg-slate-50'
                   }`}
               >
                 Não recebeu o código? Enviar novamente
@@ -533,12 +527,12 @@ export function SimulationFlow() {
                     onClick={() => setSelectedUcId(ucId)}
                     disabled={!isUcAtiva}
                     className={`w-full p-6 rounded-xl border-2 text-left transition-all ${!isUcAtiva
-                        ? 'opacity-50 cursor-not-allowed border-slate-300'
-                        : selectedUcId === ucId
-                          ? 'border-[#00A3E0] bg-[#00A3E0]/10'
-                          : isDark
-                            ? 'border-slate-700 hover:border-slate-600 bg-slate-900'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                      ? 'opacity-50 cursor-not-allowed border-slate-300'
+                      : selectedUcId === ucId
+                        ? 'border-[#00A3E0] bg-[#00A3E0]/10'
+                        : isDark
+                          ? 'border-slate-700 hover:border-slate-600 bg-slate-900'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
                       }`}
                   >
                     <div className="flex items-start justify-between">
@@ -564,10 +558,10 @@ export function SimulationFlow() {
                         )}
                       </div>
                       <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedUcId === ucId
-                          ? 'border-[#00A3E0] bg-[#00A3E0]'
-                          : isDark
-                            ? 'border-slate-600'
-                            : 'border-slate-300'
+                        ? 'border-[#00A3E0] bg-[#00A3E0]'
+                        : isDark
+                          ? 'border-slate-600'
+                          : 'border-slate-300'
                         }`}>
                         {selectedUcId === ucId && (
                           <CheckCircle2 size={14} className="text-white" />
@@ -730,8 +724,8 @@ export function SimulationFlow() {
                   Entrar em Contato
                 </button>
                 <button className={`px-6 py-3 rounded-xl font-semibold border-2 transition-all ${isDark
-                    ? 'border-slate-700 text-white hover:bg-slate-800'
-                    : 'border-slate-300 text-slate-900 hover:bg-slate-50'
+                  ? 'border-slate-700 text-white hover:bg-slate-800'
+                  : 'border-slate-300 text-slate-900 hover:bg-slate-50'
                   } flex items-center justify-center gap-2`}>
                   <Download size={20} />
                   Baixar Relatório
@@ -742,8 +736,8 @@ export function SimulationFlow() {
             <button
               onClick={handleBackToHome}
               className={`w-full px-4 py-3 rounded-lg transition-colors ${isDark
-                  ? 'text-slate-400 hover:bg-slate-800'
-                  : 'text-slate-600 hover:bg-slate-50'
+                ? 'text-slate-400 hover:bg-slate-800'
+                : 'text-slate-600 hover:bg-slate-50'
                 }`}
             >
               Voltar ao Início

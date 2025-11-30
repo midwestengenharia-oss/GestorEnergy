@@ -2,14 +2,15 @@ from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 from pydantic import ValidationError
-from database import SessionLocal, Cliente, UnidadeConsumidora, Fatura, Usuario, SolicitacaoGestor
+from database import SessionLocal, Cliente, UnidadeConsumidora, Fatura, Usuario, SolicitacaoGestor, Lead, InteracaoLead
 from energisa_client import EnergisaGatewayClient
 from auth import get_usuario_atual, get_db
 from schemas import (
     ClienteCreate, ValidarSmsRequest, MensagemResponse, SyncStatusResponse,
-    SolicitarGestorRequest, ValidarCodigoGestorRequest, SolicitacaoGestorResponse
+    SolicitarGestorRequest, ValidarCodigoGestorRequest, SolicitacaoGestorResponse,
+    LeadResponse, LeadUpdate, InteracaoLeadCreate, InteracaoLeadResponse
 )
 from routes_auth import router as auth_router
 import base64
@@ -17,7 +18,7 @@ import json
 import os
 import traceback
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 app = FastAPI(title="Gestor de Faturas SaaS - Enterprise Edition")
 gateway = EnergisaGatewayClient()
@@ -43,6 +44,12 @@ def verificar_cliente_pertence_usuario(cliente: Cliente, usuario: Usuario):
     """Verifica se o cliente pertence ao usuario logado"""
     if cliente.usuario_id != usuario.id:
         raise HTTPException(403, "Acesso negado a este recurso")
+
+
+def verificar_superadmin(usuario: Usuario):
+    """Verifica se o usuario e super admin"""
+    if not usuario.is_superadmin:
+        raise HTTPException(403, "Acesso negado. Apenas super admins podem acessar este recurso.")
 
 
 # ==========================================
@@ -1112,3 +1119,337 @@ def cancelar_solicitacao(
         raise
     except Exception as e:
         raise HTTPException(500, f"Erro ao cancelar solicitacao: {str(e)}")
+
+
+# ==========================================
+# ROTAS PÚBLICAS DE LEADS (SEM AUTENTICAÇÃO)
+# ==========================================
+
+@app.post("/public/leads/salvar")
+def salvar_lead_publico(
+    cpf: str,
+    nome: Optional[str] = None,
+    telefone: Optional[str] = None,
+    email: Optional[str] = None,
+    total_ucs: int = 0,
+    total_consumo_kwh: int = 0,
+    valor_total_faturas: float = 0.0,
+    dados_simulacao_json: Optional[str] = None,
+    ip_origem: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint PÚBLICO para salvar leads vindos da landing page.
+    Não requer autenticação - é chamado pelo gateway.
+    """
+    try:
+        # Remove formatação do CPF
+        cpf_limpo = cpf.replace(".", "").replace("-", "")
+
+        # Verifica se já existe lead com esse CPF nos ultimos 7 dias
+        sete_dias_atras = datetime.utcnow() - timedelta(days=7)
+
+        lead_existente = db.query(Lead).filter(
+            Lead.cpf == cpf_limpo,
+            Lead.criado_em >= sete_dias_atras
+        ).first()
+
+        if lead_existente:
+            # Atualiza o lead existente
+            lead_existente.nome = nome or lead_existente.nome
+            lead_existente.telefone = telefone or lead_existente.telefone
+            lead_existente.email = email or lead_existente.email
+            lead_existente.total_ucs = total_ucs
+            lead_existente.total_consumo_kwh = total_consumo_kwh
+            lead_existente.valor_total_faturas = valor_total_faturas
+            lead_existente.dados_simulacao_json = dados_simulacao_json
+            lead_existente.atualizado_em = datetime.utcnow()
+
+            db.commit()
+            db.refresh(lead_existente)
+
+            return {
+                "success": True,
+                "message": "Lead atualizado com sucesso",
+                "lead_id": lead_existente.id,
+                "is_new": False
+            }
+
+        # Cria novo lead
+        novo_lead = Lead(
+            cpf=cpf_limpo,
+            nome=nome,
+            telefone=telefone,
+            email=email,
+            total_ucs=total_ucs,
+            total_consumo_kwh=total_consumo_kwh,
+            valor_total_faturas=valor_total_faturas,
+            dados_simulacao_json=dados_simulacao_json,
+            status="NOVO",
+            origem="LANDING_PAGE",
+            ip_origem=ip_origem,
+            user_agent=user_agent
+        )
+
+        db.add(novo_lead)
+        db.commit()
+        db.refresh(novo_lead)
+
+        return {
+            "success": True,
+            "message": "Lead cadastrado com sucesso",
+            "lead_id": novo_lead.id,
+            "is_new": True
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Erro ao salvar lead: {str(e)}")
+
+
+# ==========================================
+# ROTAS DE LEADS (SUPER ADMIN)
+# ==========================================
+
+@app.get("/admin/leads", response_model=List[LeadResponse])
+def listar_leads(
+    status: str = None,
+    skip: int = 0,
+    limit: int = 100,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """
+    Lista todos os leads com filtros opcionais.
+    Requer permissão de SUPER ADMIN.
+    """
+    verificar_superadmin(usuario)
+
+    try:
+        query = db.query(Lead)
+
+        # Filtro por status
+        if status:
+            query = query.filter(Lead.status == status)
+
+        # Ordena por mais recentes primeiro
+        query = query.order_by(Lead.criado_em.desc())
+
+        # Paginacao
+        leads = query.offset(skip).limit(limit).all()
+
+        return leads
+
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao listar leads: {str(e)}")
+
+
+@app.get("/admin/leads/{lead_id}", response_model=LeadResponse)
+def obter_lead(
+    lead_id: int,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna detalhes de um lead especifico.
+    Requer permissão de SUPER ADMIN.
+    """
+    verificar_superadmin(usuario)
+
+    try:
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+
+        if not lead:
+            raise HTTPException(404, "Lead nao encontrado")
+
+        return lead
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao obter lead: {str(e)}")
+
+
+@app.put("/admin/leads/{lead_id}", response_model=LeadResponse)
+def atualizar_lead(
+    lead_id: int,
+    dados: LeadUpdate,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza dados do lead (status, observacoes, atribuicao, etc).
+    Requer permissão de SUPER ADMIN.
+    """
+    try:
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+
+        if not lead:
+            raise HTTPException(404, "Lead nao encontrado")
+
+        # Guarda status anterior para criar interacao
+        status_anterior = lead.status
+
+        # Atualiza campos fornecidos
+        if dados.nome is not None:
+            lead.nome = dados.nome
+        if dados.telefone is not None:
+            lead.telefone = dados.telefone
+        if dados.email is not None:
+            lead.email = dados.email
+        if dados.status is not None:
+            lead.status = dados.status
+            if dados.status == "CONVERTIDO":
+                lead.convertido_em = datetime.utcnow()
+        if dados.cliente_id is not None:
+            lead.cliente_id = dados.cliente_id
+        if dados.uc_geradora_id is not None:
+            lead.uc_geradora_id = dados.uc_geradora_id
+        if dados.observacoes is not None:
+            lead.observacoes = dados.observacoes
+        if dados.motivo_perda is not None:
+            lead.motivo_perda = dados.motivo_perda
+
+        lead.atualizado_em = datetime.utcnow()
+
+        # Se mudou o status, cria uma interacao automatica
+        if dados.status and dados.status != status_anterior:
+            interacao = InteracaoLead(
+                lead_id=lead.id,
+                tipo="STATUS_CHANGE",
+                titulo=f"Status alterado de {status_anterior} para {dados.status}",
+                status_anterior=status_anterior,
+                status_novo=dados.status,
+                usuario_id=usuario.id
+            )
+            db.add(interacao)
+
+        db.commit()
+        db.refresh(lead)
+
+        return lead
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao atualizar lead: {str(e)}")
+
+
+@app.get("/admin/leads/{lead_id}/interacoes", response_model=List[InteracaoLeadResponse])
+def listar_interacoes_lead(
+    lead_id: int,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """
+    Lista todas as interacoes de um lead (timeline do CRM).
+    Requer permissão de SUPER ADMIN.
+    """
+    try:
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+
+        if not lead:
+            raise HTTPException(404, "Lead nao encontrado")
+
+        interacoes = db.query(InteracaoLead).filter(
+            InteracaoLead.lead_id == lead_id
+        ).order_by(InteracaoLead.criado_em.desc()).all()
+
+        return interacoes
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao listar interacoes: {str(e)}")
+
+
+@app.post("/admin/leads/{lead_id}/interacoes", response_model=InteracaoLeadResponse)
+def criar_interacao_lead(
+    lead_id: int,
+    dados: InteracaoLeadCreate,
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """
+    Cria uma nova interacao com o lead (nota, ligacao, email, etc).
+    Requer permissão de SUPER ADMIN.
+    """
+    try:
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+
+        if not lead:
+            raise HTTPException(404, "Lead nao encontrado")
+
+        interacao = InteracaoLead(
+            lead_id=lead_id,
+            tipo=dados.tipo,
+            titulo=dados.titulo,
+            descricao=dados.descricao,
+            status_anterior=dados.status_anterior,
+            status_novo=dados.status_novo,
+            usuario_id=usuario.id
+        )
+
+        db.add(interacao)
+        db.commit()
+        db.refresh(interacao)
+
+        return interacao
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao criar interacao: {str(e)}")
+
+
+@app.get("/admin/leads/stats/dashboard")
+def obter_stats_leads(
+    usuario: Usuario = Depends(get_usuario_atual),
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna estatisticas gerais dos leads para dashboard do Super Admin.
+    Requer permissão de SUPER ADMIN.
+    """
+    try:
+        # Total de leads
+        total_leads = db.query(Lead).count()
+
+        # Leads por status
+        leads_por_status = {}
+        statuses = ["NOVO", "CONTATADO", "QUALIFICADO", "PROPOSTA_ENVIADA", "NEGOCIACAO", "CONVERTIDO", "PERDIDO"]
+        for status in statuses:
+            count = db.query(Lead).filter(Lead.status == status).count()
+            leads_por_status[status] = count
+
+        # Leads novos hoje
+        hoje = datetime.utcnow().date()
+        leads_hoje = db.query(Lead).filter(
+            Lead.criado_em >= datetime.combine(hoje, datetime.min.time())
+        ).count()
+
+        # Leads novos ultimos 7 dias
+        sete_dias_atras = datetime.utcnow() - timedelta(days=7)
+        leads_semana = db.query(Lead).filter(
+            Lead.criado_em >= sete_dias_atras
+        ).count()
+
+        # Taxa de conversao
+        convertidos = leads_por_status.get("CONVERTIDO", 0)
+        taxa_conversao = (convertidos / total_leads * 100) if total_leads > 0 else 0
+
+        # Valor total potencial (soma de todas as faturas dos leads)
+        valor_total_potencial = db.query(func.sum(Lead.valor_total_faturas)).scalar() or 0
+
+        return {
+            "total_leads": total_leads,
+            "leads_por_status": leads_por_status,
+            "leads_hoje": leads_hoje,
+            "leads_semana": leads_semana,
+            "taxa_conversao": round(taxa_conversao, 2),
+            "valor_total_potencial": round(valor_total_potencial, 2)
+        }
+
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao obter stats: {str(e)}")

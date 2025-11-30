@@ -4,7 +4,9 @@
       "Bash(docker-compose restart:*)",
       "Bash(docker-compose ps:*)",
       "Bash(docker logs:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker-compose up:*)"
     ],
     "deny": [],
     "ask": []

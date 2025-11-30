@@ -9,6 +9,7 @@ services:
     environment:
       - API_SECRET_KEY=sua_chave_secreta_segura
       - CRM_SECRET=cnOOJJCg8VK3W11xOo6vhaHd4RNTP-ALT06#cs#I #
+      - GESTOR_URL=http://gestor:8000
     shm_size: '2gb'
     restart: always
 
@@ -19,8 +20,6 @@ services:
       - "8000"
     environment:
       - GATEWAY_URL=http://gateway:3000
-    depends_on:
-      - gateway
     volumes:
       - ./gestor_dados:/app/dados
       - ./gestor_faturas:/app/faturas_storage

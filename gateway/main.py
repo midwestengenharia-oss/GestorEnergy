@@ -14,6 +14,8 @@ import threading
 import queue
 import time
 from security_middleware import SecurityMiddleware, security_manager
+import json
+import httpx
 
 # Gerenciador de sessoes de login em threads separadas
 # Cada login fica em sua propria thread ate o finish_login
@@ -1012,6 +1014,83 @@ def public_simulation_get_faturas(session_id: str, codigo_uc: int, request: Requ
     except Exception as e:
         print(f"ERRO ao buscar faturas: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# ENDPOINTS DE LEADS (SUPER ADMIN)
+# ============================================
+
+class LeadSalvarRequest(BaseModel):
+    """Schema para salvar lead da simulacao"""
+    cpf: str
+    nome: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    total_ucs: int = 0
+    total_consumo_kwh: int = 0
+    valor_total_faturas: float = 0.0
+    dados_simulacao: Optional[Dict[str, Any]] = None  # Objeto JSON com detalhes
+
+
+@app.post("/public/simulacao/salvar-lead")
+async def public_simulation_save_lead(req: LeadSalvarRequest, request: Request):
+    """
+    Endpoint para salvar lead quando usuario conclui a simulacao.
+    Este lead fica disponivel para o SUPER ADMIN fazer a conversao.
+
+    IMPORTANTE: Este endpoint encaminha a requisição para o serviço gestor,
+    que possui acesso ao banco de dados de leads.
+    """
+    try:
+        # Obtém IP e User-Agent para tracking
+        ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+        if "," in ip:
+            ip = ip.split(",")[0].strip()
+
+        user_agent = request.headers.get("User-Agent", "")
+
+        # Prepara payload para enviar ao gestor
+        payload = {
+            "cpf": req.cpf,
+            "nome": req.nome,
+            "telefone": req.telefone,
+            "email": req.email,
+            "total_ucs": req.total_ucs,
+            "total_consumo_kwh": req.total_consumo_kwh,
+            "valor_total_faturas": req.valor_total_faturas,
+            "dados_simulacao_json": json.dumps(req.dados_simulacao) if req.dados_simulacao else None,
+            "ip_origem": ip,
+            "user_agent": user_agent
+        }
+
+        # Chama o serviço gestor para salvar o lead
+        # URL do gestor no docker: http://gestor:8000
+        gestor_url = os.getenv("GESTOR_URL", "http://gestor:8000")
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                f"{gestor_url}/public/leads/salvar",
+                json=payload
+            )
+
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"Erro ao salvar lead no gestor: {response.status_code} - {response.text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Erro ao processar lead: {response.text}"
+                )
+
+    except httpx.RequestError as e:
+        print(f"Erro de conexão com o serviço gestor: {str(e)}")
+        raise HTTPException(
+            status_code=503,
+            detail="Sistema de leads temporariamente indisponível. Tente novamente mais tarde."
+        )
+    except Exception as e:
+        print(f"ERRO ao salvar lead: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar lead: {str(e)}")
 
 
 # [gateway/main.py]

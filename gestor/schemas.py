@@ -369,3 +369,101 @@ class SolicitacaoGestorResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ==========================================
+# SCHEMAS DE LEADS (LANDING PAGE)
+# ==========================================
+
+class LeadCreate(BaseModel):
+    """Schema para criacao de lead via landing page"""
+    cpf: str
+    nome: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    total_ucs: int = 0
+    total_consumo_kwh: int = 0
+    valor_total_faturas: float = 0.0
+    dados_simulacao_json: Optional[str] = None
+    ip_origem: Optional[str] = None
+    user_agent: Optional[str] = None
+
+    @field_validator('cpf')
+    @classmethod
+    def validar_cpf(cls, v: str) -> str:
+        cpf_limpo = re.sub(r'[.\-\s]', '', v)
+        if not cpf_limpo.isdigit():
+            raise ValueError('CPF deve conter apenas numeros')
+        if len(cpf_limpo) != 11:
+            raise ValueError('CPF deve ter exatamente 11 digitos')
+        return cpf_limpo
+
+
+class LeadResponse(BaseModel):
+    """Schema de resposta para Lead"""
+    id: int
+    cpf: str
+    nome: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    total_ucs: int
+    total_consumo_kwh: int
+    valor_total_faturas: float
+    status: str
+    cliente_id: Optional[int] = None
+    uc_geradora_id: Optional[int] = None
+    observacoes: Optional[str] = None
+    motivo_perda: Optional[str] = None
+    criado_em: datetime
+    atualizado_em: datetime
+    convertido_em: Optional[datetime] = None
+    origem: str
+
+    class Config:
+        from_attributes = True
+
+
+class LeadUpdate(BaseModel):
+    """Schema para atualizacao de lead"""
+    nome: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    status: Optional[str] = None
+    cliente_id: Optional[int] = None
+    uc_geradora_id: Optional[int] = None
+    observacoes: Optional[str] = None
+    motivo_perda: Optional[str] = None
+
+
+class InteracaoLeadCreate(BaseModel):
+    """Schema para criar interacao com lead"""
+    lead_id: int
+    tipo: str  # NOTA, LIGACAO, EMAIL, WHATSAPP, REUNIAO, STATUS_CHANGE
+    titulo: str
+    descricao: Optional[str] = None
+    status_anterior: Optional[str] = None
+    status_novo: Optional[str] = None
+
+    @field_validator('tipo')
+    @classmethod
+    def validar_tipo(cls, v: str) -> str:
+        tipos_validos = ['NOTA', 'LIGACAO', 'EMAIL', 'WHATSAPP', 'REUNIAO', 'STATUS_CHANGE']
+        if v.upper() not in tipos_validos:
+            raise ValueError(f'Tipo deve ser um de: {", ".join(tipos_validos)}')
+        return v.upper()
+
+
+class InteracaoLeadResponse(BaseModel):
+    """Schema de resposta para interacao"""
+    id: int
+    lead_id: int
+    tipo: str
+    titulo: str
+    descricao: Optional[str] = None
+    status_anterior: Optional[str] = None
+    status_novo: Optional[str] = None
+    usuario_id: Optional[int] = None
+    criado_em: datetime
+
+    class Config:
+        from_attributes = True

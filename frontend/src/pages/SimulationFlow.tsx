@@ -7,8 +7,59 @@ import axios from 'axios';
 import {
   Zap, ArrowLeft, Loader2, CheckCircle2, AlertCircle, Shield,
   Home, MapPin, Calendar, DollarSign, TrendingDown, BarChart3,
-  Download, Share2, ChevronRight
+  Download, Share2, ChevronRight, MessageSquare, Phone, Sun
 } from 'lucide-react';
+
+// Logo Component inline
+function MidwestLogo({ className = "h-10", variant = 'color' }: { className?: string; variant?: 'color' | 'white' | 'black' }) {
+  if (variant === 'white') {
+    return (
+      <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g fill="white">
+          <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" />
+          <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" opacity="0.9" />
+          <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" opacity="0.8" />
+          <text x="55" y="36" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
+            Midwest
+          </text>
+        </g>
+      </svg>
+    );
+  }
+
+  if (variant === 'black') {
+    return (
+      <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <g fill="#282828">
+          <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" />
+          <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" opacity="0.9" />
+          <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" opacity="0.8" />
+          <text x="55" y="36" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
+            Midwest
+          </text>
+        </g>
+      </svg>
+    );
+  }
+
+  return (
+    <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="goldGradientSim" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#FFD700" />
+          <stop offset="50%" stopColor="#FFA500" />
+          <stop offset="100%" stopColor="#F18A26" />
+        </linearGradient>
+      </defs>
+      <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" fill="url(#goldGradientSim)" />
+      <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" fill="url(#goldGradientSim)" opacity="0.9" />
+      <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" fill="url(#goldGradientSim)" opacity="0.8" />
+      <text x="55" y="36" fill="#282828" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
+        Midwest
+      </text>
+    </svg>
+  );
+}
 
 // Gateway API para simulação pública
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://localhost:3000';
@@ -212,7 +263,8 @@ export function SimulationFlow() {
   };
 
   const handleBack = () => {
-    if (currentStep === 'sms') setCurrentStep('cpf');
+    if (currentStep === 'phone-select') setCurrentStep('cpf');
+    else if (currentStep === 'sms') setCurrentStep('phone-select');
     else if (currentStep === 'select-uc') setCurrentStep('sms');
     else if (currentStep === 'report') setCurrentStep('select-uc');
   };
@@ -231,12 +283,7 @@ export function SimulationFlow() {
               onClick={handleBackToHome}
               className="flex items-center gap-3 group"
             >
-              <div className="inline-flex items-center justify-center w-10 h-10 bg-gradient-to-br from-[#00A3E0] to-blue-600 rounded-xl shadow-lg shadow-blue-500/30">
-                <Zap className="text-white" size={24} />
-              </div>
-              <span className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Energia Compartilhada
-              </span>
+              <MidwestLogo variant={isDark ? 'white' : 'black'} className="h-10 w-auto" />
             </button>
 
             {currentStep !== 'cpf' && (
@@ -258,8 +305,8 @@ export function SimulationFlow() {
       {/* Progress Bar */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-2">
-          {['CPF', 'SMS', 'UC', 'Resultado'].map((label, index) => {
-            const stepIndex = ['cpf', 'sms', 'select-uc', 'report'].indexOf(currentStep);
+          {['CPF', 'Telefone', 'SMS', 'UC', 'Resultado'].map((label, index) => {
+            const stepIndex = ['cpf', 'phone-select', 'sms', 'select-uc', 'report'].indexOf(currentStep);
             const isActive = index === stepIndex;
             const isCompleted = index < stepIndex;
 
@@ -268,9 +315,9 @@ export function SimulationFlow() {
                 <div className="flex flex-col items-center flex-1">
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${isCompleted
-                      ? 'bg-green-500 text-white'
+                      ? 'bg-[#10B981] text-white'
                       : isActive
-                        ? 'bg-[#00A3E0] text-white'
+                        ? 'bg-[#FFD700] text-slate-900'
                         : isDark
                           ? 'bg-slate-700 text-slate-400'
                           : 'bg-slate-200 text-slate-500'
@@ -285,9 +332,9 @@ export function SimulationFlow() {
                     {label}
                   </span>
                 </div>
-                {index < 3 && (
+                {index < 4 && (
                   <div className={`h-1 flex-1 mx-2 rounded ${isCompleted
-                    ? 'bg-green-500'
+                    ? 'bg-[#10B981]'
                     : isDark ? 'bg-slate-700' : 'bg-slate-200'
                     }`} />
                 )}
@@ -303,8 +350,8 @@ export function SimulationFlow() {
         {currentStep === 'cpf' && (
           <div className={`p-8 rounded-2xl ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200'} shadow-xl`}>
             <div className="text-center mb-8">
-              <div className="inline-flex p-4 bg-gradient-to-br from-[#00A3E0]/20 to-blue-600/20 rounded-xl mb-4">
-                <Shield className="text-[#00A3E0]" size={48} />
+              <div className="inline-flex p-4 bg-gradient-to-br from-[#FFD700]/20 to-[#FFA500]/20 rounded-xl mb-4">
+                <Sun className="text-[#FFD700]" size={48} />
               </div>
               <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Descubra sua Economia
@@ -317,7 +364,7 @@ export function SimulationFlow() {
             <div className="space-y-6">
               <div>
                 <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  CPF do Titular
+                  CPF do Titular da Conta
                 </label>
                 <input
                   type="text"
@@ -327,7 +374,7 @@ export function SimulationFlow() {
                   className={`w-full px-4 py-3 rounded-lg border text-lg ${isDark
                     ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
                     : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
-                    } focus:ring-2 focus:ring-[#00A3E0] focus:border-transparent transition-all`}
+                    } focus:ring-2 focus:ring-[#FFD700] focus:border-transparent transition-all`}
                   autoFocus
                 />
               </div>
@@ -335,12 +382,12 @@ export function SimulationFlow() {
               <button
                 onClick={handleSubmitCpf}
                 disabled={loading}
-                className="w-full px-6 py-4 bg-gradient-to-r from-[#00A3E0] to-blue-600 text-white rounded-xl font-semibold text-lg hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full px-6 py-4 bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-slate-900 rounded-xl font-bold text-lg hover:shadow-lg hover:shadow-yellow-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
                     <Loader2 size={20} className="animate-spin" />
-                    Buscando telefones...
+                    Buscando dados...
                   </>
                 ) : (
                   <>
@@ -350,10 +397,11 @@ export function SimulationFlow() {
                 )}
               </button>
 
-              <div className={`p-4 rounded-lg ${isDark ? 'bg-slate-900/50' : 'bg-slate-50'} flex items-start gap-3`}>
-                <Shield className={`${isDark ? 'text-green-400' : 'text-green-600'} mt-0.5`} size={20} />
+              <div className={`p-4 rounded-lg ${isDark ? 'bg-slate-900/50' : 'bg-[#FFD700]/5'} flex items-start gap-3`}>
+                <Shield className="text-[#10B981] mt-0.5" size={20} />
                 <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                   Seus dados estão protegidos e serão usados apenas para gerar sua simulação de economia.
+                  Processo 100% seguro via Energisa.
                 </p>
               </div>
             </div>
@@ -364,14 +412,14 @@ export function SimulationFlow() {
         {currentStep === 'phone-select' && (
           <div className={`p-8 rounded-2xl ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200'} shadow-xl`}>
             <div className="text-center mb-8">
-              <div className="inline-flex p-4 bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-xl mb-4">
-                <Shield className="text-blue-500" size={48} />
+              <div className="inline-flex p-4 bg-gradient-to-br from-[#1E3A8A]/20 to-[#2563EB]/20 rounded-xl mb-4">
+                <Phone className="text-[#1E3A8A]" size={48} />
               </div>
               <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Selecione um telefone
               </h2>
               <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
-                Encontramos os seguintes telefones cadastrados
+                Encontramos os seguintes telefones cadastrados na Energisa
               </p>
             </div>
 
@@ -382,7 +430,7 @@ export function SimulationFlow() {
                     key={`${phone.cdc}-${phone.digitoVerificador}-${phone.posicao}`}
                     onClick={() => setSelectedPhone(phone)}
                     className={`w-full p-4 rounded-lg border-2 text-left transition-all ${selectedPhone?.cdc === phone.cdc && selectedPhone?.posicao === phone.posicao
-                      ? 'border-[#00A3E0] bg-[#00A3E0]/10'
+                      ? 'border-[#FFD700] bg-[#FFD700]/10'
                       : isDark
                         ? 'border-slate-700 hover:border-slate-600 bg-slate-900'
                         : 'border-slate-200 hover:border-slate-300 bg-white'
@@ -398,7 +446,7 @@ export function SimulationFlow() {
                         </div>
                       </div>
                       {selectedPhone?.cdc === phone.cdc && selectedPhone?.posicao === phone.posicao && (
-                        <CheckCircle2 className="text-[#00A3E0]" size={24} />
+                        <CheckCircle2 className="text-[#FFD700]" size={24} />
                       )}
                     </div>
                   </button>
@@ -408,7 +456,7 @@ export function SimulationFlow() {
               <button
                 onClick={handleSelectPhone}
                 disabled={!selectedPhone || loading}
-                className="w-full px-6 py-4 bg-gradient-to-r from-[#00A3E0] to-blue-600 text-white rounded-xl font-semibold text-lg hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full px-6 py-4 bg-gradient-to-r from-[#1E3A8A] to-[#2563EB] text-white rounded-xl font-bold text-lg hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
@@ -423,13 +471,9 @@ export function SimulationFlow() {
                 )}
               </button>
 
-              <button
-                onClick={() => setCurrentStep('cpf')}
-                className={`w-full px-4 py-2 rounded-lg ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'} transition-colors flex items-center justify-center gap-2`}
-              >
-                <ArrowLeft size={16} />
-                Voltar
-              </button>
+              <p className={`text-xs text-center ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                Vamos enviar um código de verificação para confirmar sua identidade
+              </p>
             </div>
           </div>
         )}
@@ -438,8 +482,8 @@ export function SimulationFlow() {
         {currentStep === 'sms' && (
           <div className={`p-8 rounded-2xl ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200'} shadow-xl`}>
             <div className="text-center mb-8">
-              <div className="inline-flex p-4 bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-xl mb-4">
-                <CheckCircle2 className="text-green-500" size={48} />
+              <div className="inline-flex p-4 bg-gradient-to-br from-[#10B981]/20 to-[#059669]/20 rounded-xl mb-4">
+                <MessageSquare className="text-[#10B981]" size={48} />
               </div>
               <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Verifique seu celular
@@ -452,7 +496,7 @@ export function SimulationFlow() {
             <div className="space-y-6">
               <div>
                 <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  Código SMS
+                  Digite o código SMS
                 </label>
                 <input
                   type="text"
@@ -462,7 +506,7 @@ export function SimulationFlow() {
                   className={`w-full px-4 py-3 rounded-lg border text-lg text-center tracking-widest font-mono ${isDark
                     ? 'bg-slate-900 border-slate-700 text-white placeholder-slate-500'
                     : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
-                    } focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all`}
+                    } focus:ring-2 focus:ring-[#10B981] focus:border-transparent transition-all`}
                   maxLength={6}
                   autoFocus
                 />
@@ -471,7 +515,7 @@ export function SimulationFlow() {
               <button
                 onClick={handleValidateSms}
                 disabled={validatingSms || smsCode.length < 4}
-                className="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-semibold text-lg hover:shadow-lg hover:shadow-green-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full px-6 py-4 bg-gradient-to-r from-[#10B981] to-[#059669] text-white rounded-xl font-bold text-lg hover:shadow-lg hover:shadow-green-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {validatingSms ? (
                   <>
@@ -487,7 +531,7 @@ export function SimulationFlow() {
               </button>
 
               <button
-                onClick={handleSubmitCpf}
+                onClick={handleSelectPhone}
                 disabled={loading}
                 className={`w-full px-4 py-3 rounded-lg transition-colors ${isDark
                   ? 'text-slate-400 hover:bg-slate-900'
@@ -496,11 +540,17 @@ export function SimulationFlow() {
               >
                 Não recebeu o código? Enviar novamente
               </button>
+
+              <div className={`p-3 rounded-lg ${isDark ? 'bg-yellow-900/20' : 'bg-yellow-50'} border ${isDark ? 'border-yellow-700' : 'border-yellow-200'}`}>
+                <p className={`text-xs ${isDark ? 'text-yellow-400' : 'text-yellow-700'}`}>
+                  ⚠️ Verifique se o SMS não foi para a caixa de SPAM
+                </p>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Step 3: Select UC */}
+        {/* Step 4: Select UC */}
         {currentStep === 'select-uc' && (
           <div className={`p-8 rounded-2xl ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200'} shadow-xl`}>
             <div className="text-center mb-8">
@@ -511,7 +561,7 @@ export function SimulationFlow() {
                 Selecione sua Unidade Consumidora
               </h2>
               <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
-                Escolha qual UC você deseja simular
+                Escolha qual UC você deseja simular a economia
               </p>
             </div>
 
@@ -529,7 +579,7 @@ export function SimulationFlow() {
                     className={`w-full p-6 rounded-xl border-2 text-left transition-all ${!isUcAtiva
                       ? 'opacity-50 cursor-not-allowed border-slate-300'
                       : selectedUcId === ucId
-                        ? 'border-[#00A3E0] bg-[#00A3E0]/10'
+                        ? 'border-[#FFD700] bg-[#FFD700]/10'
                         : isDark
                           ? 'border-slate-700 hover:border-slate-600 bg-slate-900'
                           : 'border-slate-200 hover:border-slate-300 bg-white'
@@ -538,7 +588,7 @@ export function SimulationFlow() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <MapPin size={16} className={selectedUcId === ucId ? 'text-[#00A3E0]' : isDark ? 'text-slate-400' : 'text-slate-500'} />
+                          <MapPin size={16} className={selectedUcId === ucId ? 'text-[#FFD700]' : isDark ? 'text-slate-400' : 'text-slate-500'} />
                           <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                             UC {ucId}-{uc.digitoVerificador}
                           </span>
@@ -558,13 +608,13 @@ export function SimulationFlow() {
                         )}
                       </div>
                       <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedUcId === ucId
-                        ? 'border-[#00A3E0] bg-[#00A3E0]'
+                        ? 'border-[#FFD700] bg-[#FFD700]'
                         : isDark
                           ? 'border-slate-600'
                           : 'border-slate-300'
                         }`}>
                         {selectedUcId === ucId && (
-                          <CheckCircle2 size={14} className="text-white" />
+                          <CheckCircle2 size={14} className="text-slate-900" />
                         )}
                       </div>
                     </div>
@@ -576,16 +626,16 @@ export function SimulationFlow() {
             <button
               onClick={handleSelectUc}
               disabled={!selectedUcId || loading}
-              className="w-full px-6 py-4 bg-gradient-to-r from-[#00A3E0] to-blue-600 text-white rounded-xl font-semibold text-lg hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full px-6 py-4 bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-slate-900 rounded-xl font-bold text-lg hover:shadow-lg hover:shadow-yellow-500/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
-                  Gerando Simulação...
+                  Calculando economia...
                 </>
               ) : (
                 <>
-                  Gerar Simulação
+                  Ver Minha Economia
                   <ChevronRight size={20} />
                 </>
               )}
@@ -593,20 +643,20 @@ export function SimulationFlow() {
           </div>
         )}
 
-        {/* Step 4: Report */}
+        {/* Step 5: Report */}
         {currentStep === 'report' && (
           <div className="space-y-6">
             {/* Summary Card */}
             <div className={`p-8 rounded-2xl ${isDark ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700' : 'bg-gradient-to-br from-white to-slate-50 border border-slate-200'} shadow-xl`}>
               <div className="text-center mb-8">
-                <div className="inline-flex p-4 bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-xl mb-4">
-                  <TrendingDown className="text-green-500" size={48} />
+                <div className="inline-flex p-4 bg-gradient-to-br from-[#10B981]/20 to-green-600/20 rounded-xl mb-4">
+                  <TrendingDown className="text-[#10B981]" size={48} />
                 </div>
                 <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Sua Simulação de Economia
                 </h2>
                 <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
-                  Veja quanto você poderia ter economizado nos últimos 12 meses
+                  Veja quanto você pode economizar com a Midwest
                 </p>
               </div>
 
@@ -616,7 +666,7 @@ export function SimulationFlow() {
                   <div className="flex items-center gap-3 mb-2">
                     <DollarSign className={isDark ? 'text-slate-400' : 'text-slate-500'} size={24} />
                     <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                      Total Pago (12 meses)
+                      Total Pago (últimos 12 meses)
                     </span>
                   </div>
                   <div className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -625,16 +675,19 @@ export function SimulationFlow() {
                 </div>
 
                 {/* Estimated Savings */}
-                <div className={`p-6 rounded-xl bg-gradient-to-br from-green-500/10 to-green-600/10 border ${isDark ? 'border-green-500/30' : 'border-green-500/20'}`}>
+                <div className="p-6 rounded-xl bg-gradient-to-br from-[#10B981]/10 to-green-600/10 border border-[#10B981]/20">
                   <div className="flex items-center gap-3 mb-2">
-                    <TrendingDown className="text-green-500" size={24} />
-                    <span className="text-sm text-green-600 dark:text-green-400">
-                      Economia Estimada (30%)
+                    <TrendingDown className="text-[#10B981]" size={24} />
+                    <span className="text-sm text-[#10B981]">
+                      Economia com 30% de desconto
                     </span>
                   </div>
-                  <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+                  <div className="text-3xl font-bold text-[#10B981]">
                     {economiaEstimada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </div>
+                  <p className="text-xs text-[#10B981] mt-1">
+                    Economia garantida em contrato!
+                  </p>
                 </div>
               </div>
 
@@ -690,7 +743,7 @@ export function SimulationFlow() {
                             <div className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'} line-through`}>
                               {valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                             </div>
-                            <div className="text-sm font-semibold text-green-500">
+                            <div className="text-sm font-semibold text-[#10B981]">
                               {valorComEconomia.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                             </div>
                           </div>
@@ -699,7 +752,7 @@ export function SimulationFlow() {
                           <span className={isDark ? 'text-slate-500' : 'text-slate-500'}>
                             Economia de 30%
                           </span>
-                          <span className="text-green-500 font-medium">
+                          <span className="text-[#10B981] font-medium">
                             -{economiaFatura.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                           </span>
                         </div>
@@ -708,27 +761,46 @@ export function SimulationFlow() {
                   })}
                 </div>
               </div>
+
+              {/* Extra Benefits */}
+              <div className={`mt-6 p-4 rounded-lg ${isDark ? 'bg-[#FFD700]/10' : 'bg-[#FFD700]/5'} border ${isDark ? 'border-[#FFD700]/30' : 'border-[#FFD700]/20'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="text-[#FFD700]" size={20} />
+                  <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    Programa Primeiros 100 Clientes
+                  </span>
+                </div>
+                <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  Seja um dos primeiros e ganhe <strong>35% de desconto</strong> (5% extra!) nos primeiros 6 meses!
+                </p>
+              </div>
             </div>
 
             {/* CTA */}
-            <div className={`p-8 rounded-2xl ${isDark ? 'bg-gradient-to-br from-[#00A3E0]/10 to-blue-600/10 border border-[#00A3E0]/30' : 'bg-gradient-to-br from-blue-50 to-green-50 border border-blue-200'} text-center`}>
+            <div className={`p-8 rounded-2xl ${isDark ? 'bg-gradient-to-br from-[#FFD700]/10 to-[#FFA500]/10 border border-[#FFD700]/30' : 'bg-gradient-to-br from-[#FFD700]/5 to-[#FFA500]/5 border border-[#FFD700]/20'} text-center`}>
               <h3 className={`text-2xl font-bold mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Gostou da simulação?
+                Pronto para economizar {economiaEstimada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} por ano?
               </h3>
               <p className={`mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Entre em contato conosco e comece a economizar ainda este mês!
+                Entre em contato agora e comece a economizar ainda este mês!
               </p>
+
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <button className="px-6 py-3 bg-gradient-to-r from-[#00A3E0] to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300 flex items-center justify-center gap-2">
-                  <Share2 size={20} />
-                  Entrar em Contato
-                </button>
+                <a
+                  href="https://wa.me/5565999999999?text=Quero%20economizar%2030%25%20na%20conta%20de%20luz!"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-3 bg-gradient-to-r from-[#10B981] to-[#059669] text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-green-500/30 transition-all duration-300 flex items-center justify-center gap-2"
+                >
+                  <MessageSquare size={20} />
+                  Falar no WhatsApp
+                </a>
                 <button className={`px-6 py-3 rounded-xl font-semibold border-2 transition-all ${isDark
                   ? 'border-slate-700 text-white hover:bg-slate-800'
                   : 'border-slate-300 text-slate-900 hover:bg-slate-50'
                   } flex items-center justify-center gap-2`}>
                   <Download size={20} />
-                  Baixar Relatório
+                  Baixar Simulação
                 </button>
               </div>
             </div>

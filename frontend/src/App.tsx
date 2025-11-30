@@ -4,8 +4,10 @@ import { useToast } from './components/Toast';
 import { useAuth } from './contexts/AuthContext';
 import { useTheme } from './contexts/ThemeContext';
 import { GestoresPage } from './pages/GestoresPage';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { AdminLeads } from './pages/AdminLeads';
 import {
-  Activity, Plug, Plus, RefreshCw, ArrowLeft, Home, FileText, Download, Loader2, Sun, BatteryCharging, ChevronDown, ChevronUp, Barcode, QrCode, X, Share2, LogOut, User, Building2, Zap, AlertCircle, CheckCircle2, Clock, DollarSign, BarChart3, PieChart, Eye, GitBranch, Move, ZoomIn, ZoomOut, Maximize2, TrendingUp, TrendingDown, Calendar, ArrowRightLeft, Layers, Timer, MapPin, ChevronRight, Menu, ChevronLeft, Moon, SunMedium, PanelLeftClose, PanelLeft, UserCog
+  Activity, Plug, Plus, RefreshCw, ArrowLeft, Home, FileText, Download, Loader2, Sun, BatteryCharging, ChevronDown, ChevronUp, Barcode, QrCode, X, Share2, LogOut, User, Building2, Zap, AlertCircle, CheckCircle2, Clock, DollarSign, BarChart3, PieChart, Eye, GitBranch, Move, ZoomIn, ZoomOut, Maximize2, TrendingUp, TrendingDown, Calendar, ArrowRightLeft, Layers, Timer, MapPin, ChevronRight, Menu, ChevronLeft, Moon, SunMedium, PanelLeftClose, PanelLeft, UserCog, Users
 } from 'lucide-react';
 
 // Função auxiliar para converter Base64 em Download
@@ -20,7 +22,7 @@ const downloadBase64File = (base64Data: string, fileName: string) => {
 };
 
 // Tipo para navegação
-type NavPage = 'dashboard' | 'empresas' | 'usinas' | 'gestores';
+type NavPage = 'dashboard' | 'empresas' | 'usinas' | 'gestores' | 'admin_dashboard' | 'admin_leads';
 
 // Interface para usina com empresa
 interface UsinaComEmpresa extends UnidadeConsumidora {
@@ -1847,6 +1849,37 @@ function App() {
             <UserCog size={20} />
             {!sidebarCollapsed && <span>Gestores</span>}
           </button>
+
+          {/* Super Admin */}
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <p className={`text-xs uppercase tracking-wider mb-2 ${sidebarCollapsed ? 'text-center' : 'px-3'} text-slate-500`}>
+              {!sidebarCollapsed && 'Super Admin'}
+            </p>
+
+            <button
+              onClick={() => { setPaginaAtual('admin_dashboard'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
+              className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} transition px-3 py-2.5 rounded-lg ${paginaAtual === 'admin_dashboard'
+                ? 'bg-[#00A3E0] text-white'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              title={sidebarCollapsed ? "Dashboard Admin" : ""}
+            >
+              <BarChart3 size={20} />
+              {!sidebarCollapsed && <span className="font-medium">Dashboard Admin</span>}
+            </button>
+
+            <button
+              onClick={() => { setPaginaAtual('admin_leads'); setVendoEmpresa(null); setMobileMenuOpen(false); }}
+              className={`flex w-full items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'} transition px-3 py-2.5 rounded-lg ${paginaAtual === 'admin_leads'
+                ? 'bg-[#00A3E0] text-white'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              title={sidebarCollapsed ? "Gerenciar Leads" : ""}
+            >
+              <Users size={20} />
+              {!sidebarCollapsed && <span className="font-medium">Gerenciar Leads</span>}
+            </button>
+          </div>
         </nav>
 
         {/* Footer da Sidebar */}
@@ -2007,10 +2040,12 @@ function App() {
               )}
             </div>
           ) : (
-            paginaAtual === 'dashboard' ? renderDashboard() :
-              paginaAtual === 'usinas' ? renderUsinas() :
-                paginaAtual === 'gestores' ? <GestoresPage empresas={empresas} /> :
-                  renderEmpresas()
+            paginaAtual === 'admin_dashboard' ? <AdminDashboard /> :
+              paginaAtual === 'admin_leads' ? <AdminLeads /> :
+                paginaAtual === 'dashboard' ? renderDashboard() :
+                  paginaAtual === 'usinas' ? renderUsinas() :
+                    paginaAtual === 'gestores' ? <GestoresPage empresas={empresas} /> :
+                      renderEmpresas()
           )}
         </main>
       </div>

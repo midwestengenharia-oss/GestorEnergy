@@ -20,6 +20,7 @@ class Usuario(Base):
     # Controle de conta
     ativo = Column(Boolean, default=True)
     email_verificado = Column(Boolean, default=False)
+    is_superadmin = Column(Boolean, default=False)  # Flag para super admin
     criado_em = Column(DateTime, default=datetime.utcnow)
     atualizado_em = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     ultimo_login = Column(DateTime, nullable=True)
@@ -120,6 +121,80 @@ class Fatura(Base):
     detalhes_json = Column(Text, nullable=True)
 
     uc = relationship("UnidadeConsumidora", back_populates="faturas")
+
+
+class Lead(Base):
+    """Leads gerados pela landing page (simulacoes)"""
+    __tablename__ = 'leads'
+
+    id = Column(Integer, primary_key=True)
+
+    # Dados basicos do lead
+    cpf = Column(String, nullable=False, index=True)
+    nome = Column(String, nullable=True)
+    telefone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+
+    # Dados da simulacao
+    total_ucs = Column(Integer, default=0)
+    total_consumo_kwh = Column(Integer, default=0)
+    valor_total_faturas = Column(Float, default=0.0)
+    dados_simulacao_json = Column(Text, nullable=True)  # JSON com detalhes completos
+
+    # Status do lead no funil
+    # NOVO -> CONTATADO -> QUALIFICADO -> PROPOSTA_ENVIADA -> NEGOCIACAO -> CONVERTIDO -> PERDIDO
+    status = Column(String, default="NOVO", index=True)
+
+    # Gestor/Usina atribuido (quando voce faz a conexao)
+    cliente_id = Column(Integer, ForeignKey('clientes.id'), nullable=True)
+    uc_geradora_id = Column(Integer, ForeignKey('unidades.id'), nullable=True)
+
+    # Anotacoes do super admin
+    observacoes = Column(Text, nullable=True)
+    motivo_perda = Column(String, nullable=True)  # Se status = PERDIDO
+
+    # Controle
+    criado_em = Column(DateTime, default=datetime.utcnow, index=True)
+    atualizado_em = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    convertido_em = Column(DateTime, nullable=True)
+
+    # Origem/tracking
+    origem = Column(String, default="LANDING_PAGE")
+    ip_origem = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+
+    # Relacionamentos
+    cliente_atribuido = relationship("Cliente", foreign_keys=[cliente_id])
+    usina_atribuida = relationship("UnidadeConsumidora", foreign_keys=[uc_geradora_id])
+
+
+class InteracaoLead(Base):
+    """Historico de interacoes com leads (timeline do CRM)"""
+    __tablename__ = 'interacoes_lead'
+
+    id = Column(Integer, primary_key=True)
+    lead_id = Column(Integer, ForeignKey('leads.id'), nullable=False)
+
+    # Tipo: NOTA, LIGACAO, EMAIL, WHATSAPP, REUNIAO, STATUS_CHANGE
+    tipo = Column(String, nullable=False)
+
+    # Conteudo
+    titulo = Column(String, nullable=False)
+    descricao = Column(Text, nullable=True)
+
+    # Status anterior/novo (para mudancas de status)
+    status_anterior = Column(String, nullable=True)
+    status_novo = Column(String, nullable=True)
+
+    # Usuario que fez a interacao (super admin por enquanto)
+    usuario_id = Column(Integer, ForeignKey('usuarios.id'), nullable=True)
+
+    # Controle
+    criado_em = Column(DateTime, default=datetime.utcnow)
+
+    # Relacionamentos
+    lead = relationship("Lead", backref="interacoes")
+    usuario = relationship("Usuario")
 
 
 class SolicitacaoGestor(Base):

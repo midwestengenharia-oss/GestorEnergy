@@ -1,0 +1,220 @@
+consultar tarifas de energia elétrica da ANEEL para:
+
+Tarifa de aplicação do grupo B1 Residencial Convencional (B convencional)
+
+Componente tarifária TUSD_FioB (Fio B residencial)
+
+O app deve consultar os dados no portal de dados abertos da ANEEL usando a API datastore_search do CKAN, com os seguintes datasets:
+
+Tarifas de aplicação (grupo B1 Convencional)
+
+Endpoint base:
+https://dadosabertos.aneel.gov.br/api/3/action/datastore_search
+
+resource_id:
+fcf2906c-7c32-4b9b-a637-054e7a5234f4 (dataset de tarifas de aplicação)
+
+Componentes tarifárias (TUSD_FioB)
+
+Endpoint base:
+https://dadosabertos.aneel.gov.br/api/3/action/datastore_search
+
+resource_id:
+a4060165-3a0c-404f-926c-83901088b67c (dataset de componentes tarifárias)
+
+1. Entrada esperada pelo app
+
+O app precisa receber pelo menos:
+
+ano (string ou número) – por exemplo "2024" ou "2025".
+
+Flags/controles indicando o que consultar:
+
+consultarTarifaBConvencional (boolean)
+
+consultarFioB (boolean)
+
+Exemplo de payload de entrada:
+
+{
+  "ano": "2025",
+  "consultarTarifaBConvencional": true,
+  "consultarFioB": true
+}
+
+2. Mapeamento do ano para a REH
+
+Para cada ano, usar a Resolução Homologatória (REH) correspondente, que deve entrar como filtro:
+
+{
+  "2025": "RESOLUÇÃO HOMOLOGATÓRIA Nº 3.440, DE 1 DE ABRIL DE 2025",
+  "2024": "RESOLUÇÃO HOMOLOGATÓRIA Nº 3.315, DE 2 DE ABRIL DE 2024"
+}
+
+
+Regra:
+
+Para o dataset de tarifas → usar campo DscREH.
+
+Para o dataset de componentes → usar campo DscResolucaoHomologatoria.
+
+Se o ano não estiver mapeado, o app pode:
+
+Ou não enviar esse filtro,
+
+Ou retornar erro/controlar isso explicitamente.
+
+3. Consulta da tarifa B1 Residencial Convencional
+
+Quando consultarTarifaBConvencional = true, o app deve chamar o dataset de tarifas com filtros fixos para B1 Residencial Convencional da EMT.
+
+3.1. Filtros a serem enviados (objeto filters)
+
+Montar um objeto JSON assim:
+
+{
+  "SigAgente": "EMT",
+  "DscBaseTarifaria": "Tarifa de Aplicação",
+  "DscSubGrupo": "B1",
+  "DscModalidadeTarifaria": "Convencional",
+  "DscClasse": "Residencial",
+  "DscSubClasse": "Residencial",
+  "DscDetalhe": "Não se aplica",
+  "NomPostoTarifario": "Não se aplica",
+  "DscREH": "<REH correspondente ao ano>"
+}
+
+
+Onde:
+
+SigAgente = "EMT" → Energisa Mato Grosso
+
+Posto tarifário para B1 Convencional → "Não se aplica"
+
+DscREH vem do mapa do item 2.
+
+3.2. Chamada HTTP
+
+A chamada é um GET para:
+
+url = https://dadosabertos.aneel.gov.br/api/3/action/datastore_search
+
+Query parameters:
+
+resource_id = fcf2906c-7c32-4b9b-a637-054e7a5234f4
+
+filters = JSON.stringify(<objeto_de_filtros>)
+
+sort = DatInicioVigencia desc
+
+limit = 30 (ou outro limite razoável)
+
+Exemplo conceitual:
+
+GET /api/3/action/datastore_search
+  ?resource_id=fcf2906c-7c32-4b9b-a637-054e7a5234f4
+  &filters={"SigAgente":"EMT","DscSubGrupo":"B1",...}
+  &sort=DatInicioVigencia%20desc
+  &limit=30
+
+3.3. Seleção do registro
+
+A API retorna um objeto com result.records (lista de registros).
+
+O app deve considerar o primeiro registro (índice 0) como a tarifa vigente, pois está ordenado por DatInicioVigencia desc (data de início de vigência mais recente).
+
+O app deve expor:
+
+O registro completo ou
+
+Os principais campos de valor (por exemplo, campos de tarifa TUSD, TE, etc.), dependendo de como o dataset estiver estruturado.
+
+4. Consulta da componente TUSD_FioB (Fio B)
+
+Quando consultarFioB = true, o app deve consultar o dataset de componentes tarifárias para obter o valor da componente TUSD_FioB para B1 Residencial na EMT.
+
+4.1. Filtros a serem enviados (objeto filters)
+
+Montar um objeto JSON assim:
+
+{
+  "SigNomeAgente": "EMT",
+  "DscComponenteTarifario": "TUSD_FioB",
+  "DscBaseTarifaria": "Tarifa de Aplicação",
+  "DscSubGrupoTarifario": "B1",
+  "DscModalidadeTarifaria": "Convencional",
+  "DscClasseConsumidor": "Residencial",
+  "DscSubClasseConsumidor": "Residencial",
+  "DscDetalheConsumidor": "Não se aplica",
+  "DscPostoTarifario": "Não se aplica",
+  "DscResolucaoHomologatoria": "<REH correspondente ao ano>"
+}
+
+4.2. Chamada HTTP
+
+url = https://dadosabertos.aneel.gov.br/api/3/action/datastore_search
+
+Query parameters:
+
+resource_id = a4060165-3a0c-404f-926c-83901088b67c
+
+filters = JSON.stringify(<objeto_de_filtros>)
+
+sort = DatInicioVigencia desc
+
+limit = 30
+
+Mesma lógica: ordenar por DatInicioVigencia desc e considerar o primeiro registro como vigente.
+
+5. Resposta consolidada do app
+
+O app deve devolver uma resposta JSON consolidada, separando bem:
+
+Informações da tarifa B1 Convencional
+
+Informações da componente TUSD_FioB
+
+Exemplo de resposta desejada:
+
+{
+  "ano": "2025",
+  "concessionaria": "EMT",
+  "reh": "RESOLUÇÃO HOMOLOGATÓRIA Nº 3.440, DE 1 DE ABRIL DE 2025",
+  "tarifa_b1_convencional": {
+    "raw_record": { /* registro original retornado pela ANEEL para tarifas */ },
+    "valor_principal": 1.2345,
+    "unidade": "R$/kWh"
+  },
+  "componente_fio_b": {
+    "raw_record": { /* registro original retornado pela ANEEL para TUSD_FioB */ },
+    "valor_principal": 0.6789,
+    "unidade": "R$/kWh"
+  }
+}
+
+
+Observações:
+
+valor_principal deve ser preenchido com o campo numérico mais relevante do registro (por exemplo, o campo de valor em R$/MWh ou R$/kWh correspondente à componente).
+
+Mesmo que o app escolha um campo principal, é importante retornar também o raw_record completo para permitir inspeção e ajustes futuros.
+
+6. Comportamento em caso de erro ou ausência de dados
+
+Se a consulta não retornar registros (result.records vazio), o app deve:
+
+Indicar claramente que não foram encontrados dados para aquele ano/combinação.
+
+Não lançar erro genérico, mas sim uma mensagem estruturada, por exemplo:
+
+{
+  "erro": true,
+  "mensagem": "Nenhuma tarifa encontrada para B1 Convencional na EMT para o ano 2025",
+  "contexto": {
+    "tipoConsulta": "tarifa_b1_convencional",
+    "ano": "2025"
+  }
+}
+
+
+O mesmo vale para a componente Fio B.

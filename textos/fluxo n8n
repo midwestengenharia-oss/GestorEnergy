@@ -1,0 +1,872 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://dadosabertos.aneel.gov.br/api/3/action/datastore_search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "resource_id",
+              "value": "fcf2906c-7c32-4b9b-a637-054e7a5234f4"
+            },
+            {
+              "name": "filters",
+              "value": "={{ JSON.stringify({\n  SigAgente: \"EMT\",\n  DscBaseTarifaria: \"Tarifa de Aplicação\",\n  DscSubGrupo: \"B1\",\n  DscModalidadeTarifaria: \"Convencional\",\n  DscDetalhe: \"Não se aplica\",\n  NomPostoTarifario: \"Não se aplica\",\n  DscClasse: \"Residencial\",\n  DscSubClasse: \"Residencial\",\n  DscREH: \"RESOLUÇÃO HOMOLOGATÓRIA Nº 3.440, DE 1 DE ABRIL DE 2025\"\n}) }}"
+            },
+            {
+              "name": "sort",
+              "value": "DatInicioVigencia desc"
+            },
+            {
+              "name": "limit",
+              "value": "30"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        224,
+        0
+      ],
+      "id": "275b78a7-5011-4081-88e5-24ed7da3744a",
+      "name": "HTTP Request4"
+    }
+  ],
+  "connections": {
+    "HTTP Request4": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a12360371cd82993f73405f220eb9edccfa0db9213a4df540b65c6b7e870c14"
+  }
+}
+
+{
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://dadosabertos.aneel.gov.br/api/3/action/datastore_search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "resource_id",
+              "value": "a4060165-3a0c-404f-926c-83901088b67c"
+            },
+            {
+              "name": "filters",
+              "value": "={{ JSON.stringify({\n  SigNomeAgente: \"EMT\",\n  DscComponenteTarifario: \"TUSD_FioB\",\n  DscBaseTarifaria: \"Tarifa de Aplicação\",\n  DscSubGrupoTarifario: \"B1\",\n  DscModalidadeTarifaria: \"Convencional\",\n  DscClasseConsumidor: \"Residencial\",\n  DscSubClasseConsumidor: \"Residencial\",\n  DscDetalheConsumidor: \"Não se aplica\",\n  DscPostoTarifario: \"Não se aplica\",\n  DscResolucaoHomologatoria: \"RESOLUÇÃO HOMOLOGATÓRIA Nº 3.440, DE 1 DE ABRIL DE 2025\"\n}) }}"
+            },
+            {
+              "name": "sort",
+              "value": "DatInicioVigencia desc"
+            },
+            {
+              "name": "limit",
+              "value": "30"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        448,
+        0
+      ],
+      "id": "348719cc-d0e9-4789-8f6c-af689c8660b3",
+      "name": "HTTP Request3"
+    }
+  ],
+  "connections": {
+    "HTTP Request3": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a12360371cd82993f73405f220eb9edccfa0db9213a4df540b65c6b7e870c14"
+  }
+}
+
+// ============================================
+// Code Node - Proposta Energia Compartilhada
+// Midwest Energias - Layout Sora/Raleway
+// Cards principais só consumo, tabela 10 anos
+// ============================================
+
+// ====== INPUTS DOS NÓS ======
+const form       = $('On form submission').first().json || {};
+const tarifaResp = $('HTTP Request4').first().json || {}; // Tarifas B1 (TUSD+TE)
+const fioBResp   = $('HTTP Request3').first().json || {}; // Componente TUSD_FioB
+
+// ====== CONSTANTES DE TRIBUTAÇÃO (apenas p/ TARIFA) ======
+const PIS    = 0.012102;
+const COFINS = 0.055743;
+const ICMS   = 0.17;
+
+// Tabela da ANEEL vem SEM tributos → “brutalizar” (TUSD+TE)
+const TRIB_DIVISOR = (1 - (PIS + COFINS)) * (1 - ICMS);
+
+function applyTaxes(valor) {
+  return valor / TRIB_DIVISOR;
+}
+
+function parseBR(value) {
+  if (value === null || value === undefined) return 0;
+  const s = String(value).trim();
+  if (!s) return 0;
+  return Number(s.replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function toFixedDown(num, casas = 2) {
+  const fator = Math.pow(10, casas);
+  return Math.floor(num * fator) / fator;
+}
+
+function formatBR(num, casas = 2) {
+  const n = toFixedDown(num, casas);
+  return n.toLocaleString('pt-BR', {
+    minimumFractionDigits: casas,
+    maximumFractionDigits: casas,
+  });
+}
+
+// ====== PEGAR TARIFA B1 (TUSD + TE) E FIO B ======
+const tarifaResult   = tarifaResp.result || {};
+const tarifaRecords  = tarifaResult.records || [];
+
+const fioBResult     = fioBResp.result || {};
+const fioBRecords    = fioBResult.records || [];
+
+// Tarifa B1 Convencional (R$/kWh COM impostos)
+let tarifaB1_kWh_comImpostos = 0;
+
+// Fio B (R$/kWh, SEM impostos - NÃO aplicar tributos)
+let fioBBase_kWh = 0;
+
+// --- Tarifa B1 (TUSD+TE) ---
+tarifaRecords.forEach((r) => {
+  const subgrupo   = r.DscSubGrupo;
+  const modalidade = r.DscModalidadeTarifaria;
+  const posto      = r.NomPostoTarifario;
+  const unidade    = r.DscUnidadeTerciaria;
+  const teRaw      = r.VlrTE;
+  const tusdRaw    = r.VlrTUSD;
+
+  // B1 Convencional, posto "Não se aplica" (consumo)
+  if (subgrupo === 'B1' && modalidade === 'Convencional' && posto === 'Não se aplica') {
+    let total = parseBR(tusdRaw) + parseBR(teRaw); // R$/MWh, SEM tributos
+    if (unidade === 'MWh') {
+      total = total / 1000; // R$/kWh, SEM tributos
+    }
+    tarifaB1_kWh_comImpostos = applyTaxes(total); // R$/kWh COM tributos
+  }
+});
+
+// --- Fio B (sem impostos, direto da ANEEL) ---
+if (fioBRecords.length > 0) {
+  const fio = fioBRecords[0];
+  const baseMWh = parseBR(fio.VlrComponenteTarifario); // R$/MWh
+  fioBBase_kWh = baseMWh / 1000; // R$/kWh, SEM tributos
+}
+
+// ====== DADOS DO FORM ======
+const nomeCliente       = form['Nome'] || form.nome || 'Cliente';
+const tipoClassificacao = form['Tipo Classificação'] || form.tipo_classificacao || 'Bifásico';
+
+// Consumo em kWh/mês
+const consumo_kWh = Number(form['Consumo'] ?? form.consumo ?? 0) || 0;
+
+// Iluminação pública e bandeiras em R$/mês
+const iluminacaoPublica_R = Number(form['Iluminação Pública'] ?? form.iluminacao_publica ?? 0) || 0;
+const bandeiras_R         = Number(form['Bandeiras'] ?? form.bandeiras ?? 0) || 0;
+
+// ====== TAXA MÍNIMA EM kWh (30 / 50 / 100) ======
+let taxaMin_kWh = 50; // default bifásico
+
+const tipoLower = String(tipoClassificacao).toLowerCase();
+if (tipoLower.includes('mono')) {
+  taxaMin_kWh = 30;
+} else if (tipoLower.includes('bi')) {
+  taxaMin_kWh = 50;
+} else if (tipoLower.includes('tri')) {
+  taxaMin_kWh = 100;
+}
+
+// Não pode ser maior que o consumo
+const taxaMinAplicada_kWh = Math.min(consumo_kWh, taxaMin_kWh);
+
+// ====== FIO B ESCALONADO (SEM impostos) ======
+const FIOB_RAMP = {
+  2023: 0.15,
+  2024: 0.30,
+  2025: 0.45,
+  2026: 0.60,
+  2027: 0.75,
+  2028: 0.90,
+};
+
+const anoAtual = new Date().getFullYear();
+const fatorFioB = (FIOB_RAMP[anoAtual] != null)
+  ? FIOB_RAMP[anoAtual]
+  : FIOB_RAMP[2028]; // fallback 90% se passar de 2028
+
+const fioB_escalonado_kWh = fioBBase_kWh * fatorFioB; // R$/kWh, SEM impostos
+
+// Valor Fio B mensal (R$), sobre TODO o consumo
+const valorFioB_R = consumo_kWh * fioB_escalonado_kWh;
+
+// Taxa mínima em R$ (usa tarifa cheia COM impostos)
+const valorTaxaMin_R = taxaMinAplicada_kWh * tarifaB1_kWh_comImpostos;
+
+// Piso regulatório: maior entre taxa mínima e Fio B escalonado
+const valorPisoRegulatorio_R = Math.max(valorTaxaMin_R, valorFioB_R);
+
+// ====== CONSUMO: TARIFA CHEIA x TARIFA COM DESCONTO (30%) ======
+const descontoPercentTarifa = 0.30; // 30% sobre a tarifa de consumo
+const tarifaMidwest_kWh     = tarifaB1_kWh_comImpostos * (1 - descontoPercentTarifa);
+
+// Apenas CONSUMO (sem ILP / bandeira / piso)
+const valorConsumoEnergisa_R = consumo_kWh * tarifaB1_kWh_comImpostos;
+const valorConsumoMidwest_R  = consumo_kWh * tarifaMidwest_kWh;
+const economiaConsumo_R      = Math.max(valorConsumoEnergisa_R - valorConsumoMidwest_R, 0);
+
+// ====== CONTAS COMPLETAS (para composição e faturas economizadas) ======
+
+// Conta atual: energia + iluminação + bandeiras
+const contaAtual_R = valorConsumoEnergisa_R + iluminacaoPublica_R + bandeiras_R;
+
+// Conta Midwest: consumo com desconto + piso regulatório + iluminação (bandeiras zeradas)
+const contaMidwest_R = valorConsumoMidwest_R + valorPisoRegulatorio_R + iluminacaoPublica_R;
+
+// Economia na fatura (total)
+let economiaMensal_R = contaAtual_R - contaMidwest_R;
+if (economiaMensal_R < 0) economiaMensal_R = 0;
+
+const economiaAnual_R = economiaMensal_R * 12;
+
+// Faturas economizadas = economia anual / fatura depois
+let faturasNumber = 0;
+if (contaMidwest_R > 0 && economiaAnual_R > 0) {
+  faturasNumber = economiaAnual_R / contaMidwest_R;
+}
+const faturasLabel = faturasNumber.toLocaleString('pt-BR', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 2,
+});
+
+// ====== TABELA 10 ANOS (REAJUSTE 8% AO ANO) ======
+const reajusteAnual = 0.08;
+let linhas10Anos = '';
+let economiaAcumulada_R = 0;
+
+for (let i = 0; i < 10; i++) {
+  const ano = i + 1;
+  const fator = Math.pow(1 + reajusteAnual, i);
+
+  const custoEnergisaAno_R = contaAtual_R * 12 * fator;
+  const valorMidwestAno_R  = contaMidwest_R * 12 * fator;
+
+  let economiaAno_R = custoEnergisaAno_R - valorMidwestAno_R;
+  if (economiaAno_R < 0) economiaAno_R = 0;
+
+  economiaAcumulada_R += economiaAno_R;
+
+  linhas10Anos += `
+              <tr>
+                <td>${ano}</td>
+                <td>R$ ${formatBR(custoEnergisaAno_R)}</td>
+                <td>R$ ${formatBR(valorMidwestAno_R)}</td>
+                <td class="text-green">R$ ${formatBR(economiaAno_R)}</td>
+                <td class="text-primary">R$ ${formatBR(economiaAcumulada_R)}</td>
+              </tr>`;
+}
+
+// ====== LOGO ======
+const logoUrl = 'https://baserow.simplexsolucoes.com.br/media/user_files/WE8kutKMAmL1PMICsfR9k56kUHaNYz8p_4566a63159be5bf535dc3a25811394b215dcd9a04a1a44d9f14321e296b6a9c3.png';
+
+// ====== HTML (LAYOUT BASE AJUSTADO) ======
+const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Proposta Energia Compartilhada - Midwest</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Raleway:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 portrait; margin: 0; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+    }
+
+    .pdf-root { 
+      font-family: 'Sora', 'Segoe UI', Arial, sans-serif; 
+      color: #282828; 
+      background: #ffffff;
+    }
+
+    .page {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      width: 210mm;
+      height: 297mm;
+      box-sizing: border-box;
+      background: #ffffff;
+    }
+
+    /* Header com gradiente suave */
+    .header {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      padding: 14px 32px;
+      text-align: center;
+      border-bottom: 3px solid #F18A26;
+    }
+
+    .logo { 
+      max-width: 300px;
+      height: auto; 
+      margin: 15px auto 35px;
+      display: block;
+    }
+
+    .cliente-info {
+      font-family: 'Raleway', sans-serif;
+      font-size: 14px;
+      color: #495057;
+      font-weight: 500;
+    }
+
+    .cliente-nome {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      color: #282828;
+      font-size: 16px;
+    }
+
+    /* Content */
+    .content {
+      flex: 1;
+      padding: 18px 32px 22px;
+    }
+
+    /* Hero Card - Consumo */
+    .hero-card {
+      background: linear-gradient(135deg, #FEF6F0 0%, #FDEEE6 100%);
+      border: 1px solid #F4D3C4;
+      border-radius: 18px;
+      padding: 14px 16px;
+      text-align: center;
+      margin-bottom: 18px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(241,138,38,0.05) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #6c757d;
+      margin-bottom: 6px;
+    }
+
+    .hero-value {
+      font-size: 28px;
+      font-weight: 800;
+      color: #282828;
+      margin-bottom: 3px;
+    }
+
+    .hero-subtitle {
+      font-family: 'Raleway', sans-serif;
+      font-size: 11px;
+      color: #6c757d;
+    }
+
+    /* Cards Grid Principal */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .comparison-card {
+      background: #ffffff;
+      border: 2px solid #e9ecef;
+      border-radius: 14px;
+      padding: 14px 14px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+    }
+
+    .comparison-card.energisa {
+      border-color: #dee2e6;
+    }
+
+    .comparison-card.midwest {
+      border-color: #F4D3C4;
+      background: linear-gradient(135deg, #ffffff 0%, #FEF9F5 100%);
+    }
+
+    .card-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6c757d;
+      margin-bottom: 4px;
+    }
+
+    .card-value {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .comparison-card.energisa .card-value {
+      color: #6c757d;
+    }
+
+    .comparison-card.midwest .card-value {
+      color: #F18A26;
+    }
+
+    .card-description {
+      font-family: 'Raleway', sans-serif;
+      font-size: 10px;
+      color: #6c757d;
+      line-height: 1.35;
+    }
+
+    /* Highlight Box */
+    .highlight-box {
+      background: linear-gradient(135deg, #282828 0%, #3d3d3d 100%);
+      color: white;
+      border-radius: 14px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 3px 10px rgba(40,40,40,0.2);
+    }
+
+    .highlight-item {
+      text-align: center;
+      flex: 1;
+    }
+
+    .highlight-item + .highlight-item {
+      border-left: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .highlight-label {
+      font-size: 9px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.85;
+      margin-bottom: 3px;
+    }
+
+    .highlight-value {
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    .highlight-value.desconto {
+      color: #FDB462;
+    }
+
+    .highlight-value.faturas {
+      color: #80E0A7;
+    }
+
+    /* Resumo comparativo simplificado */
+    .summary-section {
+      margin-bottom: 18px;
+    }
+
+    .summary-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #282828;
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #F18A26;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      background: #f8f9fa;
+      padding: 14px;
+      border-radius: 10px;
+    }
+
+    .summary-col {
+      text-align: center;
+    }
+
+    .summary-col-title {
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #495057;
+    }
+
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid #e9ecef;
+      font-size: 10px;
+    }
+
+    .summary-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid #e9ecef;
+      font-size: 10px;
+    }
+    
+    .summary-col .summary-item:last-of-type {
+      border-bottom: none;
+    }
+
+    .summary-label {
+      color: #6c757d;
+    }
+
+    .summary-value {
+      font-weight: 600;
+      color: #282828;
+    }
+
+    .summary-total {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 2px solid #dee2e6;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .summary-total .summary-value {
+      font-size: 12px;
+    }
+
+    /* Tabela simplificada */
+    .projection-section {
+      background: #ffffff;
+      border: 1px solid #e9ecef;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+
+    .projection-header {
+      background: #f8f9fa;
+      padding: 8px 14px;
+      border-bottom: 2px solid #F18A26;
+    }
+
+    .projection-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #282828;
+      margin: 0;
+    }
+
+    .projection-subtitle {
+      font-family: 'Raleway', sans-serif;
+      font-size: 9px;
+      color: #6c757d;
+      margin: 2px 0 0;
+    }
+
+    .table-simple {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9px;
+    }
+
+    .table-simple thead th {
+      background: #282828;
+      color: white;
+      font-weight: 600;
+      padding: 6px 4px;
+      text-align: center;
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .table-simple tbody td {
+      padding: 5px 4px;
+      text-align: center;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .table-simple tbody tr:nth-child(even) {
+      background: #fafafa;
+    }
+
+    .table-simple tbody tr:hover {
+      background: #FEF6F0;
+    }
+
+    .text-green {
+      color: #28a745;
+      font-weight: 600;
+    }
+
+    .text-primary {
+      color: #F18A26;
+      font-weight: 700;
+    }
+
+    /* Footer moderno */
+    .footer {
+      background: #282828;
+      color: white;
+      padding: 14px 32px;
+      font-size: 10px;
+    }
+
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-info {
+      font-family: 'Raleway', sans-serif;
+      opacity: 0.9;
+      max-width: 60%;
+    }
+
+    .footer-company {
+      text-align: right;
+    }
+
+    .footer-company-name {
+      font-weight: 700;
+      font-size: 11px;
+      margin-bottom: 2px;
+      color: #F18A26;
+    }
+
+    .footer-contact {
+      opacity: 0.8;
+      line-height: 1.3;
+    }
+
+    @media print {
+      .comparison-card,
+      .highlight-box,
+      .projection-section {
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="pdf-root">
+    <div class="page">
+      <!-- Header -->
+      <div class="header">
+        <img class="logo" src="${logoUrl}" alt="Midwest Energias">
+        <div class="cliente-info">
+          Proposta elaborada para: <span class="cliente-nome">${nomeCliente}</span>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <!-- Hero Card -->
+        <div class="hero-card">
+          <div class="hero-title">Seu Consumo Médio Mensal</div>
+          <div class="hero-value">${consumo_kWh} kWh</div>
+          <div class="hero-subtitle">Base de cálculo para economia com energia compartilhada</div>
+        </div>
+
+        <!-- Cards Comparativos (APENAS CONSUMO) -->
+        <div class="main-grid">
+          <div class="comparison-card energisa">
+            <div class="card-label">Custo atual</div>
+            <div class="card-value">R$ ${formatBR(valorConsumoEnergisa_R)}</div>
+            <div class="card-description">
+              Valor do consumo atual Energisa.
+            </div>
+          </div>
+
+          <div class="comparison-card midwest">
+            <div class="card-label">Novo valor</div>
+            <div class="card-value">R$ ${formatBR(valorConsumoMidwest_R)}</div>
+            <div class="card-description">
+              Valor do consumo com desconto Midwest.
+            </div>
+          </div>
+        </div>
+
+        <!-- Highlight Box -->
+        <div class="highlight-box">
+          <div class="highlight-item">
+            <div class="highlight-label">Desconto na Tarifa de Consumo</div>
+            <div class="highlight-value desconto">30%</div>
+          </div>
+          <div class="highlight-item">
+            <div class="highlight-label">Economia Mensal na Fatura</div>
+            <div class="highlight-value">R$ ${formatBR(economiaConsumo_R)}</div>
+          </div>
+          <div class="highlight-item">
+            <div class="highlight-label">Faturas Economizadas/Ano</div>
+            <div class="highlight-value faturas">${faturasLabel}</div>
+          </div>
+        </div>
+
+        <!-- Resumo Comparativo Simplificado -->
+        <div class="summary-section">
+          <h3 class="summary-title">Detalhamento da Economia</h3>
+          
+          <div class="summary-grid">
+            <div class="summary-col">
+              <div class="summary-col-title">Composição Atual</div>
+              <div class="summary-item">
+                <span class="summary-label">Energia</span>
+                <span class="summary-value">R$ ${formatBR(valorConsumoEnergisa_R)}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Iluminação Pública</span>
+                <span class="summary-value">R$ ${formatBR(iluminacaoPublica_R)}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Bandeiras</span>
+                <span class="summary-value">R$ ${formatBR(bandeiras_R)}</span>
+              </div>
+              <div class="summary-total">
+                <span class="summary-label">Total Mensal</span>
+                <span class="summary-value">R$ ${formatBR(contaAtual_R)}</span>
+              </div>
+            </div>
+
+            <div class="summary-col">
+              <div class="summary-col-title">Nova Composição</div>
+              <div class="summary-item">
+                <span class="summary-label">Energia (c/ desconto)</span>
+                <span class="summary-value">R$ ${formatBR(valorConsumoMidwest_R)}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Taxa Mínima/Fio B</span>
+                <span class="summary-value">R$ ${formatBR(valorPisoRegulatorio_R)}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">Iluminação Pública</span>
+                <span class="summary-value">R$ ${formatBR(iluminacaoPublica_R)}</span>
+              </div>
+              <div class="summary-total">
+                <span class="summary-label">Total Mensal</span>
+                <span class="summary-value text-primary">R$ ${formatBR(contaMidwest_R)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabela Projeção (10 anos) -->
+        <div class="projection-section">
+          <div class="projection-header">
+            <h3 class="projection-title">Projeção de Economia - 10 Anos</h3>
+            <p class="projection-subtitle">Considerando reajuste médio anual de 8% nas tarifas de energia</p>
+          </div>
+          
+          <table class="table-simple">
+            <thead>
+              <tr>
+                <th>Ano</th>
+                <th>Gasto sem Midwest</th>
+                <th>Gasto com Midwest</th>
+                <th>Economia Anual</th>
+                <th>Economia Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${linhas10Anos}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <div class="footer-content">
+          <div class="footer-info">
+            Simulação realizada com base nas tarifas vigentes e no consumo informado.<br>
+            Valores sujeitos a variações conforme consumo real e reajustes regulatórios.
+          </div>
+          <div class="footer-company">
+            <div class="footer-company-name">MIDWEST ENERGIAS LTDA</div>
+            <div class="footer-contact">
+              contato@midwestengenharia.com.br<br>
+              Cuiabá | Rondonópolis | Sinop
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+// ====== SAÍDA ======
+return {
+  json: {
+    html,
+    resumo: {
+      nomeCliente,
+      tipoClassificacao,
+      consumo_kWh,
+      valorConsumoEnergisa_R,
+      valorConsumoMidwest_R,
+      economiaConsumo_R,
+      contaAtual_R,
+      contaMidwest_R,
+      economiaMensal_R,
+      economiaAnual_R,
+      faturasNumber
+    }
+  }
+};

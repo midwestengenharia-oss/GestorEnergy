@@ -9,57 +9,10 @@ import {
   Home, MapPin, Calendar, DollarSign, TrendingDown, BarChart3,
   Download, Share2, ChevronRight, MessageSquare, Phone, Sun
 } from 'lucide-react';
-
-// Logo Component inline
-function MidwestLogo({ className = "h-10", variant = 'color' }: { className?: string; variant?: 'color' | 'white' | 'black' }) {
-  if (variant === 'white') {
-    return (
-      <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g fill="white">
-          <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" />
-          <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" opacity="0.9" />
-          <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" opacity="0.8" />
-          <text x="55" y="36" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
-            Midwest
-          </text>
-        </g>
-      </svg>
-    );
-  }
-
-  if (variant === 'black') {
-    return (
-      <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g fill="#282828">
-          <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" />
-          <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" opacity="0.9" />
-          <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" opacity="0.8" />
-          <text x="55" y="36" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
-            Midwest
-          </text>
-        </g>
-      </svg>
-    );
-  }
-
-  return (
-    <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="goldGradientSim" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FFD700" />
-          <stop offset="50%" stopColor="#FFA500" />
-          <stop offset="100%" stopColor="#F18A26" />
-        </linearGradient>
-      </defs>
-      <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" fill="url(#goldGradientSim)" />
-      <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" fill="url(#goldGradientSim)" opacity="0.9" />
-      <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" fill="url(#goldGradientSim)" opacity="0.8" />
-      <text x="55" y="36" fill="#282828" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
-        Midwest
-      </text>
-    </svg>
-  );
-}
+import LogoBranca from '../assets/logo/logo-branca.png';
+import LogoPreta from '../assets/logo/logo-preta.png';
+import Logo from '../assets/logo/logo.png';
+import { EconomyBreakdown } from '../components/EconomyBreakdown';
 
 // Gateway API para simulação pública
 const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL || 'http://localhost:3000';
@@ -86,6 +39,14 @@ interface SimulationData {
   ucs?: UnidadeConsumidora[];
   selectedUc?: UnidadeConsumidora;
   faturas?: Fatura[];
+  // Novos campos para cálculo detalhado
+  uc_info?: {
+    tipo_ligacao: string;
+    grupo_leitura: string;
+  };
+  faturas_resumo?: any;
+  calculo_economia?: any;
+  projecao_10_anos?: any[];
 }
 
 export function SimulationFlow() {
@@ -236,23 +197,44 @@ export function SimulationFlow() {
 
     setLoading(true);
     try {
-      // Fetch faturas for the selected UC
+      // Fetch faturas for the selected UC with detailed calculation
       const faturasResponse = await gatewayApi.get(`/public/simulacao/faturas/${simulationData.sessionId}/${selectedUcId}`);
 
-      const faturas = faturasResponse.data.faturas || [];
+      const data = faturasResponse.data;
+      const faturas = data.faturas || [];
 
-      // Calculate total paid and estimated savings
-      const total = faturas.reduce((sum: number, f: any) => {
-        return sum + (f.valorFatura || 0);
-      }, 0);
-      const economia = total * 0.30; // 30% savings
+      // Extract new detailed data
+      const uc_info = data.uc_info;
+      const faturas_resumo = data.faturas_resumo;
+      const calculo_economia = data.calculo_economia;
+      const projecao_10_anos = data.projecao_10_anos;
+
+      // Fallback para compatibilidade: usar cálculo antigo se não houver economia calculada
+      let total = data.total_pago_12_meses || 0;
+      let economia = 0;
+
+      if (calculo_economia) {
+        // Usa cálculo detalhado
+        total = calculo_economia.conta_atual.total * 12; // Anualizado
+        economia = calculo_economia.economia.anual;
+      } else {
+        // Fallback antigo
+        total = faturas.reduce((sum: number, f: any) => {
+          return sum + (f.valorFatura || 0);
+        }, 0);
+        economia = total * 0.30;
+      }
 
       setTotalPago(total);
       setEconomiaEstimada(economia);
       setSimulationData({
         ...simulationData,
         selectedUc,
-        faturas
+        faturas,
+        uc_info,
+        faturas_resumo,
+        calculo_economia,
+        projecao_10_anos
       });
       setCurrentStep('report');
     } catch (error: any) {
@@ -283,7 +265,7 @@ export function SimulationFlow() {
               onClick={handleBackToHome}
               className="flex items-center gap-3 group"
             >
-              <MidwestLogo variant={isDark ? 'white' : 'black'} className="h-10 w-auto" />
+              <img src={isDark ? LogoBranca : LogoPreta} alt="Midwest Logo" className="h-10 w-auto" />
             </button>
 
             {currentStep !== 'cpf' && (
@@ -646,134 +628,91 @@ export function SimulationFlow() {
         {/* Step 5: Report */}
         {currentStep === 'report' && (
           <div className="space-y-6">
-            {/* Summary Card */}
-            <div className={`p-8 rounded-2xl ${isDark ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700' : 'bg-gradient-to-br from-white to-slate-50 border border-slate-200'} shadow-xl`}>
-              <div className="text-center mb-8">
-                <div className="inline-flex p-4 bg-gradient-to-br from-[#10B981]/20 to-green-600/20 rounded-xl mb-4">
-                  <TrendingDown className="text-[#10B981]" size={48} />
-                </div>
-                <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  Sua Simulação de Economia
-                </h2>
-                <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
-                  Veja quanto você pode economizar com a Midwest
-                </p>
+            {/* Header */}
+            <div className={`p-6 rounded-2xl ${isDark ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700' : 'bg-gradient-to-br from-white to-slate-50 border border-slate-200'} shadow-xl text-center`}>
+              <div className="inline-flex p-4 bg-gradient-to-br from-[#10B981]/20 to-green-600/20 rounded-xl mb-4">
+                <TrendingDown className="text-[#10B981]" size={48} />
               </div>
+              <h2 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                Sua Simulação de Economia
+              </h2>
+              <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
+                Veja quanto você pode economizar com a Midwest
+              </p>
+            </div>
 
-              <div className="grid md:grid-cols-2 gap-6 mb-8">
-                {/* Total Paid */}
-                <div className={`p-6 rounded-xl ${isDark ? 'bg-slate-900/50 border border-slate-700' : 'bg-white border border-slate-200'}`}>
-                  <div className="flex items-center gap-3 mb-2">
-                    <DollarSign className={isDark ? 'text-slate-400' : 'text-slate-500'} size={24} />
-                    <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                      Total Pago (últimos 12 meses)
-                    </span>
-                  </div>
-                  <div className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {totalPago.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </div>
-                </div>
+            {/* UC Info */}
+            {simulationData.selectedUc && (() => {
+              const uc = simulationData.selectedUc as any;
+              const enderecoCompleto = `${uc.endereco}, ${uc.numeroImovel}${uc.complemento ? ' - ' + uc.complemento : ''} - ${uc.bairro}, ${uc.nomeMunicipio}/${uc.uf}`;
 
-                {/* Estimated Savings */}
-                <div className="p-6 rounded-xl bg-gradient-to-br from-[#10B981]/10 to-green-600/10 border border-[#10B981]/20">
-                  <div className="flex items-center gap-3 mb-2">
-                    <TrendingDown className="text-[#10B981]" size={24} />
-                    <span className="text-sm text-[#10B981]">
-                      Economia com 30% de desconto
-                    </span>
-                  </div>
-                  <div className="text-3xl font-bold text-[#10B981]">
-                    {economiaEstimada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </div>
-                  <p className="text-xs text-[#10B981] mt-1">
-                    Economia garantida em contrato!
-                  </p>
-                </div>
-              </div>
-
-              {/* UC Info */}
-              {simulationData.selectedUc && (() => {
-                const uc = simulationData.selectedUc as any;
-                const enderecoCompleto = `${uc.endereco}, ${uc.numeroImovel}${uc.complemento ? ' - ' + uc.complemento : ''} - ${uc.bairro}, ${uc.nomeMunicipio}/${uc.uf}`;
-
-                return (
-                  <div className={`p-6 rounded-xl ${isDark ? 'bg-slate-900/50 border border-slate-700' : 'bg-slate-50 border border-slate-200'} mb-6`}>
-                    <div className="flex items-start gap-3">
-                      <Home className={isDark ? 'text-slate-400' : 'text-slate-500'} size={20} />
-                      <div className="flex-1">
-                        <div className={`font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                          UC {uc.numeroUc}-{uc.digitoVerificador}
-                        </div>
-                        <div className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                          {enderecoCompleto}
-                        </div>
+              return (
+                <div className={`p-6 rounded-xl ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200'}`}>
+                  <div className="flex items-start gap-3">
+                    <Home className={isDark ? 'text-slate-400' : 'text-slate-500'} size={20} />
+                    <div className="flex-1">
+                      <div className={`font-semibold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                        UC {uc.numeroUc}-{uc.digitoVerificador}
+                      </div>
+                      <div className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                        {enderecoCompleto}
                       </div>
                     </div>
                   </div>
-                );
-              })()}
+                </div>
+              );
+            })()}
 
-              {/* Monthly Breakdown */}
-              <div className="space-y-3">
-                <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'} flex items-center gap-2`}>
-                  <BarChart3 size={20} />
-                  Detalhamento Mensal
-                </h3>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {simulationData.faturas?.map((fatura: any, index: number) => {
-                    const valor = fatura.valorFatura || 0;
-                    const economiaFatura = valor * 0.30;
-                    const valorComEconomia = valor - economiaFatura;
-                    const mes = fatura.mesReferencia || 0;
-                    const ano = fatura.anoReferencia || 0;
+            {/* Economy Breakdown Component */}
+            {simulationData.calculo_economia && simulationData.uc_info && simulationData.faturas_resumo ? (
+              <EconomyBreakdown
+                calculoEconomia={simulationData.calculo_economia}
+                projecao10Anos={simulationData.projecao_10_anos || []}
+                ucInfo={simulationData.uc_info}
+                faturasResumo={simulationData.faturas_resumo}
+              />
+            ) : (
+              // Fallback para visualização antiga se não houver cálculo detalhado
+              <div className={`p-8 rounded-xl ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white border border-slate-200'}`}>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className={`p-6 rounded-xl ${isDark ? 'bg-slate-900/50' : 'bg-slate-50'}`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <DollarSign className={isDark ? 'text-slate-400' : 'text-slate-500'} size={24} />
+                      <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                        Total Pago (12 meses)
+                      </span>
+                    </div>
+                    <div className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {totalPago.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </div>
+                  </div>
 
-                    return (
-                      <div
-                        key={index}
-                        className={`p-4 rounded-lg ${isDark ? 'bg-slate-900/50' : 'bg-slate-50'}`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Calendar size={16} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
-                            <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                              {mes ? String(mes).padStart(2, '0') : '??'}/{ano || '????'}
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <div className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'} line-through`}>
-                              {valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </div>
-                            <div className="text-sm font-semibold text-[#10B981]">
-                              {valorComEconomia.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className={isDark ? 'text-slate-500' : 'text-slate-500'}>
-                            Economia de 30%
-                          </span>
-                          <span className="text-[#10B981] font-medium">
-                            -{economiaFatura.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <div className="p-6 rounded-xl bg-gradient-to-br from-[#10B981]/10 to-green-600/10 border border-[#10B981]/20">
+                    <div className="flex items-center gap-3 mb-2">
+                      <TrendingDown className="text-[#10B981]" size={24} />
+                      <span className="text-sm text-[#10B981]">
+                        Economia Estimada
+                      </span>
+                    </div>
+                    <div className="text-3xl font-bold text-[#10B981]">
+                      {economiaEstimada.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </div>
+                  </div>
                 </div>
               </div>
+            )}
 
-              {/* Extra Benefits */}
-              <div className={`mt-6 p-4 rounded-lg ${isDark ? 'bg-[#FFD700]/10' : 'bg-[#FFD700]/5'} border ${isDark ? 'border-[#FFD700]/30' : 'border-[#FFD700]/20'}`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle className="text-[#FFD700]" size={20} />
-                  <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    Programa Primeiros 100 Clientes
-                  </span>
-                </div>
-                <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                  Seja um dos primeiros e ganhe <strong>35% de desconto</strong> (5% extra!) nos primeiros 6 meses!
-                </p>
+            {/* Extra Benefits */}
+            <div className={`p-4 rounded-lg ${isDark ? 'bg-[#FFD700]/10' : 'bg-[#FFD700]/5'} border ${isDark ? 'border-[#FFD700]/30' : 'border-[#FFD700]/20'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="text-[#FFD700]" size={20} />
+                <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Programa Primeiros 100 Clientes
+                </span>
               </div>
+              <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                Seja um dos primeiros e ganhe <strong>35% de desconto</strong> (5% extra!) nos primeiros 6 meses!
+              </p>
             </div>
 
             {/* CTA */}
@@ -784,7 +723,7 @@ export function SimulationFlow() {
               <p className={`mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Entre em contato agora e comece a economizar ainda este mês!
               </p>
-
+              
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <a
                   href="https://wa.me/5565999999999?text=Quero%20economizar%2030%25%20na%20conta%20de%20luz!"

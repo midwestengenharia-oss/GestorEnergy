@@ -7,57 +7,9 @@ import {
   Calculator, MessageSquare, FileText, Building, X, Star,
   Phone, MapPin, AlertCircle
 } from 'lucide-react';
-
-// Logo Component inline
-function MidwestLogo({ className = "h-10", variant = 'color' }: { className?: string; variant?: 'color' | 'white' | 'black' }) {
-  if (variant === 'white') {
-    return (
-      <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g fill="white">
-          <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" />
-          <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" opacity="0.9" />
-          <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" opacity="0.8" />
-          <text x="55" y="36" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
-            Midwest
-          </text>
-        </g>
-      </svg>
-    );
-  }
-
-  if (variant === 'black') {
-    return (
-      <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <g fill="#282828">
-          <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" />
-          <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" opacity="0.9" />
-          <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" opacity="0.8" />
-          <text x="55" y="36" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
-            Midwest
-          </text>
-        </g>
-      </svg>
-    );
-  }
-
-  return (
-    <svg className={className} viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FFD700" />
-          <stop offset="50%" stopColor="#FFA500" />
-          <stop offset="100%" stopColor="#F18A26" />
-        </linearGradient>
-      </defs>
-      <path d="M10 20 L15 15 L25 15 L25 40 L15 45 L10 40 Z" fill="url(#goldGradient)" />
-      <path d="M20 20 L25 15 L35 15 L35 40 L25 45 L20 40 Z" fill="url(#goldGradient)" opacity="0.9" />
-      <path d="M30 20 L35 15 L45 15 L45 40 L35 45 L30 40 Z" fill="url(#goldGradient)" opacity="0.8" />
-      <text x="55" y="36" fill="#282828" fontFamily="Arial, sans-serif" fontSize="26" fontWeight="bold" letterSpacing="-1">
-        Midwest
-      </text>
-    </svg>
-  );
-}
+import LogoBranca from '../assets/logo/logo-branca.png';
+import LogoPreta from '../assets/logo/logo-preta.png';
+import Logo from '../assets/logo/logo.png';
 
 export function LandingPage() {
   const { isDark } = useTheme();
@@ -67,10 +19,10 @@ export function LandingPage() {
   const [economia, setEconomia] = useState(null);
   const [vagasRestantes, setVagasRestantes] = useState(27);
   const [showFAQ, setShowFAQ] = useState({});
-
+  
   // Contador de economia em tempo real
   const [economiaTotal, setEconomiaTotal] = useState(45782);
-
+  
   useEffect(() => {
     const interval = setInterval(() => {
       setEconomiaTotal(prev => prev + Math.floor(Math.random() * 100));
@@ -127,11 +79,11 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <MidwestLogo variant={isDark ? 'white' : 'black'} className="h-10 w-auto" />
+              <img src={isDark ? LogoBranca : LogoPreta} alt="Midwest Logo" className="h-10 w-auto" />
             </div>
             <div className="flex items-center gap-3">
               <a
-                href="https://wa.me/5566996350491?text=Quero%20economizar%2030%25%20na%20conta%20de%20luz!"
+                href="https://wa.me/5565999999999?text=Quero%20economizar%2030%25%20na%20conta%20de%20luz!"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 bg-[#10B981] text-white rounded-lg font-medium hover:bg-[#059669] transition-all"
@@ -180,14 +132,14 @@ export function LandingPage() {
               </div>
 
               <h1 className={`text-4xl lg:text-6xl font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Economize <span className="text-[#FFD700]">30%</span> na Conta de Luz<br />
+                Economize <span className="text-[#FFD700]">30%</span> na Conta de Luz<br/>
                 <span className="text-2xl lg:text-3xl text-[#10B981]">
                   Sem Instalar Nada, Sem Investimento
                 </span>
               </h1>
 
               <p className={`text-lg lg:text-xl ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                Energia solar compartilhada que cabe no seu bolso.
+                Energia solar compartilhada que cabe no seu bolso. 
                 Mais de <strong className="text-[#1E3A8A]">100 famílias</strong> já estão economizando no Mato Grosso.
               </p>
 
@@ -292,7 +244,7 @@ export function LandingPage() {
           <p className={`text-lg mb-8 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
             E pior: as bandeiras tarifárias tornam impossível prever quanto você vai pagar no próximo mês.
           </p>
-
+          
           <div className={`p-8 rounded-2xl ${isDark ? 'bg-slate-900' : 'bg-white'} shadow-xl max-w-2xl mx-auto`}>
             <h3 className={`text-xl font-bold mb-6 ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Mas e se existisse um jeito de:
@@ -342,10 +294,11 @@ export function LandingPage() {
                     value={valorConta}
                     onChange={(e) => setValorConta(e.target.value)}
                     placeholder="Ex: 300"
-                    className={`flex-1 px-4 py-3 rounded-lg border ${isDark
-                      ? 'bg-slate-900 border-slate-700 text-white'
-                      : 'bg-white border-slate-300 text-slate-900'
-                      } focus:outline-none focus:ring-2 focus:ring-[#FFD700]`}
+                    className={`flex-1 px-4 py-3 rounded-lg border ${
+                      isDark 
+                        ? 'bg-slate-900 border-slate-700 text-white' 
+                        : 'bg-white border-slate-300 text-slate-900'
+                    } focus:outline-none focus:ring-2 focus:ring-[#FFD700]`}
                   />
                   <button
                     onClick={calcularEconomia}
@@ -364,7 +317,7 @@ export function LandingPage() {
                   <h3 className={`text-2xl font-bold mb-6 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     🎉 Veja quanto você vai economizar!
                   </h3>
-
+                  
                   <div className="grid md:grid-cols-3 gap-4 mb-8">
                     <div className={`p-4 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-[#FFD700]/10'}`}>
                       <DollarSign className="text-[#FFD700] mx-auto mb-2" size={32} />
@@ -375,7 +328,7 @@ export function LandingPage() {
                         por mês
                       </div>
                     </div>
-
+                    
                     <div className={`p-4 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-[#10B981]/10'}`}>
                       <TrendingDown className="text-[#10B981] mx-auto mb-2" size={32} />
                       <div className="text-2xl font-bold text-[#10B981]">
@@ -385,7 +338,7 @@ export function LandingPage() {
                         por ano
                       </div>
                     </div>
-
+                    
                     <div className={`p-4 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-[#1E3A8A]/10'}`}>
                       <Award className="text-[#1E3A8A] mx-auto mb-2" size={32} />
                       <div className="text-2xl font-bold text-[#1E3A8A]">
@@ -529,7 +482,7 @@ export function LandingPage() {
                 ))}
               </div>
               <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                "De R$ 420 para R$ 294! Moro de aluguel e achava que nunca poderia ter energia solar.
+                "De R$ 420 para R$ 294! Moro de aluguel e achava que nunca poderia ter energia solar. 
                 A Midwest provou que eu estava errado! Processo foi super simples."
               </p>
               <div className="flex items-center gap-3">
@@ -555,7 +508,7 @@ export function LandingPage() {
                 ))}
               </div>
               <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                "Economizo R$ 180 todo mês sem instalar nada!
+                "Economizo R$ 180 todo mês sem instalar nada! 
                 Em 6 meses já economizei R$ 1.080 - deu pra quitar duas prestações do carro!"
               </p>
               <div className="flex items-center gap-3">
@@ -581,7 +534,7 @@ export function LandingPage() {
                 ))}
               </div>
               <p className={`mb-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                "No início achei que era pegadinha, mas é real!
+                "No início achei que era pegadinha, mas é real! 
                 30% de desconto todo mês. Atendimento pelo WhatsApp é excelente."
               </p>
               <div className="flex items-center gap-3">
@@ -693,15 +646,17 @@ export function LandingPage() {
               >
                 <button
                   onClick={() => toggleFAQ(index)}
-                  className={`w-full px-6 py-4 text-left flex items-center justify-between ${isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-50'
-                    } transition-colors`}
+                  className={`w-full px-6 py-4 text-left flex items-center justify-between ${
+                    isDark ? 'hover:bg-slate-700' : 'hover:bg-slate-50'
+                  } transition-colors`}
                 >
                   <span className={`font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {item.pergunta}
                   </span>
                   <ChevronRight
-                    className={`transform transition-transform ${showFAQ[index] ? 'rotate-90' : ''
-                      } ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
+                    className={`transform transition-transform ${
+                      showFAQ[index] ? 'rotate-90' : ''
+                    } ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
                     size={20}
                   />
                 </button>
@@ -794,10 +749,11 @@ export function LandingPage() {
               href="https://youtube.com/watch?v=example"
               target="_blank"
               rel="noopener noreferrer"
-              className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${isDark
-                ? 'bg-slate-800 text-white hover:bg-slate-700'
-                : 'bg-white text-slate-900 hover:bg-slate-100'
-                } shadow-lg`}
+              className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+                isDark
+                  ? 'bg-slate-800 text-white hover:bg-slate-700'
+                  : 'bg-white text-slate-900 hover:bg-slate-100'
+              } shadow-lg`}
             >
               <MessageSquare size={20} />
               VER VÍDEO EXPLICATIVO - 2 MIN
@@ -809,16 +765,17 @@ export function LandingPage() {
       {/* CTA Section - Oferta Limitada */}
       <section className={`py-20 ${isDark ? 'bg-gradient-to-r from-slate-900 to-slate-800' : 'bg-gradient-to-r from-[#FFD700]/10 to-[#FFA500]/10'}`}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${isDark ? 'bg-red-900/30' : 'bg-red-100'
-            } text-red-600 mb-6`}>
+          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
+            isDark ? 'bg-red-900/30' : 'bg-red-100'
+          } text-red-600 mb-6`}>
             <AlertCircle size={20} />
             <span className="font-medium">PROGRAMA PRIMEIROS 100 CLIENTES</span>
           </div>
-
+          
           <h2 className={`text-3xl lg:text-4xl font-bold mb-6 ${isDark ? 'text-white' : 'text-slate-900'}`}>
             ⚡ Benefício Exclusivo: <span className="text-[#FFD700]">35% de desconto</span> (5% extra!)
           </h2>
-
+          
           <div className="flex items-center justify-center gap-8 mb-8">
             <div>
               <div className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -860,14 +817,14 @@ export function LandingPage() {
             {/* Logo e Info */}
             <div>
               <div className="flex items-center gap-3 mb-4">
-                <MidwestLogo variant={isDark ? 'white' : 'black'} className="h-10 w-auto" />
+                <img src={isDark ? LogoBranca : LogoPreta} alt="Midwest Logo" className="h-10 w-auto" />
               </div>
               <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Empresa do MT para o MT. Energia compartilhada com economia real garantida.
               </p>
               <div className="space-y-2 text-sm">
                 <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
-                  CNPJ: 61.902.316/0001-63
+                  CNPJ: XX.XXX.XXX/0001-XX
                 </p>
               </div>
             </div>
@@ -899,29 +856,29 @@ export function LandingPage() {
                 Fale Conosco
               </h4>
               <div className="space-y-3">
-                <a
-                  href="https://wa.me/5566996350491"
+                <a 
+                  href="https://wa.me/5565999999999"
                   target="_blank"
                   rel="noopener noreferrer"
                   className={`flex items-center gap-3 text-sm hover:text-[#10B981] transition-colors ${isDark ? 'text-slate-400' : 'text-slate-600'}`}
                 >
                   <Phone size={16} />
-                  (66) 99635-0491
+                  (65) 99999-9999
                 </a>
                 <div className={`flex items-start gap-3 text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                   <MapPin size={16} className="mt-0.5" />
                   <span>
-                    Cuiabá, Sinop, Rondonópolis<br />
+                    Cuiabá, Sinop, Rondonópolis<br/>
                     e todo Mato Grosso
                   </span>
                 </div>
               </div>
-
+              
               <h4 className={`font-bold mt-6 mb-3 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Horário de Atendimento
               </h4>
               <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Seg a Sex: 8h às 20h<br />
+                Seg a Sex: 8h às 20h<br/>
                 Sábado: 9h às 13h
               </p>
             </div>

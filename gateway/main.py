@@ -16,6 +16,9 @@ import time
 from security_middleware import SecurityMiddleware, security_manager
 import json
 import httpx
+import constants
+import calculadora
+import aneel_api
 
 # Gerenciador de sessoes de login em threads separadas
 # Cada login fica em sua propria thread ate o finish_login
@@ -941,7 +944,7 @@ def public_simulation_get_ucs(session_id: str, request: Request):
 def public_simulation_get_faturas(session_id: str, codigo_uc: int, request: Request):
     """
     Endpoint público para buscar faturas de uma UC específica.
-    Retorna faturas dos últimos 12 meses.
+    Retorna faturas dos últimos 12 meses + cálculo detalhado de economia.
     PROTEGIDO: Validação de sessão e IP
     """
     try:
@@ -1002,17 +1005,108 @@ def public_simulation_get_faturas(session_id: str, codigo_uc: int, request: Requ
         faturas_data = svc.listar_faturas(uc_mapeada)
 
         # Limita aos últimos 12 meses
-        faturas_12_meses = faturas_data[-12:] if len(faturas_data) > 12 else faturas_data
+        faturas_12_meses = faturas_data[-13:] if len(faturas_data) > 13 else faturas_data
 
+        # ====== NOVO: BUSCAR INFORMAÇÕES DETALHADAS DA UC ======
+        uc_info_detalhada = None
+        tipo_ligacao = "BIFASICO"  # Fallback padrão
+        grupo_leitura = "B"
+
+        try:
+            uc_info_response = svc.get_uc_info(uc_mapeada)
+
+            if uc_info_response and not uc_info_response.get("errored"):
+                uc_info_detalhada = uc_info_response
+
+                # Extrai tipo de ligação dos dados detalhados
+                infos = uc_info_response.get("infos", {})
+                dados_instalacao = infos.get("dadosInstalacao", {})
+
+                tipo_ligacao = dados_instalacao.get("tipoLigacao", "BIFASICO")
+                grupo_leitura = dados_instalacao.get("grupoLeitura", "B")
+
+                print(f"   [OK] UC Info detalhada obtida: Tipo={tipo_ligacao}, Grupo={grupo_leitura}")
+            else:
+                print(f"   [AVISO] UC Info retornou erro, usando fallback")
+        except Exception as e:
+            print(f"   [AVISO] Erro ao buscar UC info detalhada: {e}. Usando fallback.")
+
+        # ====== PROCESSA FATURAS E CALCULA ECONOMIA ======
+        # Usa a FATURA MAIS RECENTE para o cálculo (não média)
+        faturas_processadas = calculadora.processar_faturas(faturas_12_meses)
+
+        consumo_kwh = faturas_processadas["consumo_kwh"]
+        iluminacao_publica = faturas_processadas["iluminacao_publica"]
+        tem_bandeira = faturas_processadas["tem_bandeira_vermelha"]
+
+        print(f"   [INFO] Fatura mais recente: Consumo={consumo_kwh} kWh, Ilum={iluminacao_publica}, Bandeira={tem_bandeira}")
+
+        # ====== BUSCA TARIFAS DA ANEEL EM TEMPO REAL ======
+        print(f"   [INFO] Buscando tarifas da ANEEL...")
+        tarifas_aneel = aneel_api.get_tarifas_com_fallback("EMT")
+
+        tarifa_b1_sem_impostos = tarifas_aneel["tarifa_b1_sem_impostos"]
+        fiob_base = tarifas_aneel["fiob_sem_impostos"]
+
+        # Aplica impostos sobre a tarifa B1
+        tarifa_b1_com_impostos = constants.aplicar_impostos(tarifa_b1_sem_impostos)
+
+        # Calcula economia detalhada
+        calculo_economia = None
+        projecao_10_anos = None
+
+        # Só calcula se tiver consumo válido
+        if consumo_kwh > 0:
+            # Verifica se é Grupo B (suportado)
+            if grupo_leitura == "B":
+                calculo_economia = calculadora.calcular_economia_mensal(
+                    consumo_kwh=consumo_kwh,
+                    tipo_ligacao=tipo_ligacao,
+                    iluminacao_publica=iluminacao_publica,
+                    tem_bandeira_vermelha=tem_bandeira,
+                    tarifa_b1_kwh_com_impostos=tarifa_b1_com_impostos,
+                    fiob_base_kwh=fiob_base
+                )
+
+                # Projeção 10 anos (APENAS CONSUMO, sem iluminação/piso)
+                projecao_10_anos = calculadora.calcular_projecao_10_anos(
+                    conta_atual_mensal=calculo_economia["custo_energisa_consumo"],
+                    conta_midwest_mensal=calculo_economia["valor_midwest_consumo"]
+                )
+            else:
+                print(f"   [AVISO] Grupo de leitura '{grupo_leitura}' não suportado. Apenas Grupo B é aceito.")
+
+        # ====== RETORNA DADOS ENRIQUECIDOS ======
         return {
             "success": True,
-            "faturas": faturas_12_meses
+            "faturas": faturas_12_meses,
+
+            # Informações da UC
+            "uc_info": {
+                "tipo_ligacao": tipo_ligacao,
+                "grupo_leitura": grupo_leitura,
+                "dados_completos": uc_info_detalhada
+            },
+
+            # Dados processados das faturas
+            "faturas_resumo": faturas_processadas,
+
+            # Cálculo de economia detalhado
+            "calculo_economia": calculo_economia,
+
+            # Projeção 10 anos
+            "projecao_10_anos": projecao_10_anos,
+
+            # Fallback para compatibilidade
+            "total_pago_12_meses": faturas_processadas["total_pago_12_meses"]
         }
 
     except HTTPException:
         raise
     except Exception as e:
         print(f"ERRO ao buscar faturas: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

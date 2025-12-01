@@ -1152,5 +1152,73 @@ class EnergisaService:
         except Exception as e:
             raise Exception(f"Erro na requisição de opções: {str(e)}")
     
+    def listar_faturas_ssr(self, uc_data: dict):
+        """
+        Nova rota GET via SSR (Server Side Rendering) para buscar faturas.
+        Não interfere no método listar_faturas padrão.
+        """
+        try:
+            # 1. Preparar dados
+            cdc = uc_data.get('cdc')
+            digito = uc_data.get('digitoVerificadorCdc')
+            empresa = uc_data.get('codigoEmpresaWeb', 6)
+            
+            # 2. Obter Build ID (Necessário para montar a URL do Next.js)
+            build_id = self._get_build_id()
+            if not build_id:
+                return {"errored": True, "message": "Não foi possível obter o Build ID"}
+
+            # 3. Montar URL
+            # Ex: https://servicos.energisa.com.br/_next/data/{build_id}/login/login-faturas-ssr.json
+            url = f"{self.base_url}/_next/data/{build_id}/login/login-faturas-ssr.json"
+
+            # 4. Configurar Cookies Obrigatórios para esta requisição
+            # O servidor valida se o cookie bate com a UC solicitada
+            self.session.cookies.set("NumeroUc", str(cdc))
+            self.session.cookies.set("Digito", str(digito))
+            self.session.cookies.set("CodigoEmpresaWeb", str(empresa))
+
+            # 5. Parâmetros da URL (Query String)
+            params = {
+                "codigoEmpresaWeb": empresa,
+                "numeroCdc": cdc,           # Atenção: aqui usa 'numeroCdc'
+                "digitoVerificador": digito,
+                "GrupoLeitura": "B",        # Hardcoded conforme seu exemplo
+                "Redirect": ""
+            }
+
+            # 6. Headers Específicos
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": f"{self.base_url}/login",
+                "x-nextjs-data": "1" # Importante para indicar chamada de dados do Next
+            }
+
+            print(f"   🚀 [SSR] Buscando faturas (Novo GET): UC {cdc}")
+            
+            # Requisição GET
+            resp = self.session.get(url, params=params, headers=headers)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                
+                # O retorno tem a estrutura: pageProps -> dadosServerSide -> faturas
+                page_props = data.get("pageProps", {})
+                dados_server = page_props.get("dadosServerSide", {})
+                
+                if dados_server.get("errored"):
+                    return {"errored": True, "message": dados_server.get("mensagem")}
+                
+                faturas = dados_server.get("faturas", [])
+                print(f"   ✅ [SSR] Sucesso! {len(faturas)} faturas encontradas.")
+                return faturas
+            else:
+                print(f"   ❌ [SSR] Erro: HTTP {resp.status_code}")
+                return {"errored": True, "status": resp.status_code, "content": resp.text[:200]}
+
+        except Exception as e:
+            print(f"   ❌ [SSR] Exceção: {str(e)}")
+            return {"errored": True, "message": str(e)}
+    
 
     

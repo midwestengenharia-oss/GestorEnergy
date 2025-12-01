@@ -15,7 +15,7 @@ import queue
 import time
 from security_middleware import SecurityMiddleware, security_manager
 import json
-import httpx
+#import httpx
 import constants
 import calculadora
 import aneel_api
@@ -1185,6 +1185,33 @@ async def public_simulation_save_lead(req: LeadSalvarRequest, request: Request):
     except Exception as e:
         print(f"ERRO ao salvar lead: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro ao salvar lead: {str(e)}")
+    
+@app.post("/faturas/ssr", dependencies=[Depends(verify_token)])
+def list_bills_ssr(req: UcRequest):
+    """
+    Novo endpoint exclusivo para buscar faturas via SSR (Login Faturas JSON).
+    Não afeta o endpoint padrão /faturas/listar.
+    """
+    if not req.cdc: 
+        raise HTTPException(400, "CDC obrigatório")
+    
+    try:
+        svc = EnergisaService(req.cpf)
+        if not svc.is_authenticated():
+             raise HTTPException(401, "Não autenticado na Energisa.")
+             
+        result = svc.listar_faturas_ssr(req.model_dump())
+        
+        # Se retornou um dict com erro, repassa o erro
+        if isinstance(result, dict) and result.get("errored"):
+            raise HTTPException(400, detail=result.get("message", "Erro ao buscar faturas SSR"))
+            
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 # [gateway/main.py]

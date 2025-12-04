@@ -26,8 +26,13 @@ export function AuthLayout() {
     }
 
     // Se já autenticado, redireciona para o dashboard do perfil
-    if (isAuthenticated && perfilAtivo) {
-        return <Navigate to={`/app/${perfilAtivo}`} replace />;
+    if (isAuthenticated) {
+        // Se perfilAtivo está definido, vai direto para o dashboard do perfil
+        if (perfilAtivo) {
+            return <Navigate to={`/app/${perfilAtivo}`} replace />;
+        }
+        // Senão, vai para a rota de redirecionamento que resolverá o perfil
+        return <Navigate to="/app/dashboard" replace />;
     }
 
     return <Outlet />;

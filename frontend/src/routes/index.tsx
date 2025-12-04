@@ -25,6 +25,11 @@ import { DashboardParceiro } from '../pages/parceiro';
 import { LandingPage } from '../pages/LandingPage';
 import { SimulationFlow } from '../pages/SimulationFlow';
 
+// Mapeamento de perfil para rota (quando são diferentes)
+const PERFIL_ROTA_MAP: Record<string, string> = {
+    superadmin: 'admin',  // perfil 'superadmin' vai para rota '/app/admin'
+};
+
 /**
  * Componente para redirecionar ao dashboard do perfil ativo
  */
@@ -42,7 +47,9 @@ function RedirectToDashboard() {
         return <Navigate to="/app/usuario" replace />;
     }
 
-    return <Navigate to={`/app/${perfilAtivo}`} replace />;
+    // Mapeia o perfil para a rota correta (ex: superadmin -> admin)
+    const rota = PERFIL_ROTA_MAP[perfilAtivo] || perfilAtivo;
+    return <Navigate to={`/app/${rota}`} replace />;
 }
 
 /**

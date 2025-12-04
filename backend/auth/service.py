@@ -36,7 +36,7 @@ class AuthService:
         """
         Cadastra novo usuário.
 
-        1. Verifica se CPF já existe
+        1. Verifica se CPF/CNPJ já existe
         2. Cria usuário no Supabase Auth
         3. Cria registro na tabela usuarios
         4. Adiciona perfil 'usuario' padrão
@@ -48,13 +48,18 @@ class AuthService:
             Tupla (UserResponse, AuthTokens)
 
         Raises:
-            ConflictError: Se email ou CPF já existem
+            ConflictError: Se email, CPF ou CNPJ já existem
             ValidationError: Se dados inválidos
         """
-        # Verifica se CPF já existe
-        existing = self.db.usuarios().select("id").eq("cpf", data.cpf).execute()
-        if existing.data:
-            raise ConflictError("CPF já cadastrado no sistema")
+        # Verifica duplicidade baseado no tipo de pessoa
+        if data.tipo_pessoa.value == "PF" and data.cpf:
+            existing = self.db.usuarios().select("id").eq("cpf", data.cpf).execute()
+            if existing.data:
+                raise ConflictError("CPF já cadastrado no sistema")
+        elif data.tipo_pessoa.value == "PJ" and data.cnpj:
+            existing = self.db.usuarios().select("id").eq("cnpj", data.cnpj).execute()
+            if existing.data:
+                raise ConflictError("CNPJ já cadastrado no sistema")
 
         # Verifica se email já existe na tabela usuarios
         existing_email = self.db.usuarios().select("id").eq("email", data.email).execute()
@@ -85,13 +90,23 @@ class AuthService:
             # Cria registro na tabela usuarios
             user_data = {
                 "auth_id": auth_id,
+                "tipo_pessoa": data.tipo_pessoa.value,
                 "nome_completo": data.nome_completo,
                 "email": data.email,
-                "cpf": data.cpf,
                 "telefone": data.telefone,
                 "ativo": True,
                 "email_verificado": False
             }
+
+            # Campos específicos PF
+            if data.tipo_pessoa.value == "PF":
+                user_data["cpf"] = data.cpf
+
+            # Campos específicos PJ
+            if data.tipo_pessoa.value == "PJ":
+                user_data["cnpj"] = data.cnpj
+                user_data["razao_social"] = data.razao_social
+                user_data["nome_fantasia"] = data.nome_fantasia
 
             user_result = self.db.usuarios().insert(user_data).execute()
 
@@ -115,9 +130,13 @@ class AuthService:
             user_response = UserResponse(
                 id=user_id,
                 auth_id=auth_id,
+                tipo_pessoa=user.get("tipo_pessoa", "PF"),
                 nome_completo=user["nome_completo"],
                 email=user["email"],
                 cpf=user.get("cpf"),
+                cnpj=user.get("cnpj"),
+                razao_social=user.get("razao_social"),
+                nome_fantasia=user.get("nome_fantasia"),
                 telefone=user.get("telefone"),
                 is_superadmin=user.get("is_superadmin", False),
                 ativo=user.get("ativo", True),
@@ -200,9 +219,13 @@ class AuthService:
             user_response = UserResponse(
                 id=user["id"],
                 auth_id=auth_id,
+                tipo_pessoa=user.get("tipo_pessoa", "PF"),
                 nome_completo=user["nome_completo"],
                 email=user["email"],
                 cpf=user.get("cpf"),
+                cnpj=user.get("cnpj"),
+                razao_social=user.get("razao_social"),
+                nome_fantasia=user.get("nome_fantasia"),
                 telefone=user.get("telefone"),
                 is_superadmin=user.get("is_superadmin", False),
                 ativo=user.get("ativo", True),
@@ -309,9 +332,13 @@ class AuthService:
         return UserResponse(
             id=user["id"],
             auth_id=user["auth_id"],
+            tipo_pessoa=user.get("tipo_pessoa", "PF"),
             nome_completo=user["nome_completo"],
             email=user["email"],
             cpf=user.get("cpf"),
+            cnpj=user.get("cnpj"),
+            razao_social=user.get("razao_social"),
+            nome_fantasia=user.get("nome_fantasia"),
             telefone=user.get("telefone"),
             is_superadmin=user.get("is_superadmin", False),
             ativo=user.get("ativo", True),
@@ -325,7 +352,9 @@ class AuthService:
         self,
         user_id: int,
         nome_completo: Optional[str] = None,
-        telefone: Optional[str] = None
+        telefone: Optional[str] = None,
+        razao_social: Optional[str] = None,
+        nome_fantasia: Optional[str] = None
     ) -> UserResponse:
         """
         Atualiza perfil do usuário.
@@ -334,6 +363,8 @@ class AuthService:
             user_id: ID do usuário
             nome_completo: Novo nome
             telefone: Novo telefone
+            razao_social: Nova razão social (PJ)
+            nome_fantasia: Novo nome fantasia (PJ)
 
         Returns:
             UserResponse atualizado
@@ -343,6 +374,10 @@ class AuthService:
             update_data["nome_completo"] = nome_completo
         if telefone is not None:
             update_data["telefone"] = telefone
+        if razao_social is not None:
+            update_data["razao_social"] = razao_social
+        if nome_fantasia is not None:
+            update_data["nome_fantasia"] = nome_fantasia
 
         if not update_data:
             return await self.get_user_by_id(user_id)

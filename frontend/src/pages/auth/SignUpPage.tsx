@@ -1,5 +1,5 @@
 /**
- * SignUpPage - Página de cadastro
+ * SignUpPage - Página de cadastro com suporte a PF e PJ
  */
 
 import { useState } from 'react';
@@ -7,7 +7,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToast } from '../../components/Toast';
-import { Loader2, Mail, Lock, User, Phone, CreditCard, Zap, ArrowLeft, Moon, SunMedium } from 'lucide-react';
+import { Loader2, Mail, Lock, User, Phone, CreditCard, Zap, ArrowLeft, Moon, SunMedium, Building2 } from 'lucide-react';
 
 // Formatar CPF
 const formatCPF = (value: string) => {
@@ -16,6 +16,16 @@ const formatCPF = (value: string) => {
         .replace(/(\d{3})(\d)/, '$1.$2')
         .replace(/(\d{3})(\d)/, '$1.$2')
         .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+};
+
+// Formatar CNPJ
+const formatCNPJ = (value: string) => {
+    const numbers = value.replace(/\D/g, '').slice(0, 14);
+    return numbers
+        .replace(/(\d{2})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1/$2')
+        .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
 };
 
 // Formatar telefone
@@ -31,16 +41,22 @@ const formatPhone = (value: string) => {
         .replace(/(\d{5})(\d)/, '$1-$2');
 };
 
+type TipoPessoa = 'PF' | 'PJ';
+
 export function SignUpPage() {
     const navigate = useNavigate();
     const { signup } = useAuth();
     const { isDark, toggleTheme } = useTheme();
     const toast = useToast();
 
+    const [tipoPessoa, setTipoPessoa] = useState<TipoPessoa>('PF');
     const [formData, setFormData] = useState({
         nome_completo: '',
         email: '',
         cpf: '',
+        cnpj: '',
+        razao_social: '',
+        nome_fantasia: '',
         telefone: '',
         senha: '',
         confirmarSenha: ''
@@ -52,6 +68,8 @@ export function SignUpPage() {
 
         if (field === 'cpf') {
             formattedValue = formatCPF(value);
+        } else if (field === 'cnpj') {
+            formattedValue = formatCNPJ(value);
         } else if (field === 'telefone') {
             formattedValue = formatPhone(value);
         }
@@ -62,15 +80,39 @@ export function SignUpPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Validações
-        if (!formData.nome_completo || !formData.email || !formData.cpf || !formData.telefone || !formData.senha) {
-            toast.warning('Preencha todos os campos');
+        // Validações comuns
+        if (!formData.nome_completo || !formData.email || !formData.telefone || !formData.senha) {
+            toast.warning('Preencha todos os campos obrigatórios');
             return;
         }
 
         if (formData.nome_completo.split(' ').length < 2) {
             toast.warning('Informe nome e sobrenome');
             return;
+        }
+
+        // Validações específicas PF
+        if (tipoPessoa === 'PF') {
+            if (!formData.cpf) {
+                toast.warning('Informe o CPF');
+                return;
+            }
+            if (formData.cpf.replace(/\D/g, '').length !== 11) {
+                toast.warning('CPF deve ter 11 dígitos');
+                return;
+            }
+        }
+
+        // Validações específicas PJ
+        if (tipoPessoa === 'PJ') {
+            if (!formData.cnpj) {
+                toast.warning('Informe o CNPJ');
+                return;
+            }
+            if (formData.cnpj.replace(/\D/g, '').length !== 14) {
+                toast.warning('CNPJ deve ter 14 dígitos');
+                return;
+            }
         }
 
         if (formData.senha.length < 6) {
@@ -85,15 +127,24 @@ export function SignUpPage() {
 
         setLoading(true);
         try {
-            await signup({
+            const signupData: any = {
+                tipo_pessoa: tipoPessoa,
                 nome_completo: formData.nome_completo,
                 email: formData.email,
-                cpf: formData.cpf.replace(/\D/g, ''),
                 telefone: formData.telefone.replace(/\D/g, ''),
                 password: formData.senha
-            });
+            };
+
+            if (tipoPessoa === 'PF') {
+                signupData.cpf = formData.cpf.replace(/\D/g, '');
+            } else {
+                signupData.cnpj = formData.cnpj.replace(/\D/g, '');
+                signupData.razao_social = formData.razao_social || null;
+                signupData.nome_fantasia = formData.nome_fantasia || null;
+            }
+
+            await signup(signupData);
             toast.success('Conta criada com sucesso!');
-            // Navegação é feita pelo AuthLayout após detectar autenticação
         } catch (err: any) {
             toast.error(err.message || 'Erro ao criar conta');
         } finally {
@@ -137,9 +188,43 @@ export function SignUpPage() {
                         <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Criar conta</h2>
                     </div>
 
+                    {/* Toggle PF/PJ */}
+                    <div className="flex gap-2 mb-6">
+                        <button
+                            type="button"
+                            onClick={() => setTipoPessoa('PF')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition ${
+                                tipoPessoa === 'PF'
+                                    ? 'bg-[#00A3E0] text-white'
+                                    : isDark
+                                        ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                        >
+                            <User size={18} />
+                            Pessoa Física
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setTipoPessoa('PJ')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition ${
+                                tipoPessoa === 'PJ'
+                                    ? 'bg-[#00A3E0] text-white'
+                                    : isDark
+                                        ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                        >
+                            <Building2 size={18} />
+                            Pessoa Jurídica
+                        </button>
+                    </div>
+
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label className={labelClass}>Nome completo</label>
+                            <label className={labelClass}>
+                                {tipoPessoa === 'PF' ? 'Nome completo' : 'Nome do responsável'}
+                            </label>
                             <div className="relative">
                                 <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <input
@@ -147,7 +232,7 @@ export function SignUpPage() {
                                     value={formData.nome_completo}
                                     onChange={(e) => handleChange('nome_completo', e.target.value)}
                                     className={inputClass}
-                                    placeholder="Seu nome completo"
+                                    placeholder={tipoPessoa === 'PF' ? 'Seu nome completo' : 'Nome do responsável'}
                                 />
                             </div>
                         </div>
@@ -166,35 +251,101 @@ export function SignUpPage() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className={labelClass}>CPF</label>
-                                <div className="relative">
-                                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                    <input
-                                        type="text"
-                                        value={formData.cpf}
-                                        onChange={(e) => handleChange('cpf', e.target.value)}
-                                        className={inputClass}
-                                        placeholder="000.000.000-00"
-                                    />
+                        {/* Campos PF */}
+                        {tipoPessoa === 'PF' && (
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className={labelClass}>CPF</label>
+                                    <div className="relative">
+                                        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input
+                                            type="text"
+                                            value={formData.cpf}
+                                            onChange={(e) => handleChange('cpf', e.target.value)}
+                                            className={inputClass}
+                                            placeholder="000.000.000-00"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div>
-                                <label className={labelClass}>Telefone</label>
-                                <div className="relative">
-                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                    <input
-                                        type="text"
-                                        value={formData.telefone}
-                                        onChange={(e) => handleChange('telefone', e.target.value)}
-                                        className={inputClass}
-                                        placeholder="(00) 00000-0000"
-                                    />
+                                <div>
+                                    <label className={labelClass}>Telefone</label>
+                                    <div className="relative">
+                                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input
+                                            type="text"
+                                            value={formData.telefone}
+                                            onChange={(e) => handleChange('telefone', e.target.value)}
+                                            className={inputClass}
+                                            placeholder="(00) 00000-0000"
+                                        />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* Campos PJ */}
+                        {tipoPessoa === 'PJ' && (
+                            <>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className={labelClass}>CNPJ</label>
+                                        <div className="relative">
+                                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                            <input
+                                                type="text"
+                                                value={formData.cnpj}
+                                                onChange={(e) => handleChange('cnpj', e.target.value)}
+                                                className={inputClass}
+                                                placeholder="00.000.000/0000-00"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className={labelClass}>Telefone</label>
+                                        <div className="relative">
+                                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                            <input
+                                                type="text"
+                                                value={formData.telefone}
+                                                onChange={(e) => handleChange('telefone', e.target.value)}
+                                                className={inputClass}
+                                                placeholder="(00) 00000-0000"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Razão Social <span className="text-slate-400 font-normal">(opcional)</span></label>
+                                    <div className="relative">
+                                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input
+                                            type="text"
+                                            value={formData.razao_social}
+                                            onChange={(e) => handleChange('razao_social', e.target.value)}
+                                            className={inputClass}
+                                            placeholder="Razão social da empresa"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Nome Fantasia <span className="text-slate-400 font-normal">(opcional)</span></label>
+                                    <div className="relative">
+                                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input
+                                            type="text"
+                                            value={formData.nome_fantasia}
+                                            onChange={(e) => handleChange('nome_fantasia', e.target.value)}
+                                            className={inputClass}
+                                            placeholder="Nome fantasia"
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        )}
 
                         <div>
                             <label className={labelClass}>Senha</label>

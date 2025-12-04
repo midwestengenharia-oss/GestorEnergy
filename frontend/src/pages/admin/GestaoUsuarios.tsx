@@ -18,16 +18,22 @@ import {
     Shield,
     Mail,
     Phone,
-    Calendar
+    Calendar,
+    Building2,
+    User
 } from 'lucide-react';
 import api from '../../api/axios';
 
 interface Usuario {
     id: string;
     auth_id: string | null;
+    tipo_pessoa: 'PF' | 'PJ';
     nome_completo: string;
     email: string;
     cpf: string | null;
+    cnpj: string | null;
+    razao_social: string | null;
+    nome_fantasia: string | null;
     telefone: string | null;
     avatar_url: string | null;
     is_superadmin: boolean;
@@ -282,10 +288,10 @@ export function GestaoUsuarios() {
                         <thead className="bg-slate-50 dark:bg-slate-900">
                             <tr>
                                 <th className="text-left py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">Usuário</th>
-                                <th className="text-left py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">CPF</th>
+                                <th className="text-left py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">Tipo</th>
+                                <th className="text-left py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">CPF/CNPJ</th>
                                 <th className="text-left py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">Perfis</th>
                                 <th className="text-left py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">Status</th>
-                                <th className="text-left py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">Criado em</th>
                                 <th className="text-right py-3 px-4 text-sm font-medium text-slate-500 dark:text-slate-400">Ações</th>
                             </tr>
                         </thead>
@@ -308,8 +314,21 @@ export function GestaoUsuarios() {
                                             </div>
                                         </div>
                                     </td>
+                                    <td className="py-3 px-4">
+                                        {usuario.tipo_pessoa === 'PJ' ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                                <Building2 size={12} />
+                                                PJ
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                                <User size={12} />
+                                                PF
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-300">
-                                        {usuario.cpf || '-'}
+                                        {usuario.tipo_pessoa === 'PJ' ? (usuario.cnpj || '-') : (usuario.cpf || '-')}
                                     </td>
                                     <td className="py-3 px-4">
                                         <div className="flex flex-wrap gap-1">
@@ -337,9 +356,6 @@ export function GestaoUsuarios() {
                                                 Inativo
                                             </span>
                                         )}
-                                    </td>
-                                    <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-300">
-                                        {formatarData(usuario.criado_em)}
                                     </td>
                                     <td className="py-3 px-4 text-right">
                                         <button
@@ -424,20 +440,66 @@ export function GestaoUsuarios() {
                                 </div>
                             </div>
 
+                            {/* Tipo de Pessoa */}
+                            <div className="flex items-center gap-2">
+                                {selectedUser.tipo_pessoa === 'PJ' ? (
+                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                        <Building2 size={16} />
+                                        Pessoa Jurídica
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                        <User size={16} />
+                                        Pessoa Física
+                                    </span>
+                                )}
+                            </div>
+
                             {/* Dados */}
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-xs text-slate-500 dark:text-slate-400">CPF</label>
-                                    <p className="font-medium text-slate-900 dark:text-white">
-                                        {selectedUser.cpf || '-'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-500 dark:text-slate-400">Telefone</label>
-                                    <p className="font-medium text-slate-900 dark:text-white">
-                                        {selectedUser.telefone || '-'}
-                                    </p>
-                                </div>
+                                {selectedUser.tipo_pessoa === 'PJ' ? (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-500 dark:text-slate-400">CNPJ</label>
+                                            <p className="font-medium text-slate-900 dark:text-white">
+                                                {selectedUser.cnpj || '-'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-500 dark:text-slate-400">Telefone</label>
+                                            <p className="font-medium text-slate-900 dark:text-white">
+                                                {selectedUser.telefone || '-'}
+                                            </p>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="text-xs text-slate-500 dark:text-slate-400">Razão Social</label>
+                                            <p className="font-medium text-slate-900 dark:text-white">
+                                                {selectedUser.razao_social || '-'}
+                                            </p>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="text-xs text-slate-500 dark:text-slate-400">Nome Fantasia</label>
+                                            <p className="font-medium text-slate-900 dark:text-white">
+                                                {selectedUser.nome_fantasia || '-'}
+                                            </p>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-500 dark:text-slate-400">CPF</label>
+                                            <p className="font-medium text-slate-900 dark:text-white">
+                                                {selectedUser.cpf || '-'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-500 dark:text-slate-400">Telefone</label>
+                                            <p className="font-medium text-slate-900 dark:text-white">
+                                                {selectedUser.telefone || '-'}
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
                                 <div>
                                     <label className="text-xs text-slate-500 dark:text-slate-400">Criado em</label>
                                     <p className="font-medium text-slate-900 dark:text-white">

@@ -516,9 +516,8 @@ class AdminService:
         """Retorna status detalhado da sincronização"""
 
         # Total de UCs
-        ucs_result = self.supabase.unidades_consumidoras().select(
-            "id, cdc, cod_empresa, digito_verificador, ultima_sincronizacao, nome_titular, cidade, uf, usuario_id",
-            "usuarios!inner(cpf, nome_completo)"
+        ucs_result = self.supabase.table("unidades_consumidoras").select(
+            "id, cdc, cod_empresa, digito_verificador, ultima_sincronizacao, nome_titular, cidade, uf, usuario_id, usuarios!inner(cpf, nome_completo)"
         ).execute()
 
         ucs = ucs_result.data or []

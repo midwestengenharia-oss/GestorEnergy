@@ -1,63 +1,143 @@
 """
-Session Manager - Gerenciamento de sessões da Energisa
+Session Manager - Gerenciamento de sessões da Energisa no banco de dados
 """
 
-import json
 import time
-from pathlib import Path
+import logging
+from datetime import datetime, timezone, timedelta
 
-# Define a pasta onde os arquivos ficarão
-SESSION_DIR = Path("sessions")
-SESSION_DIR.mkdir(exist_ok=True)
+from backend.core.database import db_admin
+
+logger = logging.getLogger(__name__)
+
+# Tempo máximo de validade da sessão (24 horas)
+MAX_SESSION_AGE_HOURS = 24
 
 
 class SessionManager:
     @staticmethod
-    def get_session_path(cpf: str) -> Path:
-        # Garante que o CPF seja apenas números no nome do arquivo
-        cpf_clean = cpf.replace(".", "").replace("-", "")
-        return SESSION_DIR / f"{cpf_clean}.json"
+    def _clean_cpf(cpf: str) -> str:
+        """Remove pontos e traços do CPF"""
+        return cpf.replace(".", "").replace("-", "")
 
     @staticmethod
     def save_session(cpf: str, cookies: dict):
-        data = {
-            "cookies": cookies,
-            "timestamp": time.time()
-        }
-        arquivo = SessionManager.get_session_path(cpf)
-        with open(arquivo, 'w') as f:
-            json.dump(data, f, indent=2)
-        print(f"💾 Sessão salva em: {arquivo}")
+        """
+        Salva sessão no banco de dados.
+
+        Args:
+            cpf: CPF do titular
+            cookies: Dict com cookies da sessão
+        """
+        cpf_clean = SessionManager._clean_cpf(cpf)
+
+        try:
+            # Upsert - insere ou atualiza se já existir
+            data = {
+                "cpf": cpf_clean,
+                "cookies": cookies,
+                "atualizado_em": datetime.now(timezone.utc).isoformat()
+            }
+
+            db_admin.table("sessoes_energisa").upsert(
+                data,
+                on_conflict="cpf"
+            ).execute()
+
+            logger.info(f"💾 Sessão salva no banco para CPF: {cpf_clean[:3]}***")
+            print(f"💾 Sessão salva no banco para CPF: {cpf_clean[:3]}***")
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao salvar sessão no banco: {e}")
+            print(f"❌ Erro ao salvar sessão no banco: {e}")
+            raise
 
     @staticmethod
     def load_session(cpf: str):
-        arquivo = SessionManager.get_session_path(cpf)
+        """
+        Carrega sessão do banco de dados.
 
-        if not arquivo.exists():
-            print(f"⚠️ Arquivo de sessão não encontrado: {arquivo}")
-            return None
+        Args:
+            cpf: CPF do titular
+
+        Returns:
+            Dict com cookies ou None se não encontrado/expirado
+        """
+        cpf_clean = SessionManager._clean_cpf(cpf)
 
         try:
-            with open(arquivo, 'r') as f:
-                data = json.load(f)
+            result = db_admin.table("sessoes_energisa").select(
+                "cookies, atualizado_em"
+            ).eq("cpf", cpf_clean).execute()
 
-            saved_time = data.get("timestamp", 0)
-            current_time = time.time()
-            age = current_time - saved_time
-
-            # 24 horas em segundos
-            MAX_AGE = 86400
-
-            print(f"🔍 Verificando sessão para {cpf}:")
-            print(f"   📅 Criada em: {time.ctime(saved_time)}")
-            print(f"   ⏱️ Idade: {age:.1f} segundos (Máx: {MAX_AGE}s)")
-
-            if age > MAX_AGE:
-                print("   ❌ Sessão expirada!")
+            if not result.data:
+                logger.warning(f"⚠️ Sessão não encontrada no banco para CPF: {cpf_clean[:3]}***")
+                print(f"⚠️ Sessão não encontrada no banco para CPF: {cpf_clean[:3]}***")
                 return None
 
-            print("   ✅ Sessão válida (pelo horário).")
-            return data.get("cookies")
+            session_data = result.data[0]
+            atualizado_em = session_data.get("atualizado_em")
+
+            # Verifica idade da sessão
+            if atualizado_em:
+                session_time = datetime.fromisoformat(atualizado_em.replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                age = now - session_time
+                max_age = timedelta(hours=MAX_SESSION_AGE_HOURS)
+
+                logger.info(f"🔍 Verificando sessão para CPF {cpf_clean[:3]}***:")
+                logger.info(f"   📅 Atualizada em: {session_time.isoformat()}")
+                logger.info(f"   ⏱️ Idade: {age.total_seconds():.0f}s (Máx: {max_age.total_seconds():.0f}s)")
+
+                print(f"🔍 Verificando sessão para CPF {cpf_clean[:3]}***:")
+                print(f"   📅 Atualizada em: {session_time.isoformat()}")
+                print(f"   ⏱️ Idade: {age.total_seconds():.0f}s (Máx: {max_age.total_seconds():.0f}s)")
+
+                if age > max_age:
+                    logger.warning("   ❌ Sessão expirada!")
+                    print("   ❌ Sessão expirada!")
+                    return None
+
+            logger.info("   ✅ Sessão válida.")
+            print("   ✅ Sessão válida.")
+            return session_data.get("cookies")
+
         except Exception as e:
-            print(f"   ❌ Erro ao ler sessão: {e}")
+            logger.error(f"❌ Erro ao carregar sessão do banco: {e}")
+            print(f"❌ Erro ao carregar sessão do banco: {e}")
             return None
+
+    @staticmethod
+    def delete_session(cpf: str):
+        """
+        Remove sessão do banco de dados.
+
+        Args:
+            cpf: CPF do titular
+        """
+        cpf_clean = SessionManager._clean_cpf(cpf)
+
+        try:
+            db_admin.table("sessoes_energisa").delete().eq(
+                "cpf", cpf_clean
+            ).execute()
+
+            logger.info(f"🗑️ Sessão removida do banco para CPF: {cpf_clean[:3]}***")
+            print(f"🗑️ Sessão removida do banco para CPF: {cpf_clean[:3]}***")
+
+        except Exception as e:
+            logger.error(f"❌ Erro ao remover sessão do banco: {e}")
+            print(f"❌ Erro ao remover sessão do banco: {e}")
+
+    @staticmethod
+    def session_exists(cpf: str) -> bool:
+        """
+        Verifica se existe sessão válida para o CPF.
+
+        Args:
+            cpf: CPF do titular
+
+        Returns:
+            True se existir sessão válida
+        """
+        return SessionManager.load_session(cpf) is not None

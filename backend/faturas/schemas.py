@@ -177,6 +177,7 @@ class HistoricoGDResponse(BaseModel):
 class FaturaFiltros(BaseModel):
     """Filtros para busca de faturas"""
     uc_id: Optional[int] = None
+    usuario_id: Optional[str] = None  # Filtra faturas das UCs do usuário
     mes_referencia: Optional[int] = None
     ano_referencia: Optional[int] = None
     situacao_pagamento: Optional[str] = None

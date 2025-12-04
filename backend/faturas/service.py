@@ -86,12 +86,24 @@ class FaturasService:
         """
         query = self.db.faturas().select(
             "*",
-            "unidades_consumidoras!faturas_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, nome_titular, cidade, uf)",
+            "unidades_consumidoras!faturas_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, nome_titular, cidade, uf, usuario_id)",
             count="exact"
         )
 
         # Aplicar filtros
         if filtros:
+            # Filtro por usuário: busca UCs do usuário primeiro
+            if filtros.usuario_id:
+                uc_result = self.db.unidades_consumidoras().select("id").eq(
+                    "usuario_id", filtros.usuario_id
+                ).execute()
+                uc_ids = [uc["id"] for uc in (uc_result.data or [])]
+                if uc_ids:
+                    query = query.in_("uc_id", uc_ids)
+                else:
+                    # Usuário não tem UCs, retorna lista vazia
+                    return [], 0
+
             if filtros.uc_id:
                 query = query.eq("uc_id", filtros.uc_id)
             if filtros.mes_referencia:

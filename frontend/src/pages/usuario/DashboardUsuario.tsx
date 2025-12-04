@@ -473,8 +473,8 @@ export function DashboardUsuario() {
                             ))}
                         </div>
                     </div>
-                    <div className="h-72">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-72 min-h-[288px]">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                             <AreaChart data={dadosConsumoMensal}>
                                 <defs>
                                     <linearGradient id="colorConsumo" x1="0" y1="0" x2="0" y2="1">
@@ -516,8 +516,8 @@ export function DashboardUsuario() {
 
                     {dadosStatusFaturas.length > 0 ? (
                         <>
-                            <div className="h-48">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="h-48 min-h-[192px]">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                     <PieChart>
                                         <Pie
                                             data={dadosStatusFaturas}

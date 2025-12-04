@@ -344,8 +344,8 @@ export function GeracaoDistribuida() {
                         </p>
                     </div>
                     <div className="p-4">
-                        <div className="h-72">
-                            <ResponsiveContainer width="100%" height="100%">
+                        <div className="h-72 min-h-[288px]">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                 <BarChart data={dadosGraficoConsolidado}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                                     <XAxis dataKey="mes" stroke="#94A3B8" fontSize={12} />
@@ -512,8 +512,8 @@ export function GeracaoDistribuida() {
                                                     <TrendingUp size={16} />
                                                     Histórico de Créditos
                                                 </h4>
-                                                <div className="h-64">
-                                                    <ResponsiveContainer width="100%" height="100%">
+                                                <div className="h-64 min-h-[256px]">
+                                                    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                                         <AreaChart data={prepararDadosGrafico(ucGD.historico)}>
                                                             <defs>
                                                                 <linearGradient id={`gradSaldo_${ucGD.uc.id}`} x1="0" y1="0" x2="0" y2="1">

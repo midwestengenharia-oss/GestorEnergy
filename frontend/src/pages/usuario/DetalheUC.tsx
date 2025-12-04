@@ -402,8 +402,8 @@ export function DetalheUC() {
                                 <p className="text-slate-500 dark:text-slate-400">Sem dados de consumo</p>
                             </div>
                         ) : (
-                            <div className="h-72">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="h-72 min-h-[288px]">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                     <AreaChart data={dadosConsumoMensal}>
                                         <defs>
                                             <linearGradient id="colorConsumoUC" x1="0" y1="0" x2="0" y2="1">

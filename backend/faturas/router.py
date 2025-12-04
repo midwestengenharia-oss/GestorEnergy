@@ -47,14 +47,17 @@ async def listar_faturas(
     """
     Lista faturas da plataforma.
 
-    Filtros disponíveis:
-    - UC específica
-    - Mês/ano de referência
-    - Situação de pagamento
-    - Intervalo de vencimento
+    - Superadmins e gestores veem todas
+    - Usuários comuns veem apenas faturas de suas UCs
     """
+    # Usuários comuns só veem faturas de suas próprias UCs
+    usuario_id = None
+    if not current_user.is_superadmin and "gestor" not in current_user.perfis:
+        usuario_id = str(current_user.id)
+
     filtros = FaturaFiltros(
         uc_id=uc_id,
+        usuario_id=usuario_id,
         mes_referencia=mes_referencia,
         ano_referencia=ano_referencia,
         situacao_pagamento=situacao_pagamento,

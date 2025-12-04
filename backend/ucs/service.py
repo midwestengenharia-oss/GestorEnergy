@@ -297,13 +297,17 @@ class UCsService:
         Raises:
             ConflictError: Se UC já vinculada
         """
-        # Verifica se já existe
-        existing = self.db.unidades_consumidoras().select("id").eq(
+        # Verifica se já existe para ESTE usuário
+        existing = self.db.unidades_consumidoras().select("id, usuario_id").eq(
             "cod_empresa", data.cod_empresa
         ).eq("cdc", data.cdc).eq("digito_verificador", data.digito_verificador).execute()
 
         if existing.data:
-            raise ConflictError("UC já cadastrada no sistema")
+            # Se já existe para o mesmo usuário, erro
+            for uc in existing.data:
+                if uc["usuario_id"] == usuario_id:
+                    raise ConflictError("UC já vinculada à sua conta")
+            # Se existe para outro usuário, permite vincular (compartilhamento)
 
         # Cria vinculação
         uc_data = {

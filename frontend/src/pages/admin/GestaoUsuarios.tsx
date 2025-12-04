@@ -22,7 +22,7 @@ import {
     Building2,
     User
 } from 'lucide-react';
-import api from '../../api/axios';
+import api from '../../api/client';
 
 interface Usuario {
     id: string;

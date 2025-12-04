@@ -19,7 +19,7 @@ import {
     Globe,
     Monitor
 } from 'lucide-react';
-import api from '../../api/axios';
+import api from '../../api/client';
 
 interface LogAuditoria {
     id: number;

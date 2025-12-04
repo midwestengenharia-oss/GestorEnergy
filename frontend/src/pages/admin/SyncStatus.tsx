@@ -15,7 +15,7 @@ import {
     Loader2,
     Play
 } from 'lucide-react';
-import api from '../../api/axios';
+import api from '../../api/client';
 
 interface UCInfo {
     id: number;

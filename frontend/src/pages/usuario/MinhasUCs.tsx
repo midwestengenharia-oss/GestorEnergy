@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePerfil } from '../../contexts/PerfilContext';
 import { ucsApi } from '../../api/ucs';
 import type { UnidadeConsumidora } from '../../api/types';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -70,6 +71,7 @@ const inativaIcon = new L.Icon({
 
 export function MinhasUCs() {
     const { usuario } = useAuth();
+    const { perfilAtivo } = usePerfil();
     const [ucs, setUcs] = useState<UnidadeConsumidora[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -94,13 +96,15 @@ export function MinhasUCs() {
 
     useEffect(() => {
         fetchUCs();
-    }, []);
+    }, [perfilAtivo]);
 
     const fetchUCs = async () => {
         try {
             setLoading(true);
             setError(null);
-            const response = await ucsApi.minhas();
+            // Filtrar UCs por titularidade baseado no perfil ativo
+            const isTitular = perfilAtivo === 'usuario' ? true : perfilAtivo === 'gestor' ? false : undefined;
+            const response = await ucsApi.minhas(isTitular);
             setUcs(response.data.ucs || []);
         } catch (err: any) {
             console.error('Erro ao carregar UCs:', err);

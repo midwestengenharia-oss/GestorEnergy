@@ -102,12 +102,22 @@ async def listar_minhas_ucs(
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    usuario_titular: Optional[bool] = Query(None, description="Filtrar por titularidade: true=titular, false=gestor"),
 ):
     """
     Lista as UCs vinculadas ao usuário logado.
+
+    - usuario_titular=true: Apenas UCs onde o usuário é titular (perfil "usuario")
+    - usuario_titular=false: Apenas UCs onde o usuário NÃO é titular (perfil "gestor")
+    - Sem filtro: Todas as UCs do usuário
     """
-    ucs, total = await ucs_service.listar_por_usuario(
+    filtros = UCFiltros(
         usuario_id=str(current_user.id),
+        usuario_titular=usuario_titular
+    )
+
+    ucs, total = await ucs_service.listar(
+        filtros=filtros,
         page=page,
         per_page=per_page
     )
@@ -420,14 +430,18 @@ async def sincronizar_faturas(
 )
 async def obter_resumo_gd(
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    usuario_titular: Optional[bool] = Query(None, description="Filtrar por titularidade: true=titular, false=gestor"),
 ):
     """
     Obtém resumo de Geração Distribuída do usuário.
 
     Retorna dados consolidados de todas as UCs que participam de GD,
     lidos do banco de dados local (não consulta Energisa em tempo real).
+
+    - usuario_titular=true: Apenas UCs onde o usuário é titular
+    - usuario_titular=false: Apenas UCs onde o usuário NÃO é titular (gestor)
     """
-    return await ucs_service.obter_resumo_gd_usuario(str(current_user.id))
+    return await ucs_service.obter_resumo_gd_usuario(str(current_user.id), usuario_titular)
 
 
 @router.get(

@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { usePerfil } from '../../contexts/PerfilContext';
 import { gdApi, type GDResumo, type HistoricoGD } from '../../api/gd';
 import {
     AreaChart,
@@ -48,6 +49,7 @@ const COLORS = {
 const MESES_NOMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 export function GeracaoDistribuida() {
+    const { perfilAtivo } = usePerfil();
     const [resumoGD, setResumoGD] = useState<GDResumo | null>(null);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
@@ -60,7 +62,9 @@ export function GeracaoDistribuida() {
         try {
             setLoading(true);
             setError(null);
-            const response = await gdApi.getResumo();
+            // Filtrar por titularidade baseado no perfil ativo
+            const isTitular = perfilAtivo === 'usuario' ? true : perfilAtivo === 'gestor' ? false : undefined;
+            const response = await gdApi.getResumo(isTitular);
             setResumoGD(response.data);
         } catch (err: any) {
             console.error('Erro ao carregar dados de GD:', err);
@@ -68,7 +72,7 @@ export function GeracaoDistribuida() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [perfilAtivo]);
 
     useEffect(() => {
         fetchResumoGD();

@@ -2,6 +2,7 @@
  * Routes - Configuração centralizada de rotas
  */
 
+import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePerfil } from '../contexts/PerfilContext';
@@ -16,7 +17,7 @@ import { SignInPage, SignUpPage } from '../pages/auth';
 // Dashboards
 import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LogsAuditoria } from '../pages/admin';
 import { DashboardProprietario } from '../pages/proprietario';
-import { DashboardGestor } from '../pages/gestor';
+import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor } from '../pages/gestor';
 import { DashboardBeneficiario } from '../pages/beneficiario';
 import { DashboardUsuario, MinhasUCs, FaturasUsuario, DetalheUC, ConectarEnergisa, GeracaoDistribuida } from '../pages/usuario';
 import { DashboardParceiro } from '../pages/parceiro';
@@ -75,6 +76,8 @@ function RedirectToDashboard() {
 
 /**
  * Componente de rota protegida por perfil
+ * Permite acesso se o usuário tiver o perfil nos perfisDisponiveis
+ * E troca automaticamente para o perfil correto ao acessar a rota
  */
 function ProtectedRoute({
     children,
@@ -84,14 +87,29 @@ function ProtectedRoute({
     allowedPerfis: string[];
 }) {
     const { isAuthenticated } = useAuth();
-    const { perfilAtivo } = usePerfil();
+    const { perfilAtivo, perfisDisponiveis, trocarPerfil } = usePerfil();
+
+    // Troca automaticamente o perfil quando acessar uma rota de outro perfil que o usuário tem
+    React.useEffect(() => {
+        if (perfilAtivo && !allowedPerfis.includes(perfilAtivo)) {
+            const perfilCorreto = allowedPerfis.find(p => perfisDisponiveis.includes(p as any));
+            if (perfilCorreto) {
+                trocarPerfil(perfilCorreto as any);
+            }
+        }
+    }, [perfilAtivo, allowedPerfis, perfisDisponiveis, trocarPerfil]);
 
     if (!isAuthenticated) {
         return <Navigate to="/app" replace />;
     }
 
-    if (perfilAtivo && !allowedPerfis.includes(perfilAtivo)) {
-        return <Navigate to={`/app/${perfilAtivo}`} replace />;
+    // Verifica se o usuário tem algum dos perfis permitidos
+    const temPerfilPermitido = allowedPerfis.some(p => perfisDisponiveis.includes(p as any));
+
+    if (!temPerfilPermitido) {
+        // Usuário não tem nenhum dos perfis necessários, redireciona para seu dashboard
+        const rota = PERFIL_ROTA_MAP[perfilAtivo || 'usuario'] || perfilAtivo || 'usuario';
+        return <Navigate to={`/app/${rota}`} replace />;
     }
 
     return <>{children}</>;
@@ -187,32 +205,32 @@ export function AppRoutes() {
                 } />
                 <Route path="gestor/usinas" element={
                     <ProtectedRoute allowedPerfis={['gestor']}>
-                        <PlaceholderPage title="Usinas Gerenciadas" />
+                        <UsinasGestor />
                     </ProtectedRoute>
                 } />
                 <Route path="gestor/beneficiarios" element={
                     <ProtectedRoute allowedPerfis={['gestor']}>
-                        <PlaceholderPage title="Beneficiários" />
+                        <BeneficiariosGestor />
                     </ProtectedRoute>
                 } />
                 <Route path="gestor/rateio" element={
                     <ProtectedRoute allowedPerfis={['gestor']}>
-                        <PlaceholderPage title="Rateio de Energia" />
+                        <RateioGestor />
                     </ProtectedRoute>
                 } />
                 <Route path="gestor/cobrancas" element={
                     <ProtectedRoute allowedPerfis={['gestor']}>
-                        <PlaceholderPage title="Cobranças" />
+                        <CobrancasGestor />
                     </ProtectedRoute>
                 } />
                 <Route path="gestor/financeiro" element={
                     <ProtectedRoute allowedPerfis={['gestor']}>
-                        <PlaceholderPage title="Financeiro" />
+                        <FinanceiroGestor />
                     </ProtectedRoute>
                 } />
                 <Route path="gestor/contratos" element={
                     <ProtectedRoute allowedPerfis={['gestor']}>
-                        <PlaceholderPage title="Contratos" />
+                        <ContratosGestor />
                     </ProtectedRoute>
                 } />
 

@@ -36,6 +36,7 @@ router = APIRouter()
 async def listar_faturas(
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     uc_id: Optional[int] = Query(None, description="Filtrar por UC"),
+    usuario_titular: Optional[bool] = Query(None, description="Filtrar por titularidade: true=titular, false=gestor"),
     mes_referencia: Optional[int] = Query(None, ge=1, le=12, description="Mês de referência"),
     ano_referencia: Optional[int] = Query(None, ge=2000, le=2100, description="Ano de referência"),
     situacao_pagamento: Optional[str] = Query(None, description="Situação do pagamento"),
@@ -47,8 +48,10 @@ async def listar_faturas(
     """
     Lista faturas da plataforma.
 
-    - Superadmins e gestores veem todas
+    - Superadmins e gestores veem todas (a menos que filtrem por titularidade)
     - Usuários comuns veem apenas faturas de suas UCs
+    - usuario_titular=true: Apenas faturas de UCs onde o usuário é titular
+    - usuario_titular=false: Apenas faturas de UCs onde o usuário NÃO é titular (gestor)
     """
     # Usuários comuns só veem faturas de suas próprias UCs
     usuario_id = None
@@ -58,6 +61,7 @@ async def listar_faturas(
     filtros = FaturaFiltros(
         uc_id=uc_id,
         usuario_id=usuario_id,
+        usuario_titular=usuario_titular,
         mes_referencia=mes_referencia,
         ano_referencia=ano_referencia,
         situacao_pagamento=situacao_pagamento,
@@ -224,6 +228,36 @@ async def buscar_fatura(
     Busca dados completos de uma fatura.
     """
     return await faturas_service.buscar_por_id(fatura_id)
+
+
+@router.get(
+    "/{fatura_id}/pdf",
+    summary="Buscar PDF da fatura",
+    description="Retorna o PDF em base64 da fatura"
+)
+async def buscar_pdf_fatura(
+    fatura_id: int,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+):
+    """
+    Busca o PDF da fatura em base64.
+    """
+    return await faturas_service.buscar_pdf(fatura_id)
+
+
+@router.get(
+    "/{fatura_id}/pix",
+    summary="Buscar dados PIX da fatura",
+    description="Retorna QR Code PIX e código copia e cola"
+)
+async def buscar_pix_fatura(
+    fatura_id: int,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+):
+    """
+    Busca os dados de pagamento PIX da fatura.
+    """
+    return await faturas_service.buscar_pix(fatura_id)
 
 
 @router.post(

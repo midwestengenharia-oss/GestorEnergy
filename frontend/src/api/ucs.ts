@@ -68,9 +68,11 @@ export const ucsApi = {
     listar: (filters?: UCFilters) =>
         api.get<PaginatedResponse<UnidadeConsumidora>>('/ucs', { params: filters }),
 
-    // Minhas UCs
-    minhas: () =>
-        api.get<UnidadeConsumidora[]>('/ucs/minhas'),
+    // Minhas UCs (filtro opcional por titularidade)
+    minhas: (usuario_titular?: boolean) =>
+        api.get<UnidadeConsumidora[]>('/ucs/minhas', {
+            params: usuario_titular !== undefined ? { usuario_titular } : undefined
+        }),
 
     // Listar geradoras
     geradoras: () =>

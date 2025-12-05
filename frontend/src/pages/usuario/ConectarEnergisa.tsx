@@ -497,40 +497,124 @@ export function ConectarEnergisa() {
                             </div>
                         )}
 
-                        <div className="space-y-3 max-h-80 overflow-y-auto">
-                            {ucsEnergisa.map((uc, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => toggleUc(index)}
-                                    className={`w-full p-4 rounded-lg border-2 transition flex items-start gap-4 text-left ${
-                                        ucsSelecionadas.includes(index)
-                                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-                                    }`}
-                                >
-                                    <div className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                        ucsSelecionadas.includes(index)
-                                            ? 'border-blue-500 bg-blue-500'
-                                            : 'border-slate-300 dark:border-slate-600'
-                                    }`}>
-                                        {ucsSelecionadas.includes(index) && (
-                                            <Check className="text-white" size={14} />
-                                        )}
+                        <div className="space-y-4 max-h-96 overflow-y-auto">
+                            {/* Seção: UCs onde é titular (perfil "usuario") */}
+                            {ucsEnergisa.some(uc => uc.usuarioTitular) && (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
+                                        <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full">
+                                            Titular
+                                        </span>
+                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            Suas UCs (você é o titular)
+                                        </span>
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="font-medium text-slate-900 dark:text-white">
-                                            UC {uc.codigoEmpresaWeb}/{uc.numeroUc}-{uc.digitoVerificador}
-                                        </p>
-                                        {uc.endereco && (
-                                            <p className="text-sm text-slate-500 dark:text-slate-400">
-                                                {uc.endereco}
-                                                {uc.cidade && `, ${uc.cidade}`}
-                                                {uc.uf && `/${uc.uf}`}
-                                            </p>
-                                        )}
+                                    {ucsEnergisa.map((uc, index) => uc.usuarioTitular && (
+                                        <button
+                                            key={index}
+                                            onClick={() => toggleUc(index)}
+                                            className={`w-full p-4 rounded-lg border-2 transition flex items-start gap-4 text-left ${
+                                                ucsSelecionadas.includes(index)
+                                                    ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                                            }`}
+                                        >
+                                            <div className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                                ucsSelecionadas.includes(index)
+                                                    ? 'border-green-500 bg-green-500'
+                                                    : 'border-slate-300 dark:border-slate-600'
+                                            }`}>
+                                                {ucsSelecionadas.includes(index) && (
+                                                    <Check className="text-white" size={14} />
+                                                )}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-medium text-slate-900 dark:text-white">
+                                                        UC {uc.codigoEmpresaWeb}/{uc.numeroUc}-{uc.digitoVerificador}
+                                                    </p>
+                                                    {uc.geracaoDistribuida != null && (
+                                                        <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">
+                                                            GD
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {uc.endereco && (
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                                        {uc.endereco}
+                                                        {uc.cidade && `, ${uc.cidade}`}
+                                                        {uc.uf && `/${uc.uf}`}
+                                                    </p>
+                                                )}
+                                                {uc.nomeTitular && (
+                                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                                        {uc.nomeTitular}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Seção: UCs onde não é titular (perfil "gestor") */}
+                            {ucsEnergisa.some(uc => !uc.usuarioTitular) && (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
+                                        <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">
+                                            Gestor
+                                        </span>
+                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            UCs que você gerencia (não é titular)
+                                        </span>
                                     </div>
-                                </button>
-                            ))}
+                                    {ucsEnergisa.map((uc, index) => !uc.usuarioTitular && (
+                                        <button
+                                            key={index}
+                                            onClick={() => toggleUc(index)}
+                                            className={`w-full p-4 rounded-lg border-2 transition flex items-start gap-4 text-left ${
+                                                ucsSelecionadas.includes(index)
+                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                                            }`}
+                                        >
+                                            <div className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                                ucsSelecionadas.includes(index)
+                                                    ? 'border-blue-500 bg-blue-500'
+                                                    : 'border-slate-300 dark:border-slate-600'
+                                            }`}>
+                                                {ucsSelecionadas.includes(index) && (
+                                                    <Check className="text-white" size={14} />
+                                                )}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-medium text-slate-900 dark:text-white">
+                                                        UC {uc.codigoEmpresaWeb}/{uc.numeroUc}-{uc.digitoVerificador}
+                                                    </p>
+                                                    {uc.geracaoDistribuida != null && (
+                                                        <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">
+                                                            GD
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {uc.endereco && (
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                                        {uc.endereco}
+                                                        {uc.cidade && `, ${uc.cidade}`}
+                                                        {uc.uf && `/${uc.uf}`}
+                                                    </p>
+                                                )}
+                                                {uc.nomeTitular && (
+                                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                                        Titular: {uc.nomeTitular}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
 
                             {ucsEnergisa.length === 0 && (
                                 <div className="text-center py-8">
@@ -541,6 +625,27 @@ export function ConectarEnergisa() {
                                 </div>
                             )}
                         </div>
+
+                        {/* Info sobre perfis */}
+                        {ucsSelecionadas.length > 0 && (
+                            <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 text-sm">
+                                <p className="text-slate-600 dark:text-slate-400">
+                                    Ao vincular, você receberá automaticamente:
+                                </p>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {ucsSelecionadas.some(i => ucsEnergisa[i]?.usuarioTitular) && (
+                                        <span className="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-medium">
+                                            Perfil Usuário
+                                        </span>
+                                    )}
+                                    {ucsSelecionadas.some(i => !ucsEnergisa[i]?.usuarioTitular) && (
+                                        <span className="px-2 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full text-xs font-medium">
+                                            Perfil Gestor
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="flex gap-3">
                             <button

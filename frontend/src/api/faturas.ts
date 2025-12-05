@@ -7,6 +7,7 @@ import type { Fatura } from './types';
 
 export interface FaturaFilters {
     uc_id?: number;
+    usuario_titular?: boolean;  // Filtrar por titularidade: true=titular, false=gestor
     status?: 'pendente' | 'paga' | 'vencida' | 'cancelada';
     mes?: number;
     ano?: number;
@@ -32,6 +33,24 @@ export interface PaginatedResponse<T> {
     pages: number;
 }
 
+export interface FaturaPdfResponse {
+    id: number;
+    pdf_base64: string | null;
+    mes_referencia: number;
+    ano_referencia: number;
+    disponivel: boolean;
+}
+
+export interface FaturaPixResponse {
+    id: number;
+    qr_code_pix: string | null;
+    qr_code_pix_image: string | null;
+    codigo_barras: string | null;
+    mes_referencia: number;
+    ano_referencia: number;
+    pix_disponivel: boolean;
+}
+
 export const faturasApi = {
     // Listar faturas
     listar: (filters?: FaturaFilters) =>
@@ -40,6 +59,14 @@ export const faturasApi = {
     // Buscar fatura por ID
     buscar: (id: number) =>
         api.get<Fatura>(`/faturas/${id}`),
+
+    // Buscar PDF da fatura
+    buscarPdf: (id: number) =>
+        api.get<FaturaPdfResponse>(`/faturas/${id}/pdf`),
+
+    // Buscar dados PIX da fatura
+    buscarPix: (id: number) =>
+        api.get<FaturaPixResponse>(`/faturas/${id}/pix`),
 
     // Faturas por UC
     porUC: (ucId: number) =>

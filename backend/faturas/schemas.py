@@ -178,6 +178,7 @@ class FaturaFiltros(BaseModel):
     """Filtros para busca de faturas"""
     uc_id: Optional[int] = None
     usuario_id: Optional[str] = None  # Filtra faturas das UCs do usuário
+    usuario_titular: Optional[bool] = None  # Filtra por titularidade: True=titular, False=gestor
     mes_referencia: Optional[int] = None
     ano_referencia: Optional[int] = None
     situacao_pagamento: Optional[str] = None

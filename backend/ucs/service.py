@@ -326,6 +326,44 @@ class UCsService:
 
         return await self.buscar_por_id(result.data[0]["id"])
 
+    async def _atribuir_perfil_por_titularidade(self, usuario_id: str, is_titular: bool) -> None:
+        """
+        Atribui perfil automaticamente baseado na titularidade da UC.
+
+        - Se é titular da UC → perfil "usuario"
+        - Se NÃO é titular da UC → perfil "gestor"
+
+        Args:
+            usuario_id: ID do usuário
+            is_titular: Se o usuário é titular da UC
+        """
+        perfil = "usuario" if is_titular else "gestor"
+
+        try:
+            # Verificar se já tem o perfil
+            existing = self.db.perfis_usuario().select("*").eq(
+                "usuario_id", usuario_id
+            ).eq("perfil", perfil).execute()
+
+            if existing.data:
+                # Se existe mas está inativo, reativar
+                if not existing.data[0].get("ativo"):
+                    self.db.perfis_usuario().update({"ativo": True}).eq(
+                        "id", existing.data[0]["id"]
+                    ).execute()
+                    logger.info(f"Perfil '{perfil}' reativado para usuário {usuario_id}")
+            else:
+                # Criar novo perfil
+                self.db.perfis_usuario().insert({
+                    "usuario_id": usuario_id,
+                    "perfil": perfil,
+                    "ativo": True
+                }).execute()
+                logger.info(f"Perfil '{perfil}' atribuído ao usuário {usuario_id}")
+        except Exception as e:
+            # Não falha a vinculação por erro de perfil
+            logger.error(f"Erro ao atribuir perfil '{perfil}' ao usuário {usuario_id}: {e}")
+
     async def vincular_por_formato(
         self,
         usuario_id: str,
@@ -352,6 +390,9 @@ class UCsService:
                 usuario_titular=data.usuario_titular
             )
         )
+
+        # Atribuir perfil automaticamente baseado na titularidade
+        await self._atribuir_perfil_por_titularidade(usuario_id, data.usuario_titular)
 
         # Se tiver dados extras da Energisa, atualiza a UC
         update_data = {}
@@ -768,18 +809,24 @@ class UCsService:
             percentual_rateio=uc.percentual_rateio
         )
 
-    async def obter_resumo_gd_usuario(self, usuario_id: str) -> GDResumoResponse:
+    async def obter_resumo_gd_usuario(
+        self,
+        usuario_id: str,
+        usuario_titular: Optional[bool] = None
+    ) -> GDResumoResponse:
         """
         Obtém resumo de GD de todas as UCs do usuário.
 
         Args:
             usuario_id: ID do usuário
+            usuario_titular: Filtro de titularidade (True=titular, False=gestor)
 
         Returns:
             GDResumoResponse com resumo consolidado
         """
-        # Busca todas as UCs do usuário
-        ucs, _ = await self.listar_por_usuario(usuario_id, page=1, per_page=100)
+        # Busca UCs do usuário com filtro de titularidade se especificado
+        filtros = UCFiltros(usuario_id=usuario_id, usuario_titular=usuario_titular)
+        ucs, _ = await self.listar(filtros=filtros, page=1, per_page=100)
 
         ucs_com_gd = []
         total_creditos = 0

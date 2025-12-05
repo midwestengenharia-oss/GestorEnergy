@@ -5,17 +5,45 @@ Admin Service - Lógica de negócio para Administração
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from ..core.database import get_supabase_admin
+import re
+from ..core.database import db_admin
 from ..core.exceptions import NotFoundError, ValidationError, ForbiddenError
+
+
+def parse_datetime_safe(dt_string: str) -> datetime:
+    """Parse datetime string de forma robusta, tratando vários formatos ISO"""
+    if not dt_string:
+        return datetime.now()
+
+    # Remove timezone info para simplificar
+    dt_string = dt_string.replace("Z", "").replace("+00:00", "")
+
+    # Normaliza microssegundos para 6 dígitos
+    # Formato: 2025-12-04T18:47:35.98022 -> 2025-12-04T18:47:35.098022
+    match = re.match(r'(.+\.)(\d+)$', dt_string)
+    if match:
+        prefix, microseconds = match.groups()
+        # Preenche com zeros à direita para ter 6 dígitos
+        microseconds = microseconds.ljust(6, '0')[:6]
+        dt_string = f"{prefix}{microseconds}"
+
+    try:
+        return datetime.fromisoformat(dt_string)
+    except ValueError:
+        # Fallback: tenta sem microssegundos
+        try:
+            return datetime.fromisoformat(dt_string.split('.')[0])
+        except ValueError:
+            return datetime.now()
 
 
 class AdminService:
     """Serviço para administração do sistema"""
 
     def __init__(self):
-        # Usa service_role key para bypass das políticas RLS
+        # Usa db_admin (wrapper com service_role key) para bypass das políticas RLS
         # Necessário para operações administrativas
-        self.supabase = get_supabase_admin()
+        self.supabase = db_admin
 
     async def dashboard_stats(self) -> Dict[str, Any]:
         """Retorna estatísticas gerais do dashboard"""
@@ -47,13 +75,14 @@ class AdminService:
         ucs_geradoras = len([u for u in ucs.data if u.get("is_geradora")])
         ucs_beneficiarias = total_ucs - ucs_geradoras
 
-        # Cobranças do mês
+        # Cobranças do mês (campos reais: mes, ano, valor_total, status)
         cobrancas = self.supabase.table("cobrancas").select(
-            "id, valor_final, valor_pago, status"
-        ).eq("mes_referencia", hoje.month).eq("ano_referencia", hoje.year).execute()
+            "id, valor_total, status"
+        ).eq("mes", hoje.month).eq("ano", hoje.year).execute()
 
-        valor_total = sum(Decimal(str(c.get("valor_final", 0))) for c in cobrancas.data)
-        valor_recebido = sum(Decimal(str(c.get("valor_pago", 0) or 0)) for c in cobrancas.data if c.get("valor_pago"))
+        valor_total = sum(Decimal(str(c.get("valor_total", 0))) for c in cobrancas.data)
+        # Considera PAGO como valor recebido
+        valor_recebido = sum(Decimal(str(c.get("valor_total", 0))) for c in cobrancas.data if c.get("status") == "PAGO")
         valor_pendente = valor_total - valor_recebido
 
         vencidas = len([c for c in cobrancas.data if c.get("status") == "VENCIDA"])
@@ -101,7 +130,7 @@ class AdminService:
     async def _grafico_cobrancas(self, labels: List[str], meses: int, usina_id: Optional[int]) -> Dict[str, Any]:
         """Gráfico de cobranças por mês"""
 
-        query = self.supabase.table("cobrancas").select("mes_referencia, ano_referencia, valor_final, valor_pago, status")
+        query = self.supabase.table("cobrancas").select("mes, ano, valor_total, status")
 
         if usina_id:
             query = query.eq("usina_id", usina_id)
@@ -113,10 +142,11 @@ class AdminService:
         recebido_mes = {}
 
         for c in result.data:
-            chave = f"{c['mes_referencia']:02d}/{c['ano_referencia']}"
-            valores_mes[chave] = valores_mes.get(chave, 0) + float(c.get("valor_final", 0))
-            if c.get("valor_pago"):
-                recebido_mes[chave] = recebido_mes.get(chave, 0) + float(c.get("valor_pago", 0))
+            chave = f"{c['mes']:02d}/{c['ano']}"
+            valores_mes[chave] = valores_mes.get(chave, 0) + float(c.get("valor_total", 0))
+            # Considera PAGO como valor recebido
+            if c.get("status") == "PAGO":
+                recebido_mes[chave] = recebido_mes.get(chave, 0) + float(c.get("valor_total", 0))
 
         return {
             "labels": labels,
@@ -144,7 +174,7 @@ class AdminService:
         usuarios_mes = {}
         for u in result.data:
             if u.get("criado_em"):
-                data = datetime.fromisoformat(u["criado_em"].replace("Z", "+00:00"))
+                data = parse_datetime_safe(u["criado_em"])
                 chave = data.strftime("%b/%Y")
                 usuarios_mes[chave] = usuarios_mes.get(chave, 0) + 1
 
@@ -310,8 +340,9 @@ class AdminService:
         cobrancas = result.data
 
         total = len(cobrancas)
-        valor_total = sum(Decimal(str(c.get("valor_final", 0))) for c in cobrancas)
-        valor_recebido = sum(Decimal(str(c.get("valor_pago", 0) or 0)) for c in cobrancas if c.get("valor_pago"))
+        valor_total = sum(Decimal(str(c.get("valor_total", 0))) for c in cobrancas)
+        # Considera PAGO como valor recebido
+        valor_recebido = sum(Decimal(str(c.get("valor_total", 0))) for c in cobrancas if c.get("status") == "PAGO")
 
         # Por usina
         por_usina = {}
@@ -319,22 +350,22 @@ class AdminService:
             usina_nome = c.get("usinas", {}).get("nome", "Sem Usina")
             if usina_nome not in por_usina:
                 por_usina[usina_nome] = {"total": 0, "recebido": 0, "pendente": 0}
-            por_usina[usina_nome]["total"] += float(c.get("valor_final", 0))
-            if c.get("valor_pago"):
-                por_usina[usina_nome]["recebido"] += float(c.get("valor_pago", 0))
+            por_usina[usina_nome]["total"] += float(c.get("valor_total", 0))
+            if c.get("status") == "PAGO":
+                por_usina[usina_nome]["recebido"] += float(c.get("valor_total", 0))
 
         for usina in por_usina:
             por_usina[usina]["pendente"] = por_usina[usina]["total"] - por_usina[usina]["recebido"]
 
-        # Por mês
+        # Por mês (campos: mes, ano)
         por_mes = {}
         for c in cobrancas:
-            chave = f"{c['mes_referencia']:02d}/{c['ano_referencia']}"
+            chave = f"{c['mes']:02d}/{c['ano']}"
             if chave not in por_mes:
                 por_mes[chave] = {"total": 0, "recebido": 0}
-            por_mes[chave]["total"] += float(c.get("valor_final", 0))
-            if c.get("valor_pago"):
-                por_mes[chave]["recebido"] += float(c.get("valor_pago", 0))
+            por_mes[chave]["total"] += float(c.get("valor_total", 0))
+            if c.get("status") == "PAGO":
+                por_mes[chave]["recebido"] += float(c.get("valor_total", 0))
 
         return {
             "tipo": "financeiro",
@@ -547,7 +578,7 @@ class AdminService:
             if not ultima_sync:
                 ucs_nunca_sync.append(uc_info)
             else:
-                sync_time = datetime.fromisoformat(ultima_sync.replace("Z", "+00:00").replace("+00:00", ""))
+                sync_time = parse_datetime_safe(ultima_sync)
                 horas_desde_sync = (agora - sync_time).total_seconds() / 3600
 
                 uc_info["horas_desde_sync"] = round(horas_desde_sync, 1)
@@ -566,7 +597,7 @@ class AdminService:
         for s in sessoes_result.data or []:
             atualizado = s.get("atualizado_em")
             if atualizado:
-                sess_time = datetime.fromisoformat(atualizado.replace("Z", "+00:00").replace("+00:00", ""))
+                sess_time = parse_datetime_safe(atualizado)
                 idade_horas = (agora - sess_time).total_seconds() / 3600
                 sessoes.append({
                     "cpf": f"{s['cpf'][:3]}***{s['cpf'][-2:]}",
@@ -576,11 +607,11 @@ class AdminService:
                 })
 
         # Total de faturas
-        faturas_result = self.supabase.faturas().select("id", count="exact").execute()
+        faturas_result = self.supabase.table("faturas").select("id", count="exact").execute()
         total_faturas = faturas_result.count or 0
 
         # Faturas com PDF
-        faturas_pdf_result = self.supabase.faturas().select(
+        faturas_pdf_result = self.supabase.table("faturas").select(
             "id", count="exact"
         ).not_.is_("pdf_base64", "null").execute()
         faturas_com_pdf = faturas_pdf_result.count or 0
@@ -606,8 +637,8 @@ class AdminService:
         from backend.sync.service import SyncService
 
         # Busca a UC
-        uc_result = self.supabase.unidades_consumidoras().select(
-            "*", "usuarios!inner(cpf)"
+        uc_result = self.supabase.table("unidades_consumidoras").select(
+            "*, usuarios!inner(cpf)"
         ).eq("id", uc_id).single().execute()
 
         if not uc_result.data:

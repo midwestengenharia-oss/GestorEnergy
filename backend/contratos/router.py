@@ -4,7 +4,7 @@ Contratos Router - Endpoints da API para Contratos
 
 from fastapi import APIRouter, Depends, Query, Request
 from typing import Optional, List
-from ..core.security import get_current_user, require_perfil
+from ..core.security import get_current_active_user, require_perfil, CurrentUser
 from .schemas import (
     ContratoCreateRequest,
     ContratoUpdateRequest,
@@ -29,7 +29,7 @@ async def listar_contratos(
     beneficiario_id: Optional[int] = None,
     status: Optional[str] = None,
     tipo: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_active_user)
 ):
     """
     Lista contratos com filtros e paginação.
@@ -41,8 +41,8 @@ async def listar_contratos(
     - parceiro: contratos onde é parceiro
     """
     return await service.listar(
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", []),
+        user_id=current_user.id,
+        perfis=current_user.perfis,
         page=page,
         per_page=per_page,
         usina_id=usina_id,
@@ -53,20 +53,20 @@ async def listar_contratos(
 
 
 @router.get("/meus", response_model=List[ContratoResponse])
-async def meus_contratos(current_user: dict = Depends(get_current_user)):
+async def meus_contratos(current_user: CurrentUser = Depends(get_current_active_user)):
     """Lista contratos do usuário logado"""
-    return await service.meus_contratos(user_id=current_user["id"])
+    return await service.meus_contratos(user_id=current_user.id)
 
 
 @router.get("/estatisticas", response_model=EstatisticasContratoResponse)
 async def estatisticas_contratos(
     usina_id: Optional[int] = None,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Retorna estatísticas de contratos"""
     return await service.estatisticas(
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", []),
+        user_id=current_user.id,
+        perfis=current_user.perfis,
         usina_id=usina_id
     )
 
@@ -77,12 +77,12 @@ async def contratos_por_usina(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     status: Optional[str] = None,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Lista contratos de uma usina específica"""
     return await service.listar(
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", []),
+        user_id=current_user.id,
+        perfis=current_user.perfis,
         page=page,
         per_page=per_page,
         usina_id=usina_id,
@@ -93,25 +93,25 @@ async def contratos_por_usina(
 @router.get("/{contrato_id}", response_model=ContratoResponse)
 async def buscar_contrato(
     contrato_id: int,
-    current_user: dict = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_active_user)
 ):
     """Busca contrato por ID"""
     return await service.buscar(
         contrato_id=contrato_id,
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", [])
+        user_id=current_user.id,
+        perfis=current_user.perfis
     )
 
 
 @router.post("", response_model=ContratoResponse, status_code=201)
 async def criar_contrato(
     data: ContratoCreateRequest,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Cria novo contrato"""
     return await service.criar(
         data=data.model_dump(),
-        user_id=current_user["id"]
+        user_id=current_user.id
     )
 
 
@@ -119,27 +119,27 @@ async def criar_contrato(
 async def atualizar_contrato(
     contrato_id: int,
     data: ContratoUpdateRequest,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Atualiza dados do contrato (apenas rascunho)"""
     return await service.atualizar(
         contrato_id=contrato_id,
         data=data.model_dump(exclude_unset=True),
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", [])
+        user_id=current_user.id,
+        perfis=current_user.perfis
     )
 
 
 @router.post("/{contrato_id}/enviar-assinatura", response_model=ContratoResponse)
 async def enviar_para_assinatura(
     contrato_id: int,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Envia contrato para assinatura do beneficiário"""
     return await service.enviar_para_assinatura(
         contrato_id=contrato_id,
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", [])
+        user_id=current_user.id,
+        perfis=current_user.perfis
     )
 
 
@@ -148,7 +148,7 @@ async def assinar_contrato(
     contrato_id: int,
     data: ContratoAssinarRequest,
     request: Request,
-    current_user: dict = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_active_user)
 ):
     """Assina contrato (beneficiário)"""
     assinatura_data = data.model_dump()
@@ -157,8 +157,8 @@ async def assinar_contrato(
     return await service.assinar(
         contrato_id=contrato_id,
         data=assinatura_data,
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", [])
+        user_id=current_user.id,
+        perfis=current_user.perfis
     )
 
 
@@ -166,14 +166,14 @@ async def assinar_contrato(
 async def rescindir_contrato(
     contrato_id: int,
     data: ContratoRescindirRequest,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Rescinde contrato"""
     return await service.rescindir(
         contrato_id=contrato_id,
         data=data.model_dump(),
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", [])
+        user_id=current_user.id,
+        perfis=current_user.perfis
     )
 
 
@@ -181,25 +181,25 @@ async def rescindir_contrato(
 async def suspender_contrato(
     contrato_id: int,
     motivo: str = Query(..., min_length=5, description="Motivo da suspensão"),
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Suspende contrato temporariamente"""
     return await service.suspender(
         contrato_id=contrato_id,
         motivo=motivo,
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", [])
+        user_id=current_user.id,
+        perfis=current_user.perfis
     )
 
 
 @router.post("/{contrato_id}/reativar", response_model=ContratoResponse)
 async def reativar_contrato(
     contrato_id: int,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Reativa contrato suspenso"""
     return await service.reativar(
         contrato_id=contrato_id,
-        user_id=current_user["id"],
-        perfis=current_user.get("perfis", [])
+        user_id=current_user.id,
+        perfis=current_user.perfis
     )

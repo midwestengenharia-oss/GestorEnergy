@@ -145,9 +145,12 @@ export const gdApi = {
     /**
      * Busca resumo de GD de todas as UCs do usuário (do banco)
      * Retorna dados consolidados sem consultar Energisa
+     * @param usuario_titular - Filtro de titularidade: true=titular, false=gestor
      */
-    getResumo: () =>
-        api.get<GDResumo>('/ucs/gd/resumo'),
+    getResumo: (usuario_titular?: boolean) =>
+        api.get<GDResumo>('/ucs/gd/resumo', {
+            params: usuario_titular !== undefined ? { usuario_titular } : undefined
+        }),
 
     /**
      * Sincroniza dados de GD de todas as UCs do usuário

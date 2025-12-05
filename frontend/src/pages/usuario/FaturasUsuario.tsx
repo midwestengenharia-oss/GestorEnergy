@@ -4,8 +4,9 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePerfil } from '../../contexts/PerfilContext';
 import { ucsApi } from '../../api/ucs';
-import { faturasApi, downloadFaturaPdf } from '../../api/faturas';
+import { faturasApi, FaturaPixResponse } from '../../api/faturas';
 import type { UnidadeConsumidora, Fatura } from '../../api/types';
 import {
     FileText,
@@ -21,11 +22,13 @@ import {
     X,
     ChevronLeft,
     ChevronRight,
-    Zap
+    Zap,
+    QrCode
 } from 'lucide-react';
 
 export function FaturasUsuario() {
     const { usuario } = useAuth();
+    const { perfilAtivo } = usePerfil();
     const [ucs, setUcs] = useState<UnidadeConsumidora[]>([]);
     const [faturas, setFaturas] = useState<Fatura[]>([]);
     const [loading, setLoading] = useState(true);
@@ -46,6 +49,12 @@ export function FaturasUsuario() {
     // Modal de detalhes
     const [faturaDetalhe, setFaturaDetalhe] = useState<Fatura | null>(null);
 
+    // Modal de PIX
+    const [pixModal, setPixModal] = useState<{ fatura: Fatura; dados: FaturaPixResponse | null; loading: boolean } | null>(null);
+
+    // Loading de download
+    const [downloadingId, setDownloadingId] = useState<number | null>(null);
+
     // Anos disponíveis para filtro
     const anosDisponiveis = Array.from(
         { length: 5 },
@@ -54,16 +63,21 @@ export function FaturasUsuario() {
 
     useEffect(() => {
         fetchUCs();
-    }, []);
+    }, [perfilAtivo]);
 
     useEffect(() => {
         fetchFaturas();
-    }, [filtroUC, filtroStatus, filtroAno, page]);
+    }, [filtroUC, filtroStatus, filtroAno, page, perfilAtivo]);
 
     const fetchUCs = async () => {
         try {
-            const response = await ucsApi.minhas();
+            // Filtrar UCs por titularidade baseado no perfil ativo
+            const isTitular = perfilAtivo === 'usuario' ? true : perfilAtivo === 'gestor' ? false : undefined;
+            const response = await ucsApi.minhas(isTitular);
             setUcs(response.data.ucs || []);
+
+            // Reset filtro de UC quando mudar o perfil
+            setFiltroUC(null);
         } catch (err: any) {
             console.error('Erro ao carregar UCs:', err);
         }
@@ -74,11 +88,19 @@ export function FaturasUsuario() {
             setLoading(true);
             setError(null);
 
+            // Filtrar faturas por titularidade baseado no perfil ativo
+            const isTitular = perfilAtivo === 'usuario' ? true : perfilAtivo === 'gestor' ? false : undefined;
+
             const params: any = {
                 page,
                 limit: perPage,
                 ano_referencia: filtroAno
             };
+
+            // Adicionar filtro de titularidade
+            if (isTitular !== undefined) {
+                params.usuario_titular = isTitular;
+            }
 
             if (filtroUC) {
                 params.uc_id = filtroUC;
@@ -147,6 +169,44 @@ export function FaturasUsuario() {
     const copiarPix = (pix: string) => {
         navigator.clipboard.writeText(pix);
         alert('Código PIX copiado!');
+    };
+
+    // Baixar PDF da fatura
+    const handleDownloadPdf = async (fatura: Fatura) => {
+        try {
+            setDownloadingId(fatura.id);
+            const response = await faturasApi.buscarPdf(fatura.id);
+
+            if (!response.data.disponivel || !response.data.pdf_base64) {
+                alert('PDF não disponível para esta fatura. Sincronize as faturas para baixar o PDF.');
+                return;
+            }
+
+            const link = document.createElement('a');
+            link.href = `data:application/pdf;base64,${response.data.pdf_base64}`;
+            link.download = `fatura_${response.data.mes_referencia.toString().padStart(2, '0')}_${response.data.ano_referencia}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err: any) {
+            console.error('Erro ao baixar PDF:', err);
+            alert('Erro ao baixar PDF da fatura');
+        } finally {
+            setDownloadingId(null);
+        }
+    };
+
+    // Abrir modal PIX
+    const handleOpenPix = async (fatura: Fatura) => {
+        setPixModal({ fatura, dados: null, loading: true });
+        try {
+            const response = await faturasApi.buscarPix(fatura.id);
+            setPixModal({ fatura, dados: response.data, loading: false });
+        } catch (err: any) {
+            console.error('Erro ao buscar PIX:', err);
+            alert('Erro ao carregar dados de pagamento');
+            setPixModal(null);
+        }
     };
 
     // Filtrar faturas localmente por busca
@@ -398,24 +458,41 @@ export function FaturasUsuario() {
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        {fatura.pdf_base64 && (
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {/* Botão PIX - só para pendentes */}
+                                                        {pendente && (
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    downloadFaturaPdf(fatura);
+                                                                    handleOpenPix(fatura);
                                                                 }}
-                                                                className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition"
-                                                                title="Baixar PDF"
+                                                                className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition"
+                                                                title="Ver PIX/Código de Barras"
                                                             >
-                                                                <Download size={16} />
+                                                                <QrCode size={16} />
                                                             </button>
                                                         )}
+                                                        {/* Botão Download PDF */}
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDownloadPdf(fatura);
+                                                            }}
+                                                            disabled={downloadingId === fatura.id}
+                                                            className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition disabled:opacity-50"
+                                                            title="Baixar PDF"
+                                                        >
+                                                            {downloadingId === fatura.id ? (
+                                                                <Loader2 size={16} className="animate-spin" />
+                                                            ) : (
+                                                                <Download size={16} />
+                                                            )}
+                                                        </button>
                                                         <button
                                                             onClick={() => setFaturaDetalhe(fatura)}
-                                                            className="text-blue-500 hover:text-blue-600 text-sm"
+                                                            className="text-blue-500 hover:text-blue-600 text-sm ml-1"
                                                         >
-                                                            Ver detalhes
+                                                            Detalhes
                                                         </button>
                                                     </div>
                                                 </td>
@@ -691,22 +768,158 @@ export function FaturasUsuario() {
                                 </div>
                             )}
 
-                            {/* PDF */}
-                            <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                                {faturaDetalhe.pdf_base64 ? (
+                            {/* Ações */}
+                            <div className="border-t border-slate-200 dark:border-slate-700 pt-4 space-y-3">
+                                {/* PIX - só para pendentes */}
+                                {isPendente(faturaDetalhe) && (
                                     <button
-                                        onClick={() => downloadFaturaPdf(faturaDetalhe)}
-                                        className="flex items-center justify-center gap-2 w-full py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                                        onClick={() => {
+                                            setFaturaDetalhe(null);
+                                            handleOpenPix(faturaDetalhe);
+                                        }}
+                                        className="flex items-center justify-center gap-2 w-full py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
                                     >
-                                        <Download size={18} />
-                                        Baixar PDF da Fatura
+                                        <QrCode size={18} />
+                                        Ver PIX / Código de Barras
                                     </button>
-                                ) : (
-                                    <p className="text-center text-slate-500 dark:text-slate-400 py-3">
-                                        PDF não disponível. Sincronize as faturas.
-                                    </p>
                                 )}
+
+                                {/* PDF */}
+                                <button
+                                    onClick={() => handleDownloadPdf(faturaDetalhe)}
+                                    disabled={downloadingId === faturaDetalhe.id}
+                                    className="flex items-center justify-center gap-2 w-full py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50"
+                                >
+                                    {downloadingId === faturaDetalhe.id ? (
+                                        <Loader2 size={18} className="animate-spin" />
+                                    ) : (
+                                        <Download size={18} />
+                                    )}
+                                    Baixar PDF da Fatura
+                                </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de PIX */}
+            {pixModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-md">
+                        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                                Pagamento - {formatarReferencia(pixModal.fatura)}
+                            </h2>
+                            <button
+                                onClick={() => setPixModal(null)}
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="p-4">
+                            {pixModal.loading ? (
+                                <div className="flex flex-col items-center py-8">
+                                    <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+                                    <p className="text-slate-500 dark:text-slate-400">Carregando dados de pagamento...</p>
+                                </div>
+                            ) : pixModal.dados ? (
+                                <div className="space-y-4">
+                                    {/* Valor */}
+                                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 text-center">
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">Valor a pagar</p>
+                                        <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                                            {formatarValor(pixModal.fatura.valor_fatura)}
+                                        </p>
+                                    </div>
+
+                                    {/* QR Code PIX */}
+                                    {pixModal.dados.qr_code_pix_image && (
+                                        <div className="flex flex-col items-center gap-3">
+                                            <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">
+                                                Escaneie o QR Code para pagar via PIX
+                                            </p>
+                                            <div className="bg-white p-3 rounded-lg shadow-sm border">
+                                                <img
+                                                    src={`data:image/png;base64,${pixModal.dados.qr_code_pix_image}`}
+                                                    alt="QR Code PIX"
+                                                    className="w-48 h-48"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* PIX Copia e Cola */}
+                                    {pixModal.dados.qr_code_pix && (
+                                        <div className="space-y-2">
+                                            <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">
+                                                PIX Copia e Cola:
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={pixModal.dados.qr_code_pix}
+                                                    readOnly
+                                                    className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white truncate"
+                                                />
+                                                <button
+                                                    onClick={() => copiarPix(pixModal.dados!.qr_code_pix!)}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition whitespace-nowrap"
+                                                >
+                                                    <Copy size={16} />
+                                                    Copiar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Código de Barras */}
+                                    {pixModal.dados.codigo_barras && (
+                                        <div className="space-y-2">
+                                            <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">
+                                                Código de Barras:
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={pixModal.dados.codigo_barras}
+                                                    readOnly
+                                                    className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                                                />
+                                                <button
+                                                    onClick={() => copiarCodigoBarras(pixModal.dados!.codigo_barras!)}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition whitespace-nowrap"
+                                                >
+                                                    <Copy size={16} />
+                                                    Copiar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Sem dados disponíveis */}
+                                    {!pixModal.dados.pix_disponivel && !pixModal.dados.codigo_barras && (
+                                        <div className="text-center py-4">
+                                            <AlertCircle className="w-12 h-12 text-orange-400 mx-auto mb-3" />
+                                            <p className="text-slate-500 dark:text-slate-400">
+                                                Dados de pagamento não disponíveis para esta fatura.
+                                            </p>
+                                            <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">
+                                                Sincronize as faturas para atualizar os dados.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="text-center py-4">
+                                    <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+                                    <p className="text-slate-500 dark:text-slate-400">
+                                        Erro ao carregar dados de pagamento.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

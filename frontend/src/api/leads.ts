@@ -6,11 +6,13 @@ import { api } from './client';
 import type { Lead } from './types';
 
 export interface LeadFilters {
-    status?: 'novo' | 'contato' | 'proposta' | 'negociacao' | 'convertido' | 'perdido';
-    parceiro_id?: number;
+    status?: string;
     origem?: string;
+    responsavel_id?: string;
+    busca?: string;
     page?: number;
-    limit?: number;
+    per_page?: number;
+    limit?: number; // alias para per_page
 }
 
 export interface LeadCapturaRequest {
@@ -55,8 +57,15 @@ export interface PaginatedResponse<T> {
 
 export const leadsApi = {
     // Listar leads
-    listar: (filters?: LeadFilters) =>
-        api.get<PaginatedResponse<Lead>>('/leads', { params: filters }),
+    listar: (filters?: LeadFilters) => {
+        // Converte limit para per_page se necessário
+        const params = filters ? { ...filters } : {};
+        if (params.limit && !params.per_page) {
+            params.per_page = params.limit;
+            delete params.limit;
+        }
+        return api.get<{ leads: Lead[]; total: number; page: number; per_page: number; total_pages: number }>('/leads', { params });
+    },
 
     // Buscar lead por ID
     buscar: (id: number) =>

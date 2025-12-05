@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePerfil } from '../../contexts/PerfilContext';
 import { ucsApi } from '../../api/ucs';
 import { faturasApi } from '../../api/faturas';
 import type { UnidadeConsumidora, Fatura } from '../../api/types';
@@ -66,6 +67,7 @@ const PIE_COLORS = ['#22C55E', '#F59E0B', '#EF4444', '#3B82F6'];
 
 export function DashboardUsuario() {
     const { usuario } = useAuth();
+    const { perfilAtivo } = usePerfil();
     const [ucs, setUcs] = useState<UnidadeConsumidora[]>([]);
     const [faturas, setFaturas] = useState<Fatura[]>([]);
     const [todasFaturas, setTodasFaturas] = useState<Fatura[]>([]);
@@ -75,22 +77,25 @@ export function DashboardUsuario() {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [perfilAtivo]);
 
     const fetchData = async () => {
         try {
             setLoading(true);
             setError(null);
 
-            const [ucsResponse, faturasResponse, todasFaturasResponse] = await Promise.all([
-                ucsApi.minhas(),
-                faturasApi.listar({ limit: 10 }),
-                faturasApi.listar({ limit: 100 }) // Para gráficos
-            ]);
-
+            // Filtrar UCs por titularidade baseado no perfil ativo
+            // usuario = apenas UCs onde é titular (usuario_titular=true)
+            // gestor = apenas UCs onde NÃO é titular (usuario_titular=false)
+            const isTitular = perfilAtivo === 'usuario' ? true : perfilAtivo === 'gestor' ? false : undefined;
+            const ucsResponse = await ucsApi.minhas(isTitular);
             setUcs(ucsResponse.data.ucs || []);
-            setFaturas(faturasResponse.data.faturas || []);
-            setTodasFaturas(todasFaturasResponse.data.faturas || []);
+
+            // Buscar faturas apenas uma vez (24 meses = 2 anos de histórico)
+            const faturasResponse = await faturasApi.listar({ limit: 24 });
+            const todasFaturas = faturasResponse.data.faturas || [];
+            setFaturas(todasFaturas.slice(0, 10)); // Primeiras 10 para lista
+            setTodasFaturas(todasFaturas); // Todas para gráficos
         } catch (err: any) {
             console.error('Erro ao carregar dados:', err);
             setError(err.response?.data?.detail || 'Erro ao carregar dados');

@@ -84,24 +84,38 @@ class FaturasService:
         Returns:
             Tupla (lista de faturas, total)
         """
+        # Seleciona apenas campos necessários, excluindo pdf_base64 e qr_code_pix_image (pesados)
         query = self.db.faturas().select(
-            "*",
+            "id, uc_id, numero_fatura, mes_referencia, ano_referencia, valor_fatura, valor_liquido, "
+            "consumo, leitura_atual, leitura_anterior, media_consumo, quantidade_dias, "
+            "valor_iluminacao_publica, valor_icms, bandeira_tarifaria, data_leitura, data_vencimento, "
+            "data_pagamento, indicador_situacao, indicador_pagamento, situacao_pagamento, "
+            "servico_distribuicao, compra_energia, servico_transmissao, encargos_setoriais, "
+            "impostos_encargos, qr_code_pix, codigo_barras, pdf_path, pdf_baixado_em, "
+            "sincronizado_em, criado_em, atualizado_em, "
             "unidades_consumidoras!faturas_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, nome_titular, cidade, uf, usuario_id)",
             count="exact"
         )
 
         # Aplicar filtros
         if filtros:
-            # Filtro por usuário: busca UCs do usuário primeiro
-            if filtros.usuario_id:
-                uc_result = self.db.unidades_consumidoras().select("id").eq(
-                    "usuario_id", filtros.usuario_id
-                ).execute()
+            # Filtro por usuário e/ou titularidade: busca UCs primeiro
+            if filtros.usuario_id or filtros.usuario_titular is not None:
+                uc_query = self.db.unidades_consumidoras().select("id")
+
+                if filtros.usuario_id:
+                    uc_query = uc_query.eq("usuario_id", filtros.usuario_id)
+
+                # Filtrar por titularidade se especificado
+                if filtros.usuario_titular is not None:
+                    uc_query = uc_query.eq("usuario_titular", filtros.usuario_titular)
+
+                uc_result = uc_query.execute()
                 uc_ids = [uc["id"] for uc in (uc_result.data or [])]
                 if uc_ids:
                     query = query.in_("uc_id", uc_ids)
                 else:
-                    # Usuário não tem UCs, retorna lista vazia
+                    # Não há UCs correspondentes, retorna lista vazia
                     return [], 0
 
             if filtros.uc_id:
@@ -210,6 +224,64 @@ class FaturasService:
             raise NotFoundError("Fatura")
 
         return self._build_response(result.data)
+
+    async def buscar_pdf(self, fatura_id: int) -> dict:
+        """
+        Busca apenas o PDF da fatura.
+
+        Args:
+            fatura_id: ID da fatura
+
+        Returns:
+            Dict com pdf_base64
+
+        Raises:
+            NotFoundError: Se fatura não encontrada
+        """
+        result = self.db.faturas().select(
+            "id, pdf_base64, mes_referencia, ano_referencia"
+        ).eq("id", fatura_id).single().execute()
+
+        if not result.data:
+            raise NotFoundError("Fatura")
+
+        return {
+            "id": result.data["id"],
+            "pdf_base64": result.data.get("pdf_base64"),
+            "mes_referencia": result.data["mes_referencia"],
+            "ano_referencia": result.data["ano_referencia"],
+            "disponivel": result.data.get("pdf_base64") is not None
+        }
+
+    async def buscar_pix(self, fatura_id: int) -> dict:
+        """
+        Busca dados PIX da fatura.
+
+        Args:
+            fatura_id: ID da fatura
+
+        Returns:
+            Dict com qr_code_pix e qr_code_pix_image
+
+        Raises:
+            NotFoundError: Se fatura não encontrada
+        """
+        result = self.db.faturas().select(
+            "id, qr_code_pix, qr_code_pix_image, codigo_barras, mes_referencia, ano_referencia"
+        ).eq("id", fatura_id).single().execute()
+
+        if not result.data:
+            raise NotFoundError("Fatura")
+
+        return {
+            "id": result.data["id"],
+            "qr_code_pix": result.data.get("qr_code_pix"),
+            "qr_code_pix_image": result.data.get("qr_code_pix_image"),
+            "codigo_barras": result.data.get("codigo_barras"),
+            "mes_referencia": result.data["mes_referencia"],
+            "ano_referencia": result.data["ano_referencia"],
+            "pix_disponivel": result.data.get("qr_code_pix") is not None or result.data.get("qr_code_pix_image") is not None
+        }
 
     async def listar_por_uc(
         self,

@@ -4,7 +4,7 @@ Leads Router - Endpoints da API para Leads/Simulações
 
 from fastapi import APIRouter, Depends, Query
 from typing import Optional, List
-from ..core.security import get_current_user, require_perfil
+from ..core.security import get_current_active_user, require_perfil, CurrentUser
 from .schemas import (
     LeadCreateRequest,
     LeadSimulacaoRequest,
@@ -61,7 +61,7 @@ async def listar_leads(
     origem: Optional[str] = None,
     responsavel_id: Optional[str] = None,
     busca: Optional[str] = None,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor", "parceiro"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor", "parceiro"))
 ):
     """Lista leads com filtros e paginação"""
     return await service.listar(
@@ -76,7 +76,7 @@ async def listar_leads(
 
 @router.get("/estatisticas", response_model=EstatisticasLeadResponse)
 async def estatisticas_leads(
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Retorna estatísticas de leads"""
     return await service.estatisticas()
@@ -84,7 +84,7 @@ async def estatisticas_leads(
 
 @router.get("/funil", response_model=FunilLeadResponse)
 async def funil_vendas(
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Retorna funil de vendas"""
     return await service.funil()
@@ -93,7 +93,7 @@ async def funil_vendas(
 @router.get("/{lead_id}", response_model=LeadResponse)
 async def buscar_lead(
     lead_id: int,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor", "parceiro"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor", "parceiro"))
 ):
     """Busca lead por ID"""
     return await service.buscar(lead_id=lead_id)
@@ -103,7 +103,7 @@ async def buscar_lead(
 async def atualizar_lead(
     lead_id: int,
     data: LeadUpdateRequest,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Atualiza dados do lead"""
     return await service.atualizar(
@@ -116,14 +116,14 @@ async def atualizar_lead(
 async def registrar_contato(
     lead_id: int,
     data: LeadContatoRequest,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor", "parceiro"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor", "parceiro"))
 ):
     """Registra contato com lead"""
     contato_data = data.model_dump()
     contato_data["lead_id"] = lead_id
     return await service.registrar_contato(
         data=contato_data,
-        user_id=current_user["id"]
+        user_id=current_user.id
     )
 
 
@@ -131,7 +131,7 @@ async def registrar_contato(
 async def atribuir_responsavel(
     lead_id: int,
     responsavel_id: str = Query(..., description="ID do usuário responsável"),
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Atribui responsável ao lead"""
     return await service.atribuir_responsavel(
@@ -144,14 +144,14 @@ async def atribuir_responsavel(
 async def converter_lead(
     lead_id: int,
     data: LeadConverterRequest,
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Converte lead em beneficiário"""
     converter_data = data.model_dump()
     converter_data["lead_id"] = lead_id
     return await service.converter(
         data=converter_data,
-        user_id=current_user["id"]
+        user_id=current_user.id
     )
 
 
@@ -159,7 +159,7 @@ async def converter_lead(
 async def marcar_lead_perdido(
     lead_id: int,
     motivo: str = Query(..., min_length=5, description="Motivo da perda"),
-    current_user: dict = Depends(require_perfil(["superadmin", "proprietario", "gestor"]))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Marca lead como perdido"""
     return await service.marcar_perdido(

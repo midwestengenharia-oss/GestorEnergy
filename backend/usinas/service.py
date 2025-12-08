@@ -477,6 +477,173 @@ class UsinasService:
 
         return beneficiarios
 
+    def _gerar_nome_usina(
+        self,
+        uc_formatada: str,
+        nome_titular: Optional[str] = None,
+        cidade: Optional[str] = None,
+        uf: Optional[str] = None
+    ) -> str:
+        """
+        Gera nome padrão para a usina.
+        Formato: "Usina GD - {Cidade/UF}" ou "Usina GD - {Nome}" ou "Usina GD - UC {código}"
+        """
+        if cidade and uf:
+            return f"Usina GD - {cidade}/{uf}"
+        elif nome_titular:
+            primeiro_nome = nome_titular.split()[0] if nome_titular else ""
+            return f"Usina GD - {primeiro_nome}"
+        return f"Usina GD - UC {uc_formatada}"
+
+    async def _vincular_gestor_se_necessario(
+        self,
+        usina_id: int,
+        gestor_id: str
+    ) -> bool:
+        """
+        Vincula gestor à usina apenas se ainda não estiver vinculado.
+        Se já existir mas estiver inativo, reativa.
+        """
+        existing = self.db.table("gestores_usina").select("id", "ativo").eq(
+            "usina_id", usina_id
+        ).eq("gestor_id", gestor_id).execute()
+
+        if existing.data:
+            if not existing.data[0].get("ativo"):
+                self.db.table("gestores_usina").update({
+                    "ativo": True
+                }).eq("id", existing.data[0]["id"]).execute()
+                logger.info(f"Gestor {gestor_id} reativado na usina {usina_id}")
+            return True
+
+        self.db.table("gestores_usina").insert({
+            "usina_id": usina_id,
+            "gestor_id": gestor_id,
+            "comissao_percentual": 0,
+            "ativo": True
+        }).execute()
+
+        logger.info(f"Gestor {gestor_id} vinculado à usina {usina_id}")
+        return True
+
+    async def criar_usina_automatica_para_gestor(
+        self,
+        uc_id: int,
+        gestor_id: str,
+        uc_formatada: str,
+        nome_titular: Optional[str] = None,
+        cidade: Optional[str] = None,
+        uf: Optional[str] = None,
+        apelido: Optional[str] = None,
+        lista_beneficiarias: Optional[List[dict]] = None
+    ) -> Optional[UsinaResponse]:
+        """
+        Cria usina automaticamente quando gestor vincula UC geradora.
+
+        Verifica:
+        1. Se já existe usina para essa UC (não duplica)
+        2. Se gestor já está vinculado (não duplica)
+        3. Importa beneficiárias da Energisa (se fornecidas)
+
+        Args:
+            uc_id: ID da UC geradora
+            gestor_id: ID do usuário gestor
+            uc_formatada: UC no formato "6/123456-7"
+            nome_titular: Nome do titular da UC
+            cidade: Cidade da UC
+            uf: UF da UC
+            apelido: Nome personalizado para a usina (opcional)
+            lista_beneficiarias: Lista de beneficiárias da API Energisa (opcional)
+
+        Returns:
+            UsinaResponse se criada/encontrada ou None se erro
+        """
+        # 1. Verifica se já existe usina para esta UC
+        existing = self.db.usinas().select("id").eq(
+            "uc_geradora_id", uc_id
+        ).execute()
+
+        if existing.data:
+            # Usina já existe - apenas vincula o gestor
+            usina_id = existing.data[0]["id"]
+            await self._vincular_gestor_se_necessario(usina_id, gestor_id)
+            logger.info(f"Gestor {gestor_id} vinculado à usina existente {usina_id}")
+
+            # Importar beneficiárias mesmo para usina existente
+            if lista_beneficiarias:
+                await self._importar_beneficiarias(usina_id, uc_id, lista_beneficiarias)
+
+            return await self.buscar_por_id(usina_id)
+
+        # 2. Gera nome padrão para a usina
+        nome_usina = apelido or self._gerar_nome_usina(uc_formatada, nome_titular, cidade, uf)
+
+        # 3. Cria a usina
+        usina_data = {
+            "nome": nome_usina,
+            "uc_geradora_id": uc_id,
+            "empresa_id": None,
+            "capacidade_kwp": None,
+            "tipo_geracao": "SOLAR",
+            "desconto_padrao": 0.30,
+            "status": "ATIVA"
+        }
+
+        result = self.db.usinas().insert(usina_data).execute()
+
+        if not result.data:
+            logger.error(f"Erro ao criar usina automática para UC {uc_id}")
+            return None
+
+        usina_id = result.data[0]["id"]
+
+        # 4. Marca UC como geradora
+        self.db.unidades_consumidoras().update({
+            "is_geradora": True
+        }).eq("id", uc_id).execute()
+
+        # 5. Vincula o gestor
+        self.db.table("gestores_usina").insert({
+            "usina_id": usina_id,
+            "gestor_id": gestor_id,
+            "comissao_percentual": 0,
+            "ativo": True
+        }).execute()
+
+        logger.info(f"Usina criada automaticamente: {nome_usina} (ID: {usina_id}) para gestor {gestor_id}")
+
+        # 6. Importar beneficiárias da Energisa (se houver)
+        if lista_beneficiarias:
+            await self._importar_beneficiarias(usina_id, uc_id, lista_beneficiarias)
+
+        return await self.buscar_por_id(usina_id)
+
+    async def _importar_beneficiarias(
+        self,
+        usina_id: int,
+        uc_geradora_id: int,
+        lista_beneficiarias: List[dict]
+    ) -> None:
+        """
+        Importa beneficiárias da Energisa para a usina.
+        """
+        from backend.beneficiarios.service import beneficiarios_service
+        try:
+            resultado = await beneficiarios_service.importar_beneficiarias_energisa(
+                usina_id=usina_id,
+                uc_geradora_id=uc_geradora_id,
+                lista_beneficiarias=lista_beneficiarias,
+                desconto_padrao=0.30
+            )
+            logger.info(
+                f"Beneficiárias importadas para usina {usina_id}: "
+                f"{resultado['importados']} novas, {resultado['existentes']} existentes"
+            )
+            if resultado['erros']:
+                logger.warning(f"Erros na importação: {resultado['erros']}")
+        except Exception as e:
+            logger.error(f"Erro ao importar beneficiárias: {e}")
+
     async def listar_por_gestor(self, gestor_id: str) -> List[UsinaResponse]:
         """
         Lista usinas gerenciadas por um gestor.

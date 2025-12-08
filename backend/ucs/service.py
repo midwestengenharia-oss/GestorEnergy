@@ -425,9 +425,113 @@ class UCsService:
             self.db.unidades_consumidoras().update(update_data).eq(
                 "id", uc.id
             ).execute()
-            return await self.buscar_por_id(uc.id)
+            uc = await self.buscar_por_id(uc.id)
+
+        # Se usuário NÃO é titular e UC é geradora -> criar usina automaticamente
+        if not data.usuario_titular and data.is_geradora:
+            await self._criar_usina_para_gestor(
+                uc_id=uc.id,
+                gestor_id=usuario_id,
+                uc_formatada=data.uc_formatada,
+                nome_titular=data.nome_titular,
+                cidade=data.cidade,
+                uf=data.uf,
+                cod_empresa=cod_empresa,
+                cdc=cdc,
+                digito=digito
+            )
 
         return uc
+
+    async def _criar_usina_para_gestor(
+        self,
+        uc_id: int,
+        gestor_id: str,
+        uc_formatada: str,
+        nome_titular: Optional[str] = None,
+        cidade: Optional[str] = None,
+        uf: Optional[str] = None,
+        cod_empresa: int = 6,
+        cdc: int = 0,
+        digito: int = 0
+    ) -> None:
+        """
+        Cria usina automaticamente para gestor que vincula UC geradora.
+        Também busca beneficiárias da Energisa para importar automaticamente.
+        """
+        from backend.usinas.service import usinas_service
+
+        # Buscar beneficiárias da Energisa
+        lista_beneficiarias = []
+        try:
+            from backend.energisa.service import EnergisaService
+
+            # Obter CPF do gestor
+            user_result = self.db.table("usuarios").select("cpf").eq(
+                "id", gestor_id
+            ).single().execute()
+
+            logger.info(f"Buscando beneficiárias para gestor {gestor_id}")
+
+            if user_result.data and user_result.data.get("cpf"):
+                cpf_gestor = user_result.data["cpf"]
+                logger.info(f"CPF do gestor: {cpf_gestor}")
+
+                svc = EnergisaService(cpf_gestor)
+
+                # Tentar refresh do token antes
+                if not svc.is_authenticated():
+                    logger.warning(f"Token não autenticado, tentando refresh...")
+                    svc._refresh_token()
+
+                if svc.is_authenticated():
+                    logger.info(f"Autenticado na Energisa, buscando GD info...")
+                    uc_data = {
+                        "cdc": cdc,
+                        "digitoVerificadorCdc": digito,
+                        "codigoEmpresaWeb": cod_empresa
+                    }
+                    logger.info(f"UC data para GD: {uc_data}")
+
+                    gd_info = svc.get_gd_info(uc_data)
+                    logger.info(f"Resposta GD info: {gd_info}")
+
+                    if gd_info:
+                        infos = gd_info.get("infos", {})
+                        objeto = infos.get("objeto", {}) if isinstance(infos, dict) else {}
+                        lista_beneficiarias = objeto.get("listaBeneficiarias", [])
+
+                        logger.info(f"Lista beneficiárias encontrada: {len(lista_beneficiarias)} itens")
+
+                        if lista_beneficiarias:
+                            logger.info(
+                                f"Encontradas {len(lista_beneficiarias)} beneficiárias "
+                                f"da Energisa para UC {uc_formatada}"
+                            )
+                    else:
+                        logger.warning(f"get_gd_info retornou None para UC {uc_formatada}")
+                else:
+                    logger.warning(f"Não foi possível autenticar na Energisa para CPF {cpf_gestor}")
+            else:
+                logger.warning(f"Gestor {gestor_id} não tem CPF cadastrado")
+        except Exception as e:
+            logger.error(f"Erro ao buscar beneficiárias da Energisa: {e}", exc_info=True)
+
+        # Criar usina com beneficiárias
+        try:
+            await usinas_service.criar_usina_automatica_para_gestor(
+                uc_id=uc_id,
+                gestor_id=gestor_id,
+                uc_formatada=uc_formatada,
+                nome_titular=nome_titular,
+                cidade=cidade,
+                uf=uf,
+                lista_beneficiarias=lista_beneficiarias
+            )
+            logger.info(f"Usina criada automaticamente para gestor {gestor_id}")
+        except Exception as e:
+            # Não falha a vinculação se der erro na criação da usina
+            logger.error(f"Erro ao criar usina automática para gestor {gestor_id}: {e}")
 
     async def atualizar(
         self,

@@ -432,7 +432,7 @@ export function DashboardUsuario() {
                             <p className="text-white/80 text-sm font-medium">Variação Mensal</p>
                             <div className="flex items-center gap-2 mt-2">
                                 <p className="text-4xl font-bold">
-                                    {metricas.variacaoConsumo > 0 ? '+' : ''}{metricas.variacaoConsumo.toFixed(1)}%
+                                    {(Number(metricas.variacaoConsumo) || 0) > 0 ? '+' : ''}{(Number(metricas.variacaoConsumo) || 0).toFixed(1)}%
                                 </p>
                                 {metricas.variacaoConsumo <= 0 ? (
                                     <ArrowDownRight size={24} />

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 import hashlib
 import uuid
-from ..core.database import get_supabase
+from ..core.database import get_supabase_admin
 from ..core.exceptions import NotFoundError, ValidationError, ForbiddenError
 from .schemas import StatusContrato, TipoContrato
 
@@ -16,7 +16,7 @@ class ContratosService:
     """Serviço para gerenciamento de contratos"""
 
     def __init__(self):
-        self.supabase = get_supabase()
+        self.supabase = get_supabase_admin()
 
     def _gerar_numero_contrato(self, tipo: str) -> str:
         """Gera número único do contrato"""
@@ -52,7 +52,7 @@ class ContratosService:
         # Filtros de acesso por perfil
         if "superadmin" not in perfis and "proprietario" not in perfis:
             if "gestor" in perfis:
-                gestoes = self.supabase.table("usinas_gestores").select("usina_id").eq("gestor_id", user_id).execute()
+                gestoes = self.supabase.table("gestores_usina").select("usina_id").eq("gestor_id", user_id).eq("ativo", True).execute()
                 usina_ids = [g["usina_id"] for g in gestoes.data]
                 if usina_ids:
                     query = query.in_("usina_id", usina_ids)
@@ -112,7 +112,7 @@ class ContratosService:
         # Verificar permissão de acesso
         if "superadmin" not in perfis and "proprietario" not in perfis:
             if "gestor" in perfis:
-                gestoes = self.supabase.table("usinas_gestores").select("usina_id").eq("gestor_id", user_id).execute()
+                gestoes = self.supabase.table("gestores_usina").select("usina_id").eq("gestor_id", user_id).eq("ativo", True).execute()
                 usina_ids = [g["usina_id"] for g in gestoes.data]
                 if contrato.get("usina_id") not in usina_ids:
                     raise ForbiddenError("Acesso negado a este contrato")

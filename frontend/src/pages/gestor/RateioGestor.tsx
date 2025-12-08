@@ -71,7 +71,9 @@ export function RateioGestor() {
                 usinasData.map(async (usina: Usina) => {
                     try {
                         const benefResponse = await beneficiariosApi.porUsina(usina.id);
-                        const beneficiarios = (benefResponse.data || []).filter(
+                        // O backend retorna { beneficiarios: [...], total: ..., ... }
+                        const benefData = benefResponse.data?.beneficiarios || benefResponse.data || [];
+                        const beneficiarios = (Array.isArray(benefData) ? benefData : []).filter(
                             (b: Beneficiario) => b.status === 'ativo'
                         );
                         const totalRateio = beneficiarios.reduce(
@@ -129,7 +131,8 @@ export function RateioGestor() {
     };
 
     const getEditedValue = (beneficiario: Beneficiario): number => {
-        return editedRateios[beneficiario.id] ?? beneficiario.percentual_rateio;
+        const value = editedRateios[beneficiario.id] ?? beneficiario.percentual_rateio;
+        return Number(value) || 0;
     };
 
     const calcularTotalEditado = (rateioUsina: RateioUsina): number => {
@@ -435,7 +438,7 @@ export function RateioGestor() {
                                                                 </td>
                                                                 <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
                                                                     {beneficiario.consumo_medio
-                                                                        ? `${beneficiario.consumo_medio.toFixed(0)} kWh`
+                                                                        ? `${(Number(beneficiario.consumo_medio) || 0).toFixed(0)} kWh`
                                                                         : '-'
                                                                     }
                                                                 </td>
@@ -464,7 +467,7 @@ export function RateioGestor() {
                                                                 </td>
                                                                 <td className="px-6 py-4 text-right">
                                                                     <span className="font-medium text-green-600 dark:text-green-400">
-                                                                        {geracaoEstimada.toFixed(0)} kWh/mês
+                                                                        {(Number(geracaoEstimada) || 0).toFixed(0)} kWh/mês
                                                                     </span>
                                                                 </td>
                                                             </tr>
@@ -505,7 +508,7 @@ export function RateioGestor() {
                                   dark:border-slate-700">
                         <p className="text-sm text-slate-500 dark:text-slate-400">Capacidade Total</p>
                         <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                            {usinas.reduce((sum, u) => sum + (u.usina.capacidade_kwp || 0), 0).toFixed(1)} kWp
+                            {usinas.reduce((sum, u) => sum + (Number(u.usina.capacidade_kwp) || 0), 0).toFixed(1)} kWp
                         </p>
                     </div>
                     <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200

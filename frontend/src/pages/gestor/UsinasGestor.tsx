@@ -53,7 +53,9 @@ export function UsinasGestor() {
         setLoadingDetalhes(true);
         try {
             const response = await beneficiariosApi.porUsina(usina.id);
-            setBeneficiariosUsina(response.data || []);
+            // O backend retorna { beneficiarios: [...], total: ..., ... }
+            const benefData = response.data?.beneficiarios || response.data || [];
+            setBeneficiariosUsina(Array.isArray(benefData) ? benefData : []);
         } catch (err) {
             console.error('Erro ao buscar beneficiários:', err);
             setBeneficiariosUsina([]);
@@ -62,11 +64,12 @@ export function UsinasGestor() {
         }
     };
 
-    const formatEnergy = (value: number) => {
-        if (value >= 1000) {
-            return `${(value / 1000).toFixed(1)} MWh`;
+    const formatEnergy = (value: number | string | undefined) => {
+        const num = Number(value) || 0;
+        if (num >= 1000) {
+            return `${(num / 1000).toFixed(1)} MWh`;
         }
-        return `${(value || 0).toFixed(0)} kWh`;
+        return `${num.toFixed(0)} kWh`;
     };
 
     const usinasFiltradas = usinas.filter(usina => {

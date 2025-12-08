@@ -41,6 +41,14 @@ export interface PaginatedResponse<T> {
     pages: number;
 }
 
+export interface BeneficiariosPaginatedResponse {
+    beneficiarios: Beneficiario[];
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+}
+
 export const beneficiariosApi = {
     // Listar beneficiários
     listar: (filters?: BeneficiarioFilters) =>
@@ -52,7 +60,7 @@ export const beneficiariosApi = {
 
     // Beneficiários por usina
     porUsina: (usinaId: number) =>
-        api.get<Beneficiario[]>(`/beneficiarios/usina/${usinaId}`),
+        api.get<BeneficiariosPaginatedResponse>(`/beneficiarios/usina/${usinaId}`),
 
     // Buscar beneficiário por ID
     buscar: (id: number) =>

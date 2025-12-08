@@ -66,14 +66,18 @@ export function BeneficiariosGestor() {
 
             if (usinaFiltro) {
                 const response = await beneficiariosApi.porUsina(usinaFiltro);
-                setBeneficiarios(response.data || []);
+                // O backend retorna { beneficiarios: [...], total: ..., ... }
+                const benefData = response.data?.beneficiarios || response.data || [];
+                setBeneficiarios(Array.isArray(benefData) ? benefData : []);
             } else {
                 // Busca beneficiários de todas as usinas
                 let allBeneficiarios: Beneficiario[] = [];
                 for (const usina of usinas) {
                     try {
                         const response = await beneficiariosApi.porUsina(usina.id);
-                        allBeneficiarios = [...allBeneficiarios, ...(response.data || [])];
+                        // O backend retorna { beneficiarios: [...], total: ..., ... }
+                        const benefData = response.data?.beneficiarios || response.data || [];
+                        allBeneficiarios = [...allBeneficiarios, ...(Array.isArray(benefData) ? benefData : [])];
                     } catch (e) {
                         console.error(`Erro ao buscar beneficiários da usina ${usina.id}:`, e);
                     }
@@ -159,7 +163,7 @@ export function BeneficiariosGestor() {
     });
 
     // Calcular total de percentual por usina
-    const totalPercentual = beneficiariosFiltrados.reduce((acc, b) => acc + (b.percentual_rateio || 0), 0);
+    const totalPercentual = beneficiariosFiltrados.reduce((acc, b) => acc + (Number(b.percentual_rateio) || 0), 0);
 
     if (loading && usinas.length === 0) {
         return (

@@ -109,8 +109,8 @@ class CobrancaResponse(BaseModel):
 
     # Tipo e referência
     tipo: str
-    mes_referencia: int
-    ano_referencia: int
+    mes: int  # Coluna real do banco
+    ano: int  # Coluna real do banco
     referencia_formatada: Optional[str] = None
 
     # Valores
@@ -151,15 +151,15 @@ class CobrancaResponse(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         if not self.referencia_formatada:
-            self.referencia_formatada = f"{self.mes_referencia:02d}/{self.ano_referencia}"
+            self.referencia_formatada = f"{self.mes:02d}/{self.ano}"
 
 
 class CobrancaResumoResponse(BaseModel):
     """Resumo da cobrança para listagens"""
     id: int
     beneficiario_nome: Optional[str] = None
-    mes_referencia: int
-    ano_referencia: int
+    mes: int  # Coluna real do banco
+    ano: int  # Coluna real do banco
     referencia_formatada: str
     valor_final: Decimal
     status: str

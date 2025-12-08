@@ -58,7 +58,7 @@ class BeneficiariosService:
             "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, nome_titular, endereco, cidade, uf)",
             "usinas(id, nome, desconto_padrao)",
             "usuarios(id, nome_completo, email)",
-            "contratos(id, status, vigencia_inicio, vigencia_fim)",
+            "contratos!contratos_beneficiario_id_fkey(id, status, vigencia_inicio, vigencia_fim)",
             count="exact"
         )
 
@@ -500,6 +500,181 @@ class BeneficiariosService:
             "status": "ATIVO",
             "ativado_em": datetime.now(timezone.utc).isoformat()
         }).eq("id", beneficiario_id).execute()
+
+        return await self.buscar_por_id(beneficiario_id)
+
+    async def importar_beneficiarias_energisa(
+        self,
+        usina_id: int,
+        uc_geradora_id: int,
+        lista_beneficiarias: List[dict],
+        desconto_padrao: float = 0.30
+    ) -> dict:
+        """
+        Importa beneficiárias retornadas pela API Energisa.
+
+        Args:
+            usina_id: ID da usina criada
+            uc_geradora_id: ID da UC geradora
+            lista_beneficiarias: Lista de beneficiárias da API (listaBeneficiarias)
+            desconto_padrao: Desconto padrão a aplicar
+
+        Returns:
+            {"importados": int, "existentes": int, "erros": list}
+        """
+        importados = 0
+        existentes = 0
+        erros = []
+
+        for benef in lista_beneficiarias:
+            try:
+                cdc = benef.get("cdc")
+                digito = benef.get("digitoVerificador")
+                cod_empresa = benef.get("codigoEmpresaWeb", 6)
+
+                # 1. Verificar se UC beneficiária já existe no banco
+                uc_result = self.db.unidades_consumidoras().select(
+                    "id", "usuario_id"
+                ).eq("cdc", cdc).eq("digito_verificador", digito).execute()
+
+                uc_id = None
+                usuario_existente_id = None
+
+                if uc_result.data:
+                    uc_id = uc_result.data[0]["id"]
+                    usuario_existente_id = uc_result.data[0].get("usuario_id")
+                else:
+                    # Criar UC beneficiária
+                    uc_data = {
+                        "cod_empresa": cod_empresa,
+                        "cdc": cdc,
+                        "digito_verificador": digito,
+                        "nome_titular": benef.get("nome"),
+                        "endereco": benef.get("endereco"),
+                        "numero_imovel": benef.get("numero"),
+                        "bairro": benef.get("bairro"),
+                        "cidade": benef.get("cidade"),
+                        "uf": benef.get("uf"),
+                        "geradora_id": uc_geradora_id,
+                        "is_geradora": False,
+                        "usuario_titular": False
+                    }
+                    uc_insert = self.db.unidades_consumidoras().insert(uc_data).execute()
+                    uc_id = uc_insert.data[0]["id"]
+
+                # 2. Verificar se já existe beneficiário para esta UC/usina
+                existing = self.db.beneficiarios().select("id").eq(
+                    "uc_id", uc_id
+                ).eq("usina_id", usina_id).execute()
+
+                if existing.data:
+                    existentes += 1
+                    continue
+
+                # 3. Extrair dados do beneficiário
+                nome = benef.get("nome", "")
+                percentual = float(benef.get("percentualRecebido", 0))
+
+                # 4. Criar registro de beneficiário
+                beneficiario_data = {
+                    "usina_id": usina_id,
+                    "uc_id": uc_id,
+                    "cpf": "",  # Será preenchido pelo gestor
+                    "nome": nome,
+                    "percentual_rateio": percentual,
+                    "desconto": desconto_padrao,
+                    "status": "PENDENTE",
+                    "usuario_id": usuario_existente_id
+                }
+
+                # Se já tem usuario_id, ativar automaticamente
+                if usuario_existente_id:
+                    beneficiario_data["status"] = "ATIVO"
+                    beneficiario_data["ativado_em"] = datetime.now(timezone.utc).isoformat()
+
+                self.db.beneficiarios().insert(beneficiario_data).execute()
+                importados += 1
+
+                logger.info(f"Beneficiária importada: UC {cod_empresa}/{cdc}-{digito}")
+
+            except Exception as e:
+                logger.error(f"Erro ao importar beneficiária CDC {benef.get('cdc')}: {e}")
+                erros.append({"cdc": benef.get("cdc"), "erro": str(e)})
+
+        return {
+            "importados": importados,
+            "existentes": existentes,
+            "erros": erros
+        }
+
+    async def vincular_por_cpf(self, cpf: str, usuario_id: str) -> List[int]:
+        """
+        Vincula todos os beneficiários com este CPF ao usuário.
+        Chamado automaticamente no signup.
+
+        Args:
+            cpf: CPF do usuário
+            usuario_id: ID do usuário
+
+        Returns:
+            Lista de IDs de beneficiários vinculados
+        """
+        # Buscar beneficiários pendentes com este CPF (não vinculados)
+        result = self.db.beneficiarios().select("id").eq(
+            "cpf", cpf
+        ).is_("usuario_id", "null").execute()
+
+        if not result.data:
+            return []
+
+        vinculados = []
+        for benef in result.data:
+            self.db.beneficiarios().update({
+                "usuario_id": usuario_id,
+                "status": "ATIVO",
+                "ativado_em": datetime.now(timezone.utc).isoformat()
+            }).eq("id", benef["id"]).execute()
+            vinculados.append(benef["id"])
+
+        if vinculados:
+            logger.info(f"Beneficiários vinculados por CPF {cpf}: {vinculados}")
+
+        return vinculados
+
+    async def atualizar_cpf_e_vincular(
+        self,
+        beneficiario_id: int,
+        cpf: str
+    ) -> BeneficiarioResponse:
+        """
+        Atualiza CPF do beneficiário e tenta vincular usuário existente.
+
+        Args:
+            beneficiario_id: ID do beneficiário
+            cpf: CPF a ser vinculado
+
+        Returns:
+            BeneficiarioResponse atualizado
+        """
+        # Verifica se beneficiário existe
+        benef = await self.buscar_por_id(beneficiario_id)
+
+        # Atualiza CPF
+        update_data = {"cpf": cpf}
+
+        # Busca se existe usuário com este CPF
+        usuario_result = self.db.table("usuarios").select("id").eq(
+            "cpf", cpf
+        ).execute()
+
+        if usuario_result.data:
+            # Usuário existe - vincular automaticamente
+            update_data["usuario_id"] = usuario_result.data[0]["id"]
+            update_data["status"] = "ATIVO"
+            update_data["ativado_em"] = datetime.now(timezone.utc).isoformat()
+            logger.info(f"Beneficiário {beneficiario_id} vinculado automaticamente ao usuário {update_data['usuario_id']}")
+
+        self.db.beneficiarios().update(update_data).eq("id", beneficiario_id).execute()
 
         return await self.buscar_por_id(beneficiario_id)
 

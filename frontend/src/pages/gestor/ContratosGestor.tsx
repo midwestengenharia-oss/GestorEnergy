@@ -95,7 +95,9 @@ export function ContratosGestor() {
             for (const usina of usinasData) {
                 try {
                     const benefResponse = await beneficiariosApi.porUsina(usina.id);
-                    const beneficiarios = benefResponse.data || [];
+                    // O backend retorna { beneficiarios: [...], total: ..., ... }
+                    const benefData = benefResponse.data?.beneficiarios || benefResponse.data || [];
+                    const beneficiarios = Array.isArray(benefData) ? benefData : [];
 
                     for (const benef of beneficiarios) {
                         // Cada beneficiário representa um "contrato" ativo
@@ -140,7 +142,9 @@ export function ContratosGestor() {
 
             for (const usina of usinas) {
                 const response = await beneficiariosApi.porUsina(usina.id);
-                const beneficiarios = response.data || [];
+                // O backend retorna { beneficiarios: [...], total: ..., ... }
+                const benefData = response.data?.beneficiarios || response.data || [];
+                const beneficiarios = Array.isArray(benefData) ? benefData : [];
                 // Filtrar beneficiários com status pendente (ainda não tem contrato efetivo)
                 const pendentes = beneficiarios.filter((b: Beneficiario) => b.status === 'pendente');
                 todosDisp.push(...pendentes);
@@ -501,7 +505,7 @@ export function ContratosGestor() {
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <span className="font-medium text-slate-900 dark:text-white">
-                                            {contrato.percentual_rateio.toFixed(1)}%
+                                            {(Number(contrato.percentual_rateio) || 0).toFixed(1)}%
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
@@ -622,7 +626,7 @@ export function ContratosGestor() {
                                     <div>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">Percentual de Rateio</p>
                                         <p className="font-medium text-slate-900 dark:text-white">
-                                            {selectedContrato.percentual_rateio.toFixed(1)}%
+                                            {(Number(selectedContrato.percentual_rateio) || 0).toFixed(1)}%
                                         </p>
                                     </div>
                                     <div>

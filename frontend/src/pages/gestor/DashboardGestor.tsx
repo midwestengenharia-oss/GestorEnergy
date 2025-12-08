@@ -71,7 +71,9 @@ export function DashboardGestor() {
             for (const usina of usinasData) {
                 try {
                     const benefResponse = await beneficiariosApi.porUsina(usina.id);
-                    allBeneficiarios = [...allBeneficiarios, ...(benefResponse.data || [])];
+                    // O backend retorna { beneficiarios: [...], total: ..., ... }
+                    const benefData = benefResponse.data?.beneficiarios || benefResponse.data || [];
+                    allBeneficiarios = [...allBeneficiarios, ...(Array.isArray(benefData) ? benefData : [])];
                 } catch (e) {
                     console.error(`Erro ao buscar beneficiários da usina ${usina.id}:`, e);
                 }
@@ -80,7 +82,8 @@ export function DashboardGestor() {
 
             // Buscar cobranças pendentes
             const cobrancasResponse = await cobrancasApi.listar({ status: 'pendente', limit: 10 });
-            const cobrancasData = cobrancasResponse.data?.items || cobrancasResponse.data || [];
+            // O backend retorna { cobrancas: [...], total: ..., ... }
+            const cobrancasData = cobrancasResponse.data?.cobrancas || cobrancasResponse.data?.items || cobrancasResponse.data || [];
             setCobrancasPendentes(Array.isArray(cobrancasData) ? cobrancasData : []);
 
             // Buscar estatísticas
@@ -121,11 +124,12 @@ export function DashboardGestor() {
         }).format(value || 0);
     };
 
-    const formatEnergy = (value: number) => {
-        if (value >= 1000) {
-            return `${(value / 1000).toFixed(1)} MWh`;
+    const formatEnergy = (value: number | string | undefined) => {
+        const num = Number(value) || 0;
+        if (num >= 1000) {
+            return `${(num / 1000).toFixed(1)} MWh`;
         }
-        return `${value.toFixed(0)} kWh`;
+        return `${num.toFixed(0)} kWh`;
     };
 
     if (loading) {

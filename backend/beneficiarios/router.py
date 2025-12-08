@@ -258,3 +258,27 @@ async def cancelar_beneficiario(
     Cancela definitivamente um beneficiário.
     """
     return await beneficiarios_service.cancelar(beneficiario_id)
+
+
+@router.patch(
+    "/{beneficiario_id}/cpf",
+    response_model=BeneficiarioResponse,
+    summary="Atualizar CPF do beneficiário",
+    description="Atualiza CPF e tenta vincular usuário existente automaticamente",
+    dependencies=[Depends(require_perfil("superadmin", "gestor", "proprietario"))]
+)
+async def atualizar_cpf_beneficiario(
+    beneficiario_id: int,
+    cpf: str = Query(..., min_length=11, max_length=14, description="CPF do beneficiário"),
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)] = None,
+):
+    """
+    Atualiza o CPF de um beneficiário.
+
+    Se já existir um usuário com este CPF, o beneficiário será vinculado
+    automaticamente ao usuário e seu status será atualizado para ATIVO.
+    """
+    return await beneficiarios_service.atualizar_cpf_e_vincular(
+        beneficiario_id=beneficiario_id,
+        cpf=cpf
+    )

@@ -141,6 +141,27 @@ class AuthService:
                 "ativo": True
             }).execute()
 
+            # Vincular beneficiários pendentes por CPF (se PF)
+            perfis_adicionados = ["usuario"]
+            if data.tipo_pessoa.value == "PF" and data.cpf:
+                try:
+                    from backend.beneficiarios.service import beneficiarios_service
+                    vinculados = await beneficiarios_service.vincular_por_cpf(
+                        cpf=data.cpf,
+                        usuario_id=user_id
+                    )
+                    if vinculados:
+                        logger.info(f"Beneficiários vinculados automaticamente no signup: {vinculados}")
+                        # Adicionar perfil beneficiário
+                        self.db.perfis_usuario().insert({
+                            "usuario_id": user_id,
+                            "perfil": "beneficiario",
+                            "ativo": True
+                        }).execute()
+                        perfis_adicionados.append("beneficiario")
+                except Exception as e:
+                    logger.error(f"Erro ao vincular beneficiários no signup: {e}")
+
             # Monta resposta
             user_response = UserResponse(
                 id=user_id,
@@ -172,7 +193,7 @@ class AuthService:
                 is_superadmin=user.get("is_superadmin", False),
                 ativo=user.get("ativo", True),
                 email_verificado=user.get("email_verificado", False),
-                perfis=["usuario"],
+                perfis=perfis_adicionados,
                 criado_em=user.get("criado_em"),
                 atualizado_em=user.get("atualizado_em")
             )

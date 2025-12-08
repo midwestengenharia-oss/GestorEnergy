@@ -47,10 +47,18 @@ export interface PaginatedResponse<T> {
     pages: number;
 }
 
+export interface CobrancasPaginatedResponse {
+    cobrancas: Cobranca[];
+    total: number;
+    page: number;
+    per_page: number;
+    total_pages: number;
+}
+
 export const cobrancasApi = {
     // Listar cobranças
     listar: (filters?: CobrancaFilters) =>
-        api.get<PaginatedResponse<Cobranca>>('/cobrancas', { params: filters }),
+        api.get<CobrancasPaginatedResponse>('/cobrancas', { params: filters }),
 
     // Minhas cobranças (beneficiário)
     minhas: () =>

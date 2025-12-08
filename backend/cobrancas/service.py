@@ -5,7 +5,7 @@ Cobranças Service - Lógica de negócio para Cobranças
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 from decimal import Decimal
-from ..core.database import get_supabase
+from ..core.database import get_supabase_admin
 from ..core.exceptions import NotFoundError, ValidationError, ForbiddenError
 from .schemas import StatusCobranca, TipoCobranca
 
@@ -14,7 +14,7 @@ class CobrancasService:
     """Serviço para gerenciamento de cobranças"""
 
     def __init__(self):
-        self.supabase = get_supabase()
+        self.supabase = get_supabase_admin()
 
     async def listar(
         self,
@@ -39,10 +39,16 @@ class CobrancasService:
         if "superadmin" not in perfis and "proprietario" not in perfis:
             if "gestor" in perfis:
                 # Gestor vê cobranças das usinas que gerencia
-                gestoes = self.supabase.table("usinas_gestores").select("usina_id").eq("gestor_id", user_id).execute()
+                gestoes = self.supabase.table("gestores_usina").select("usina_id").eq("gestor_id", user_id).eq("ativo", True).execute()
                 usina_ids = [g["usina_id"] for g in gestoes.data]
                 if usina_ids:
-                    query = query.in_("usina_id", usina_ids)
+                    # Buscar beneficiários dessas usinas
+                    benefs = self.supabase.table("beneficiarios").select("id").in_("usina_id", usina_ids).execute()
+                    benef_ids = [b["id"] for b in benefs.data] if benefs.data else []
+                    if benef_ids:
+                        query = query.in_("beneficiario_id", benef_ids)
+                    else:
+                        return {"cobrancas": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
                 else:
                     return {"cobrancas": [], "total": 0, "page": page, "per_page": per_page, "total_pages": 0}
             elif "beneficiario" in perfis:
@@ -58,19 +64,24 @@ class CobrancasService:
 
         # Filtros opcionais
         if usina_id:
-            query = query.eq("usina_id", usina_id)
+            # Filtrar por usina através dos beneficiários
+            benefs_usina = self.supabase.table("beneficiarios").select("id").eq("usina_id", usina_id).execute()
+            benef_ids_usina = [b["id"] for b in benefs_usina.data] if benefs_usina.data else []
+            if benef_ids_usina:
+                query = query.in_("beneficiario_id", benef_ids_usina)
         if beneficiario_id:
             query = query.eq("beneficiario_id", beneficiario_id)
         if status:
-            query = query.eq("status", status)
+            # Converter para uppercase para match com enum (PENDENTE, PAGA, etc.)
+            query = query.eq("status", status.upper())
         if mes_referencia:
-            query = query.eq("mes_referencia", mes_referencia)
+            query = query.eq("mes", mes_referencia)
         if ano_referencia:
-            query = query.eq("ano_referencia", ano_referencia)
+            query = query.eq("ano", ano_referencia)
 
         # Paginação
         offset = (page - 1) * per_page
-        query = query.order("ano_referencia", desc=True).order("mes_referencia", desc=True)
+        query = query.order("ano", desc=True).order("mes", desc=True)
         query = query.range(offset, offset + per_page - 1)
 
         result = query.execute()
@@ -89,7 +100,7 @@ class CobrancasService:
         """Busca cobrança por ID"""
 
         result = self.supabase.table("cobrancas").select(
-            "*, beneficiarios(id, nome, cpf, email, telefone), faturas(id, mes_referencia, ano_referencia, valor_fatura, consumo)"
+            "*, beneficiarios(id, nome, cpf, email, telefone, usina_id), faturas(id, mes_referencia, ano_referencia, valor_fatura, consumo)"
         ).eq("id", cobranca_id).single().execute()
 
         if not result.data:
@@ -98,10 +109,14 @@ class CobrancasService:
         # Verificar permissão de acesso
         if "superadmin" not in perfis and "proprietario" not in perfis:
             cobranca = result.data
+            # Obter usina_id através do beneficiário
+            beneficiario_data = cobranca.get("beneficiarios") or {}
+            cobranca_usina_id = beneficiario_data.get("usina_id")
+
             if "gestor" in perfis:
-                gestoes = self.supabase.table("usinas_gestores").select("usina_id").eq("gestor_id", user_id).execute()
+                gestoes = self.supabase.table("gestores_usina").select("usina_id").eq("gestor_id", user_id).eq("ativo", True).execute()
                 usina_ids = [g["usina_id"] for g in gestoes.data]
-                if cobranca.get("usina_id") not in usina_ids:
+                if cobranca_usina_id not in usina_ids:
                     raise ForbiddenError("Acesso negado a esta cobrança")
             elif "beneficiario" in perfis:
                 beneficiarios = self.supabase.table("beneficiarios").select("id").eq("usuario_id", user_id).execute()
@@ -131,10 +146,9 @@ class CobrancasService:
         cobranca_data = {
             "beneficiario_id": data["beneficiario_id"],
             "fatura_id": data.get("fatura_id"),
-            "usina_id": beneficiario.data.get("usina_id"),
             "tipo": data.get("tipo", TipoCobranca.BENEFICIO_GD.value),
-            "mes_referencia": data["mes_referencia"],
-            "ano_referencia": data["ano_referencia"],
+            "mes": data["mes_referencia"],
+            "ano": data["ano_referencia"],
             "valor_energia_injetada": float(valor_energia),
             "desconto_percentual": float(desconto_pct),
             "valor_desconto": float(valor_desconto),
@@ -240,7 +254,7 @@ class CobrancasService:
                 if not data.get("sobrescrever_existentes"):
                     existente = self.supabase.table("cobrancas").select("id").eq(
                         "beneficiario_id", benef["id"]
-                    ).eq("mes_referencia", mes).eq("ano_referencia", ano).execute()
+                    ).eq("mes", mes).eq("ano", ano).execute()
 
                     if existente.data:
                         continue
@@ -266,10 +280,9 @@ class CobrancasService:
                 cobranca_data = {
                     "beneficiario_id": benef["id"],
                     "fatura_id": fatura["id"] if fatura else None,
-                    "usina_id": usina_id,
                     "tipo": TipoCobranca.BENEFICIO_GD.value,
-                    "mes_referencia": mes,
-                    "ano_referencia": ano,
+                    "mes": mes,
+                    "ano": ano,
                     "valor_energia_injetada": float(valor_energia),
                     "desconto_percentual": float(desconto),
                     "valor_desconto": float(valor_desconto),
@@ -300,12 +313,29 @@ class CobrancasService:
     ) -> Dict[str, Any]:
         """Retorna estatísticas de cobranças"""
 
+        # Se filtrar por usina, buscar beneficiários primeiro
+        benef_ids = None
+        if usina_id:
+            benefs = self.supabase.table("beneficiarios").select("id").eq("usina_id", usina_id).execute()
+            benef_ids = [b["id"] for b in benefs.data] if benefs.data else []
+            if not benef_ids:
+                return {
+                    "total_cobrancas": 0,
+                    "valor_total": 0.0,
+                    "valor_pago": 0.0,
+                    "valor_pendente": 0.0,
+                    "cobrancas_pagas": 0,
+                    "cobrancas_pendentes": 0,
+                    "cobrancas_vencidas": 0,
+                    "taxa_inadimplencia": 0.0
+                }
+
         query = self.supabase.table("cobrancas").select("*")
 
-        if usina_id:
-            query = query.eq("usina_id", usina_id)
+        if benef_ids:
+            query = query.in_("beneficiario_id", benef_ids)
         if ano:
-            query = query.eq("ano_referencia", ano)
+            query = query.eq("ano", ano)
 
         result = query.execute()
         cobrancas = result.data
@@ -346,6 +376,6 @@ class CobrancasService:
 
         result = self.supabase.table("cobrancas").select(
             "*, beneficiarios(id, nome, usina_id, usinas(nome))"
-        ).in_("beneficiario_id", benef_ids).order("ano_referencia", desc=True).order("mes_referencia", desc=True).execute()
+        ).in_("beneficiario_id", benef_ids).order("ano", desc=True).order("mes", desc=True).execute()
 
         return result.data

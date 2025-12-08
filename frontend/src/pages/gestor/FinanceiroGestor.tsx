@@ -310,17 +310,17 @@ export function FinanceiroGestor() {
                                           flex items-center justify-center">
                                 <ArrowDownLeft className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                             </div>
-                            {resumo.variacao_mes >= 0 ? (
+                            {(Number(resumo.variacao_mes) || 0) >= 0 ? (
                                 <span className="flex items-center gap-1 text-xs text-green-600
                                                dark:text-green-400 font-medium">
                                     <TrendingUp className="w-3 h-3" />
-                                    +{resumo.variacao_mes.toFixed(1)}%
+                                    +{(Number(resumo.variacao_mes) || 0).toFixed(1)}%
                                 </span>
                             ) : (
                                 <span className="flex items-center gap-1 text-xs text-red-600
                                                dark:text-red-400 font-medium">
                                     <TrendingDown className="w-3 h-3" />
-                                    {resumo.variacao_mes.toFixed(1)}%
+                                    {(Number(resumo.variacao_mes) || 0).toFixed(1)}%
                                 </span>
                             )}
                         </div>

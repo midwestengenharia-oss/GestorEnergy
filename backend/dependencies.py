@@ -198,14 +198,14 @@ async def verify_usina_ownership(
     if usina.get("proprietario_id") == current_user.id:
         return usina
 
-    # Verifica se é gestor
-    gestores = db.table("gestores_usina").select("usuario_id").eq(
+    # Verifica se é gestor (usa db_admin para evitar recursão de RLS)
+    gestores = db_admin.table("gestores_usina").select("gestor_id").eq(
         "usina_id", usina_id
     ).eq("ativo", True).execute()
 
     if gestores.data:
-        gestor_ids = [g["usuario_id"] for g in gestores.data]
-        if current_user.id in gestor_ids:
+        gestor_ids = [g["gestor_id"] for g in gestores.data]
+        if str(current_user.id) in gestor_ids:
             return usina
 
     raise AuthorizationError("Você não tem acesso a esta usina")

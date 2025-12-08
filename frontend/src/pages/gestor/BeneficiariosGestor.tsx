@@ -22,7 +22,9 @@ import {
     Phone,
     CheckCircle,
     XCircle,
-    Percent
+    Percent,
+    CreditCard,
+    UserCheck
 } from 'lucide-react';
 
 export function BeneficiariosGestor() {
@@ -41,6 +43,8 @@ export function BeneficiariosGestor() {
     const [modalAberto, setModalAberto] = useState(false);
     const [beneficiarioEditando, setBeneficiarioEditando] = useState<Beneficiario | null>(null);
     const [salvando, setSalvando] = useState(false);
+    const [cpfEditando, setCpfEditando] = useState('');
+    const [salvandoCpf, setSalvandoCpf] = useState(false);
 
     useEffect(() => {
         fetchUsinas();
@@ -125,7 +129,40 @@ export function BeneficiariosGestor() {
 
     const handleEditar = (beneficiario: Beneficiario) => {
         setBeneficiarioEditando(beneficiario);
+        setCpfEditando(beneficiario.cpf || '');
         setModalAberto(true);
+    };
+
+    const handleSalvarCpf = async () => {
+        if (!beneficiarioEditando || !cpfEditando) return;
+
+        // Remover formatação do CPF
+        const cpfLimpo = cpfEditando.replace(/\D/g, '');
+        if (cpfLimpo.length !== 11) {
+            alert('CPF deve ter 11 dígitos');
+            return;
+        }
+
+        try {
+            setSalvandoCpf(true);
+            await beneficiariosApi.atualizarCpf(beneficiarioEditando.id, cpfLimpo);
+            alert('CPF atualizado com sucesso! Se já existir um usuário com este CPF, o beneficiário será vinculado automaticamente.');
+            setModalAberto(false);
+            setBeneficiarioEditando(null);
+            fetchBeneficiarios();
+        } catch (err: any) {
+            alert(err.response?.data?.detail || 'Erro ao atualizar CPF');
+        } finally {
+            setSalvandoCpf(false);
+        }
+    };
+
+    const formatarCpf = (cpf: string) => {
+        const numeros = cpf.replace(/\D/g, '');
+        if (numeros.length <= 3) return numeros;
+        if (numeros.length <= 6) return `${numeros.slice(0, 3)}.${numeros.slice(3)}`;
+        if (numeros.length <= 9) return `${numeros.slice(0, 3)}.${numeros.slice(3, 6)}.${numeros.slice(6)}`;
+        return `${numeros.slice(0, 3)}.${numeros.slice(3, 6)}.${numeros.slice(6, 9)}-${numeros.slice(9, 11)}`;
     };
 
     const handleSalvar = async (dados: any) => {
@@ -336,6 +373,9 @@ export function BeneficiariosGestor() {
                                         Beneficiário
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                        CPF
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                         Contato
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -343,6 +383,9 @@ export function BeneficiariosGestor() {
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                         Rateio
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                        Vínculo
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                                         Status
@@ -373,6 +416,17 @@ export function BeneficiariosGestor() {
                                                         )}
                                                     </div>
                                                 </div>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                {beneficiario.cpf ? (
+                                                    <span className="text-sm font-mono text-slate-600 dark:text-slate-300">
+                                                        {formatarCpf(beneficiario.cpf)}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-sm text-orange-500 italic">
+                                                        Não informado
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-4">
                                                 <div className="space-y-1">
@@ -410,6 +464,19 @@ export function BeneficiariosGestor() {
                                                         {beneficiario.percentual_rateio}%
                                                     </span>
                                                 </div>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                {beneficiario.usuario_id ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                                        <UserCheck size={12} />
+                                                        Vinculado
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">
+                                                        <AlertCircle size={12} />
+                                                        Pendente
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-4">
                                                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
@@ -506,6 +573,47 @@ export function BeneficiariosGestor() {
                                     className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500"
                                 />
                             </div>
+
+                            {/* CPF Section */}
+                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <label className="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">
+                                    <CreditCard className="inline-block mr-1" size={14} />
+                                    CPF do Beneficiário
+                                </label>
+                                <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">
+                                    Preencha o CPF para vincular automaticamente quando o beneficiário criar conta
+                                </p>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={cpfEditando}
+                                        onChange={(e) => setCpfEditando(formatarCpf(e.target.value))}
+                                        placeholder="000.000.000-00"
+                                        maxLength={14}
+                                        className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white font-mono"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleSalvarCpf}
+                                        disabled={salvandoCpf || !cpfEditando}
+                                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {salvandoCpf ? (
+                                            <Loader2 size={16} className="animate-spin" />
+                                        ) : (
+                                            <UserCheck size={16} />
+                                        )}
+                                        Salvar CPF
+                                    </button>
+                                </div>
+                                {beneficiarioEditando.usuario_id && (
+                                    <p className="mt-2 text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                                        <CheckCircle size={12} />
+                                        Beneficiário já vinculado a um usuário
+                                    </p>
+                                )}
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                                     Percentual de Rateio (%)

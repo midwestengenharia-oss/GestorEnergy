@@ -182,7 +182,7 @@ class BeneficiariosService:
             "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, nome_titular, endereco, cidade, uf)",
             "usinas(id, nome, desconto_padrao)",
             "usuarios(id, nome_completo, email)",
-            "contratos(id, status, vigencia_inicio, vigencia_fim)"
+            "contratos!contratos_beneficiario_id_fkey(id, status, vigencia_inicio, vigencia_fim)"
         ).eq("id", beneficiario_id).single().execute()
 
         if not result.data:
@@ -619,25 +619,41 @@ class BeneficiariosService:
         Returns:
             Lista de IDs de beneficiários vinculados
         """
-        # Buscar beneficiários pendentes com este CPF (não vinculados)
-        result = self.db.beneficiarios().select("id").eq(
-            "cpf", cpf
-        ).is_("usuario_id", "null").execute()
+        # Normalizar CPF (remover formatação)
+        cpf_limpo = ''.join(filter(str.isdigit, cpf))
+        logger.info(f"Tentando vincular beneficiários com CPF: {cpf_limpo} ao usuário: {usuario_id}")
+
+        # Buscar beneficiários com este CPF (sem filtrar por usuario_id para debug)
+        result = self.db.beneficiarios().select("id, cpf, usuario_id, status").eq(
+            "cpf", cpf_limpo
+        ).execute()
+
+        logger.info(f"Beneficiários encontrados com CPF {cpf_limpo}: {result.data}")
 
         if not result.data:
+            logger.info(f"Nenhum beneficiário encontrado com CPF {cpf_limpo}")
             return []
 
         vinculados = []
         for benef in result.data:
+            # Verificar se já está vinculado
+            if benef.get("usuario_id"):
+                logger.info(f"Beneficiário {benef['id']} já está vinculado ao usuário {benef['usuario_id']}")
+                continue
+
+            # Vincular
             self.db.beneficiarios().update({
                 "usuario_id": usuario_id,
                 "status": "ATIVO",
                 "ativado_em": datetime.now(timezone.utc).isoformat()
             }).eq("id", benef["id"]).execute()
             vinculados.append(benef["id"])
+            logger.info(f"Beneficiário {benef['id']} vinculado ao usuário {usuario_id}")
 
         if vinculados:
-            logger.info(f"Beneficiários vinculados por CPF {cpf}: {vinculados}")
+            logger.info(f"Beneficiários vinculados por CPF {cpf_limpo}: {vinculados}")
+        else:
+            logger.info(f"Nenhum beneficiário disponível para vincular com CPF {cpf_limpo}")
 
         return vinculados
 

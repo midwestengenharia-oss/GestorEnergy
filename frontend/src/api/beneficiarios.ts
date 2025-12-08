@@ -93,6 +93,10 @@ export const beneficiariosApi = {
     // Cancelar beneficiário
     cancelar: (id: number, motivo?: string) =>
         api.post(`/beneficiarios/${id}/cancelar`, { motivo }),
+
+    // Atualizar CPF do beneficiário (e vincular usuário se existir)
+    atualizarCpf: (id: number, cpf: string) =>
+        api.patch<Beneficiario>(`/beneficiarios/${id}/cpf`, null, { params: { cpf } }),
 };
 
 export default beneficiariosApi;

@@ -17,19 +17,23 @@ import { RefreshCw, Sun, Home, Zap, TrendingUp } from 'lucide-react';
 
 interface Beneficiaria {
     id: number;
-    codigo_uc: number;
-    cdc: number;
-    endereco: string;
+    uc_formatada?: string;
+    codigo_uc?: number;
+    cdc?: number;
+    endereco?: string;
     percentual_rateio: number;
     saldo_acumulado?: number;
+    nome?: string;
 }
 
 interface Usina {
     id: number;
-    codigo_uc: number;
-    cdc: number;
-    endereco: string;
-    saldo_acumulado: number;
+    nome?: string;
+    uc_formatada?: string;
+    codigo_uc?: number;
+    cdc?: number;
+    endereco?: string;
+    saldo_acumulado?: number;
     tipo_geracao?: string;
     beneficiarias?: Beneficiaria[];
     empresa_nome?: string;
@@ -74,11 +78,11 @@ export function GDTree({ usina, onRefresh, loading, isDark = false }: GDTreeProp
                     <div className="flex flex-col items-center gap-1">
                         <Sun size={20} className="text-white" />
                         <span className="font-bold text-sm">GERADORA</span>
-                        <span className="text-xs">UC {usina.codigo_uc}</span>
-                        <span className="text-xs opacity-80 truncate max-w-[180px]">{usina.endereco}</span>
+                        <span className="text-xs">UC {usina.uc_formatada || usina.codigo_uc}</span>
+                        <span className="text-xs opacity-80 truncate max-w-[180px]">{usina.endereco || ''}</span>
                         <div className="flex items-center gap-1 mt-1 bg-white/20 px-2 py-0.5 rounded-full">
                             <Zap size={12} />
-                            <span className="text-xs font-bold">{usina.saldo_acumulado || 0} kWh</span>
+                            <span className="text-xs font-bold">{Number(usina.saldo_acumulado) || 0} kWh</span>
                         </div>
                     </div>
                 ),
@@ -112,11 +116,11 @@ export function GDTree({ usina, onRefresh, loading, isDark = false }: GDTreeProp
                     label: (
                         <div className="flex flex-col items-center gap-1">
                             <Home size={18} className="text-slate-600" />
-                            <span className="font-bold text-sm text-slate-800">UC {ben.codigo_uc}</span>
-                            <span className="text-xs text-slate-500 truncate max-w-[160px]">{ben.endereco}</span>
+                            <span className="font-bold text-sm text-slate-800">UC {ben.uc_formatada || ben.codigo_uc}</span>
+                            <span className="text-xs text-slate-500 truncate max-w-[160px]">{ben.nome || ben.endereco || ''}</span>
                             <div className="flex items-center gap-1 mt-1 bg-blue-100 px-2 py-0.5 rounded-full">
                                 <TrendingUp size={12} className="text-blue-600" />
-                                <span className="text-xs font-bold text-blue-700">{ben.percentual_rateio}%</span>
+                                <span className="text-xs font-bold text-blue-700">{Number(ben.percentual_rateio) || 0}%</span>
                             </div>
                         </div>
                     ),
@@ -147,7 +151,7 @@ export function GDTree({ usina, onRefresh, loading, isDark = false }: GDTreeProp
             id: `edge-${usina.id}-${ben.id}`,
             source: `usina-${usina.id}`,
             target: `beneficiaria-${ben.id}`,
-            label: `${ben.percentual_rateio}%`,
+            label: `${Number(ben.percentual_rateio) || 0}%`,
             animated: true,
             style: {
                 stroke: '#10b981',

@@ -2,11 +2,13 @@
  * UsinasGestor - Página de Usinas Gerenciadas pelo Gestor
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { usinasApi } from '../../api/usinas';
 import { beneficiariosApi } from '../../api/beneficiarios';
 import type { Usina, Beneficiario } from '../../api/types';
+import { GDTree } from '../../components/GDTree';
+import { UsinaDetalheGD } from '../../components/UsinaDetalheGD';
 import {
     Building2,
     Users,
@@ -18,7 +20,9 @@ import {
     AlertCircle,
     ChevronRight,
     Search,
-    Eye
+    Eye,
+    List,
+    GitBranch
 } from 'lucide-react';
 
 export function UsinasGestor() {
@@ -29,6 +33,7 @@ export function UsinasGestor() {
     const [beneficiariosUsina, setBeneficiariosUsina] = useState<Beneficiario[]>([]);
     const [loadingDetalhes, setLoadingDetalhes] = useState(false);
     const [busca, setBusca] = useState('');
+    const [modoVisualizacao, setModoVisualizacao] = useState<'lista' | 'arvore'>('arvore');
 
     useEffect(() => {
         fetchUsinas();
@@ -71,6 +76,25 @@ export function UsinasGestor() {
         }
         return `${num.toFixed(0)} kWh`;
     };
+
+    // Mapear dados para o GDTree
+    const dadosGDTree = useMemo(() => {
+        if (!usinaDetalhes) return null;
+        return {
+            id: usinaDetalhes.id,
+            nome: usinaDetalhes.nome,
+            uc_formatada: usinaDetalhes.uc_geradora?.uc_formatada,
+            endereco: usinaDetalhes.uc_geradora?.endereco || `${usinaDetalhes.cidade || ''}, ${usinaDetalhes.uf || ''}`.trim().replace(/^,\s*|,\s*$/g, '') || '',
+            saldo_acumulado: Number(usinaDetalhes.uc_geradora?.saldo_acumulado) || 0,
+            beneficiarias: beneficiariosUsina.map(b => ({
+                id: b.id,
+                uc_formatada: b.uc?.uc_formatada,
+                endereco: b.uc?.endereco || '',
+                percentual_rateio: Number(b.percentual_rateio) || 0,
+                nome: b.nome || b.usuario?.nome_completo
+            }))
+        };
+    }, [usinaDetalhes, beneficiariosUsina]);
 
     const usinasFiltradas = usinas.filter(usina => {
         if (!busca) return true;
@@ -249,7 +273,7 @@ export function UsinasGestor() {
             {/* Modal de Detalhes */}
             {usinaDetalhes && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
                         <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-800">
                             <div className="flex items-center gap-3">
                                 <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
@@ -273,114 +297,173 @@ export function UsinasGestor() {
                         </div>
 
                         <div className="p-6 space-y-6">
-                            {/* Informações */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">Capacidade</p>
-                                    <p className="font-medium text-slate-900 dark:text-white">
-                                        {usinaDetalhes.capacidade_kwp} kWp
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">Tipo de Geração</p>
-                                    <p className="font-medium text-slate-900 dark:text-white capitalize">
-                                        {usinaDetalhes.tipo_geracao || 'Solar'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">Status</p>
-                                    <span className={`inline-block px-2 py-1 text-xs rounded-full ${
-                                        usinaDetalhes.status === 'ativa'
-                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
-                                    }`}>
-                                        {usinaDetalhes.status}
-                                    </span>
-                                </div>
-                                {usinaDetalhes.data_conexao && (
-                                    <div>
-                                        <p className="text-sm text-slate-500 dark:text-slate-400">Data de Conexão</p>
-                                        <p className="font-medium text-slate-900 dark:text-white">
-                                            {new Date(usinaDetalhes.data_conexao).toLocaleDateString('pt-BR')}
-                                        </p>
-                                    </div>
-                                )}
+                            {/* Toggle de Visualização */}
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setModoVisualizacao('arvore')}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
+                                        modoVisualizacao === 'arvore'
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                    }`}
+                                >
+                                    <GitBranch size={18} />
+                                    Árvore
+                                </button>
+                                <button
+                                    onClick={() => setModoVisualizacao('lista')}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
+                                        modoVisualizacao === 'lista'
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                    }`}
+                                >
+                                    <List size={18} />
+                                    Lista
+                                </button>
                             </div>
 
-                            {/* UC Geradora */}
-                            {usinaDetalhes.uc_geradora && (
-                                <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
-                                    <h3 className="font-medium text-slate-900 dark:text-white mb-3">UC Geradora</h3>
-                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                            {/* Conteúdo Condicional */}
+                            {modoVisualizacao === 'arvore' ? (
+                                /* Modo Árvore */
+                                loadingDetalhes ? (
+                                    <div className="flex items-center justify-center py-20">
+                                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                                    </div>
+                                ) : dadosGDTree ? (
+                                    <div className="space-y-6">
+                                        {/* Visualização em Árvore */}
+                                        <GDTree
+                                            usina={dadosGDTree}
+                                            loading={loadingDetalhes}
+                                            onRefresh={() => handleVerDetalhes(usinaDetalhes)}
+                                        />
+
+                                        {/* Detalhamento de Créditos GD */}
+                                        <UsinaDetalheGD
+                                            ucGeradoraId={usinaDetalhes.uc_geradora?.id}
+                                            beneficiarios={beneficiariosUsina}
+                                            onRefresh={() => handleVerDetalhes(usinaDetalhes)}
+                                        />
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-slate-500 dark:text-slate-400 py-10">
+                                        Dados não disponíveis
+                                    </p>
+                                )
+                            ) : (
+                                /* Modo Lista */
+                                <>
+                                    {/* Informações */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         <div>
-                                            <p className="text-slate-500 dark:text-slate-400">Código</p>
+                                            <p className="text-sm text-slate-500 dark:text-slate-400">Capacidade</p>
                                             <p className="font-medium text-slate-900 dark:text-white">
-                                                {usinaDetalhes.uc_geradora.uc_formatada}
+                                                {usinaDetalhes.capacidade_kwp} kWp
                                             </p>
                                         </div>
                                         <div>
-                                            <p className="text-slate-500 dark:text-slate-400">Saldo Acumulado</p>
-                                            <p className="font-medium text-green-600 dark:text-green-400">
-                                                {formatEnergy(usinaDetalhes.uc_geradora.saldo_acumulado || 0)}
+                                            <p className="text-sm text-slate-500 dark:text-slate-400">Tipo de Geração</p>
+                                            <p className="font-medium text-slate-900 dark:text-white capitalize">
+                                                {usinaDetalhes.tipo_geracao || 'Solar'}
                                             </p>
                                         </div>
-                                        {usinaDetalhes.uc_geradora.nome_titular && (
-                                            <div className="col-span-2">
-                                                <p className="text-slate-500 dark:text-slate-400">Titular</p>
+                                        <div>
+                                            <p className="text-sm text-slate-500 dark:text-slate-400">Status</p>
+                                            <span className={`inline-block px-2 py-1 text-xs rounded-full ${
+                                                usinaDetalhes.status === 'ativa'
+                                                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                            }`}>
+                                                {usinaDetalhes.status}
+                                            </span>
+                                        </div>
+                                        {usinaDetalhes.data_conexao && (
+                                            <div>
+                                                <p className="text-sm text-slate-500 dark:text-slate-400">Data de Conexão</p>
                                                 <p className="font-medium text-slate-900 dark:text-white">
-                                                    {usinaDetalhes.uc_geradora.nome_titular}
+                                                    {new Date(usinaDetalhes.data_conexao).toLocaleDateString('pt-BR')}
                                                 </p>
                                             </div>
                                         )}
                                     </div>
-                                </div>
-                            )}
 
-                            {/* Beneficiários */}
-                            <div>
-                                <h3 className="font-medium text-slate-900 dark:text-white mb-3">
-                                    Beneficiários ({beneficiariosUsina.length})
-                                </h3>
-                                {loadingDetalhes ? (
-                                    <div className="flex items-center justify-center py-4">
-                                        <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
-                                    </div>
-                                ) : beneficiariosUsina.length === 0 ? (
-                                    <p className="text-center text-slate-500 dark:text-slate-400 py-4">
-                                        Nenhum beneficiário vinculado
-                                    </p>
-                                ) : (
-                                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                                        {beneficiariosUsina.map((beneficiario) => (
-                                            <div
-                                                key={beneficiario.id}
-                                                className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg"
-                                            >
+                                    {/* UC Geradora */}
+                                    {usinaDetalhes.uc_geradora && (
+                                        <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                                            <h3 className="font-medium text-slate-900 dark:text-white mb-3">UC Geradora</h3>
+                                            <div className="grid grid-cols-2 gap-4 text-sm">
                                                 <div>
+                                                    <p className="text-slate-500 dark:text-slate-400">Código</p>
                                                     <p className="font-medium text-slate-900 dark:text-white">
-                                                        {beneficiario.nome || beneficiario.usuario?.nome_completo || 'Beneficiário'}
-                                                    </p>
-                                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                                        UC: {beneficiario.uc?.uc_formatada || '-'}
+                                                        {usinaDetalhes.uc_geradora.uc_formatada}
                                                     </p>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                                                        {beneficiario.percentual_rateio}%
+                                                <div>
+                                                    <p className="text-slate-500 dark:text-slate-400">Saldo Acumulado</p>
+                                                    <p className="font-medium text-green-600 dark:text-green-400">
+                                                        {formatEnergy(usinaDetalhes.uc_geradora.saldo_acumulado || 0)}
                                                     </p>
-                                                    <span className={`text-xs ${
-                                                        beneficiario.status === 'ativo'
-                                                            ? 'text-green-500'
-                                                            : 'text-slate-400'
-                                                    }`}>
-                                                        {beneficiario.status}
-                                                    </span>
                                                 </div>
+                                                {usinaDetalhes.uc_geradora.nome_titular && (
+                                                    <div className="col-span-2">
+                                                        <p className="text-slate-500 dark:text-slate-400">Titular</p>
+                                                        <p className="font-medium text-slate-900 dark:text-white">
+                                                            {usinaDetalhes.uc_geradora.nome_titular}
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
-                                        ))}
+                                        </div>
+                                    )}
+
+                                    {/* Beneficiários */}
+                                    <div>
+                                        <h3 className="font-medium text-slate-900 dark:text-white mb-3">
+                                            Beneficiários ({beneficiariosUsina.length})
+                                        </h3>
+                                        {loadingDetalhes ? (
+                                            <div className="flex items-center justify-center py-4">
+                                                <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                                            </div>
+                                        ) : beneficiariosUsina.length === 0 ? (
+                                            <p className="text-center text-slate-500 dark:text-slate-400 py-4">
+                                                Nenhum beneficiário vinculado
+                                            </p>
+                                        ) : (
+                                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                                                {beneficiariosUsina.map((beneficiario) => (
+                                                    <div
+                                                        key={beneficiario.id}
+                                                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg"
+                                                    >
+                                                        <div>
+                                                            <p className="font-medium text-slate-900 dark:text-white">
+                                                                {beneficiario.nome || beneficiario.usuario?.nome_completo || 'Beneficiário'}
+                                                            </p>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                                UC: {beneficiario.uc?.uc_formatada || '-'}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                                                {beneficiario.percentual_rateio}%
+                                                            </p>
+                                                            <span className={`text-xs ${
+                                                                beneficiario.status === 'ativo'
+                                                                    ? 'text-green-500'
+                                                                    : 'text-slate-400'
+                                                            }`}>
+                                                                {beneficiario.status}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
+                                </>
+                            )}
 
                             {/* Ações */}
                             <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">

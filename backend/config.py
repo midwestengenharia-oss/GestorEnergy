@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     ENERGISA_TOKEN_EXPIRATION_HOURS: int = 24
 
     # ========================
+    # LLM / AI Extraction
+    # ========================
+    LLMWHISPERER_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # ========================
     # Database (PostgreSQL via Supabase)
     # ========================
     DATABASE_URL: Optional[str] = None

@@ -148,6 +148,13 @@ export interface Beneficiario {
 // Faturas
 // ========================
 
+export interface FaturaAviso {
+    categoria: string;
+    campo: string;
+    mensagem: string;
+    severidade: 'warning' | 'error';
+}
+
 export interface Fatura {
     id: number;
     uc_id: number;
@@ -180,6 +187,14 @@ export interface Fatura {
     sincronizado_em?: string;
     criado_em?: string;
     atualizado_em?: string;
+
+    // Campos de extração com IA
+    dados_extraidos?: any;  // Dados estruturados extraídos do PDF
+    extracao_status?: 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDA' | 'ERRO';
+    extracao_error?: string;
+    extraido_em?: string;
+    extracao_score?: number;  // Score de confiança (0-100)
+    extracao_avisos?: FaturaAviso[];  // Avisos da validação
 }
 
 // ========================

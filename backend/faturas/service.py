@@ -7,6 +7,7 @@ from decimal import Decimal
 import logging
 from datetime import datetime, timezone, date
 import re
+import json
 
 from backend.core.database import db_admin
 
@@ -634,28 +635,60 @@ class FaturasService:
         }).eq("id", fatura_id).execute()
 
         try:
-            # 3. Extrair texto do PDF
-            logger.info(f"Extraindo texto do PDF da fatura {fatura_id}")
-            extractor = FaturaPDFExtractor()
-            texto = extractor.extrair_texto_pdf(fatura["pdf_base64"])
+            # 3. Extrair texto do PDF usando LLMWhisperer
+            logger.info(f"Extraindo texto do PDF da fatura {fatura_id} com LLMWhisperer")
+            from backend.faturas.llm_extractor import criar_extrator_llm
 
-            # 4. Parsear texto para estrutura de dados
-            logger.info(f"Parseando texto da fatura {fatura_id}")
-            parser = FaturaPythonParser()
-            dados_extraidos = parser.parse(texto)
+            llm_extractor, openai_parser = criar_extrator_llm()
+            texto = llm_extractor.extract_from_pdf(fatura["pdf_base64"])
 
-            # 5. Converter para dict e salvar no banco
-            # Usar model_dump com mode='json' para serializar corretamente objetos date
-            dados_dict = dados_extraidos.model_dump(mode='json', by_alias=True, exclude_none=False)
+            # 4. Parsear texto para estrutura de dados usando OpenAI
+            logger.info(f"Parseando texto da fatura {fatura_id} com OpenAI GPT-4o-mini")
+            dados_dict = openai_parser.parse_fatura(texto)
+
+            # 5. Validar dados extraídos
+            logger.info(f"Validando dados extraídos da fatura {fatura_id}")
+            from backend.faturas.validator import criar_validador
+
+            validador = criar_validador()
+
+            # Tentar obter dados da API Energisa (se disponível)
+            dados_energisa = None
+            try:
+                # TODO: Implementar busca de dados da API Energisa
+                # dados_energisa = await self._buscar_dados_energisa(fatura)
+                pass
+            except Exception as e:
+                logger.warning(f"Não foi possível obter dados da API Energisa: {e}")
+
+            # Executar validação
+            resultado_validacao = validador.validar(
+                dados_extraidos=dados_dict,
+                fatura_db=fatura,
+                dados_energisa=dados_energisa
+            )
+
+            logger.info(f"Validação concluída: Score={resultado_validacao.score}, Avisos={len(resultado_validacao.avisos)}")
+
+            # Log dos avisos (se houver)
+            if resultado_validacao.avisos:
+                logger.warning(f"Avisos encontrados na validação da fatura {fatura_id}:")
+                for aviso in resultado_validacao.avisos:
+                    logger.warning(f"  [{aviso['severidade']}] {aviso['categoria']}.{aviso['campo']}: {aviso['mensagem']}")
+
+            # 6. Salvar dados extraídos com validação
+            logger.info(f"Dados extraídos: {json.dumps(dados_dict, indent=2, ensure_ascii=False)[:500]}...")
 
             self.db.table("faturas").update({
                 "dados_extraidos": dados_dict,
+                "extracao_avisos": resultado_validacao.avisos,
+                "extracao_score": resultado_validacao.score,
                 "extracao_status": "CONCLUIDA",
                 "extracao_error": None,
                 "extraido_em": datetime.now(timezone.utc).isoformat()
             }).eq("id", fatura_id).execute()
 
-            logger.info(f"Extração da fatura {fatura_id} concluída com sucesso")
+            logger.info(f"Extração da fatura {fatura_id} concluída com sucesso (Score: {resultado_validacao.score}/100)")
             return dados_dict
 
         except Exception as e:

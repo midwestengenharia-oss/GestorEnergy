@@ -50,6 +50,12 @@ export function CobrancasAutomaticas() {
     const [htmlRelatorio, setHtmlRelatorio] = useState<string | null>(null);
     const [vencimentoEditando, setVencimentoEditando] = useState<string | null>(null);
 
+    // Debug/Teste
+    const [modoTeste, setModoTeste] = useState(false);
+    const [faturaIdTeste, setFaturaIdTeste] = useState<string>('');
+    const [testando, setTestando] = useState(false);
+    const [resultadoTeste, setResultadoTeste] = useState<any>(null);
+
     useEffect(() => {
         fetchUsinas();
     }, []);
@@ -182,6 +188,50 @@ export function CobrancasAutomaticas() {
         fetchCobrancasRascunho();
     };
 
+    const handleTestarFatura = async () => {
+        if (!faturaIdTeste) {
+            alert('Digite o ID da fatura');
+            return;
+        }
+
+        try {
+            setTestando(true);
+            setResultadoTeste(null);
+
+            // Testar extração
+            console.log('Extraindo fatura', faturaIdTeste);
+            const extracaoResponse = await faturasApi.extrair(Number(faturaIdTeste));
+
+            // Buscar fatura atualizada com score e avisos
+            const faturaResponse = await faturasApi.buscar(Number(faturaIdTeste));
+            const fatura = faturaResponse.data;
+
+            setResultadoTeste({
+                etapa: 'extração',
+                sucesso: extracaoResponse.data.success,
+                dados: extracaoResponse.data.dados,
+                score: fatura.extracao_score,
+                avisos: fatura.extracao_avisos || []
+            });
+
+            if (extracaoResponse.data.success) {
+                alert('Extração concluída! Veja os dados abaixo.');
+                console.log('Dados extraídos:', extracaoResponse.data.dados);
+                console.log('Score:', fatura.extracao_score);
+                console.log('Avisos:', fatura.extracao_avisos);
+            }
+        } catch (err: any) {
+            console.error('Erro no teste:', err);
+            setResultadoTeste({
+                etapa: 'erro',
+                erro: err.response?.data?.detail || err.message
+            });
+            alert(`Erro: ${err.response?.data?.detail || err.message}`);
+        } finally {
+            setTestando(false);
+        }
+    };
+
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('pt-BR', {
             style: 'currency',
@@ -199,15 +249,150 @@ export function CobrancasAutomaticas() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                    <Zap className="text-yellow-500" />
-                    Cobranças Automáticas
-                </h1>
-                <p className="text-slate-500 dark:text-slate-400">
-                    Geração automática baseada em extração de faturas PDF
-                </p>
+            <div className="flex items-start justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+                        <Zap className="text-yellow-500" />
+                        Cobranças Automáticas
+                    </h1>
+                    <p className="text-slate-500 dark:text-slate-400">
+                        Geração automática baseada em extração de faturas PDF
+                    </p>
+                </div>
+                <button
+                    onClick={() => setModoTeste(!modoTeste)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                        modoTeste
+                            ? 'bg-orange-500 text-white hover:bg-orange-600'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                    }`}
+                >
+                    {modoTeste ? '🔧 Modo Teste Ativo' : '🔧 Modo Teste'}
+                </button>
             </div>
+
+            {/* Modo Teste */}
+            {modoTeste && (
+                <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-6 border-2 border-orange-200 dark:border-orange-800">
+                    <h2 className="text-lg font-semibold text-orange-900 dark:text-orange-300 mb-4 flex items-center gap-2">
+                        <AlertCircle size={20} />
+                        Modo Teste - Fatura Individual
+                    </h2>
+                    <p className="text-sm text-orange-700 dark:text-orange-300 mb-4">
+                        Teste a extração de uma fatura específica para debug. Os dados extraídos aparecerão no console do navegador (F12).
+                    </p>
+                    <div className="flex gap-3">
+                        <input
+                            type="number"
+                            placeholder="ID da Fatura (ex: 40662)"
+                            value={faturaIdTeste}
+                            onChange={(e) => setFaturaIdTeste(e.target.value)}
+                            className="flex-1 px-4 py-2 bg-white dark:bg-slate-900 border border-orange-200 dark:border-orange-700 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-slate-900 dark:text-white"
+                        />
+                        <button
+                            onClick={handleTestarFatura}
+                            disabled={testando || !faturaIdTeste}
+                            className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {testando ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    Testando...
+                                </>
+                            ) : (
+                                <>
+                                    <Eye size={18} />
+                                    Testar Extração
+                                </>
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Resultado do Teste */}
+                    {resultadoTeste && (
+                        <div className="mt-4 p-4 bg-white dark:bg-slate-900 rounded-lg border border-orange-200 dark:border-orange-700">
+                            {resultadoTeste.sucesso ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
+                                        <CheckCircle2 size={18} />
+                                        Extração bem-sucedida!
+                                    </div>
+
+                                    {/* Score de Confiança */}
+                                    {resultadoTeste.score !== undefined && (
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                                Score de Confiança:
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                <div className={`px-3 py-1 rounded-full font-semibold ${
+                                                    resultadoTeste.score >= 90 ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' :
+                                                    resultadoTeste.score >= 70 ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' :
+                                                    'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
+                                                }`}>
+                                                    {resultadoTeste.score}/100
+                                                </div>
+                                                {resultadoTeste.score >= 90 && <span className="text-xs text-slate-500">Excelente</span>}
+                                                {resultadoTeste.score >= 70 && resultadoTeste.score < 90 && <span className="text-xs text-slate-500">Bom</span>}
+                                                {resultadoTeste.score < 70 && <span className="text-xs text-slate-500">Revisar</span>}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Avisos de Validação */}
+                                    {resultadoTeste.avisos && resultadoTeste.avisos.length > 0 && (
+                                        <div className="mt-3">
+                                            <details className="group">
+                                                <summary className="cursor-pointer text-sm font-medium text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-2">
+                                                    <AlertCircle size={16} />
+                                                    {resultadoTeste.avisos.length} {resultadoTeste.avisos.length === 1 ? 'aviso' : 'avisos'} de validação
+                                                </summary>
+                                                <div className="mt-2 space-y-2 ml-6">
+                                                    {resultadoTeste.avisos.map((aviso: any, idx: number) => (
+                                                        <div
+                                                            key={idx}
+                                                            className={`p-2 rounded text-xs border ${
+                                                                aviso.severidade === 'error'
+                                                                    ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+                                                                    : 'bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+                                                            }`}
+                                                        >
+                                                            <div className="font-medium">
+                                                                [{aviso.severidade === 'error' ? 'ERRO' : 'AVISO'}] {aviso.categoria} - {aviso.campo}
+                                                            </div>
+                                                            <div className="mt-1">{aviso.mensagem}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </details>
+                                        </div>
+                                    )}
+
+                                    {/* Dados Extraídos (JSON) */}
+                                    <details className="mt-3">
+                                        <summary className="cursor-pointer text-sm text-blue-600 dark:text-blue-400 hover:underline">
+                                            Ver dados extraídos (JSON)
+                                        </summary>
+                                        <pre className="mt-2 p-3 bg-slate-100 dark:bg-slate-800 rounded text-xs overflow-auto max-h-96">
+                                            {JSON.stringify(resultadoTeste.dados, null, 2)}
+                                        </pre>
+                                    </details>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-medium">
+                                        <XCircle size={18} />
+                                        Erro na extração
+                                    </div>
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                                        {resultadoTeste.erro}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Etapa 1: Seleção */}
             {etapa === 'selecao' && (

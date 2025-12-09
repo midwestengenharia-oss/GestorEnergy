@@ -104,6 +104,57 @@ export const cobrancasApi = {
     // Cobranças por beneficiário
     porBeneficiario: (beneficiarioId: number) =>
         api.get<Cobranca[]>(`/cobrancas/beneficiario/${beneficiarioId}`),
+
+    // ========== NOVOS ENDPOINTS AUTOMÁTICOS ==========
+
+    // Gerar cobrança automática a partir de fatura
+    gerarAutomatica: (faturaId: number, beneficiarioId: number, tarifaAneel?: number, fioB?: number) =>
+        api.post<Cobranca>('/cobrancas/gerar-automatica', null, {
+            params: {
+                fatura_id: faturaId,
+                beneficiario_id: beneficiarioId,
+                tarifa_aneel: tarifaAneel,
+                fio_b: fioB
+            }
+        }),
+
+    // Gerar cobranças automáticas em lote para toda usina
+    gerarLoteUsina: (usinaId: number, mesReferencia: number, anoReferencia: number, tarifaAneel?: number, fioB?: number) =>
+        api.post<{
+            total: number;
+            processadas: number;
+            sucesso: number;
+            erro: number;
+            ja_existentes: number;
+            resultados: any[];
+        }>('/cobrancas/gerar-lote-usina', null, {
+            params: {
+                usina_id: usinaId,
+                mes_referencia: mesReferencia,
+                ano_referencia: anoReferencia,
+                tarifa_aneel: tarifaAneel,
+                fio_b: fioB
+            }
+        }),
+
+    // Obter relatório HTML da cobrança
+    obterRelatorioHTML: (id: number) =>
+        api.get<string>(`/cobrancas/${id}/relatorio-html`, {
+            headers: { 'Accept': 'text/html' },
+            responseType: 'text' as any
+        }),
+
+    // Editar vencimento de cobrança em rascunho
+    editarVencimento: (id: number, novaData: string) =>
+        api.put<Cobranca>(`/cobrancas/${id}/vencimento`, null, {
+            params: { nova_data: novaData }
+        }),
+
+    // Aprovar cobrança (RASCUNHO → EMITIDA)
+    aprovar: (id: number, enviarEmail: boolean = false) =>
+        api.post<Cobranca>(`/cobrancas/${id}/aprovar`, null, {
+            params: { enviar_email: enviarEmail }
+        }),
 };
 
 export default cobrancasApi;

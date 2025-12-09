@@ -104,6 +104,7 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
             title: 'Financeiro',
             items: [
                 { label: 'Cobranças', path: '/app/gestor/cobrancas', icon: FileText },
+                { label: 'Cobranças Automáticas', path: '/app/gestor/cobrancas-automaticas', icon: Zap },
                 { label: 'Financeiro', path: '/app/gestor/financeiro', icon: Wallet },
                 { label: 'Contratos', path: '/app/gestor/contratos', icon: FileSignature },
             ],

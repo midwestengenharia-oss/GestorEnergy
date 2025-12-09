@@ -18,6 +18,7 @@ import { SignInPage, SignUpPage } from '../pages/auth';
 import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LogsAuditoria } from '../pages/admin';
 import { DashboardProprietario } from '../pages/proprietario';
 import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor } from '../pages/gestor';
+import { CobrancasAutomaticas } from '../pages/gestor/CobrancasAutomaticas';
 import { DashboardBeneficiario } from '../pages/beneficiario';
 import { DashboardUsuario, MinhasUCs, FaturasUsuario, DetalheUC, ConectarEnergisa, GeracaoDistribuida } from '../pages/usuario';
 import { DashboardParceiro } from '../pages/parceiro';
@@ -221,6 +222,11 @@ export function AppRoutes() {
                 <Route path="gestor/cobrancas" element={
                     <ProtectedRoute allowedPerfis={['gestor']}>
                         <CobrancasGestor />
+                    </ProtectedRoute>
+                } />
+                <Route path="gestor/cobrancas-automaticas" element={
+                    <ProtectedRoute allowedPerfis={['gestor', 'superadmin', 'proprietario']}>
+                        <CobrancasAutomaticas />
                     </ProtectedRoute>
                 } />
                 <Route path="gestor/financeiro" element={

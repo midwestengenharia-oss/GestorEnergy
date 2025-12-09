@@ -96,6 +96,37 @@ export const faturasApi = {
     // Criar fatura manual
     criarManual: (data: FaturaManualRequest) =>
         api.post<Fatura>('/faturas/manual', data),
+
+    // ========== ENDPOINTS DE EXTRAÇÃO ==========
+
+    // Extrair dados de uma fatura
+    extrair: (faturaId: number) =>
+        api.post<{ success: boolean; fatura_id: number; dados: any }>(`/faturas/${faturaId}/extrair`),
+
+    // Extrair dados em lote
+    extrairLote: (ucId?: number, mesReferencia?: number, anoReferencia?: number, limite: number = 10) =>
+        api.post<{
+            total: number;
+            processadas: number;
+            sucesso: number;
+            erro: number;
+            detalhes: any[];
+        }>('/faturas/extrair-lote', null, {
+            params: {
+                uc_id: ucId,
+                mes_referencia: mesReferencia,
+                ano_referencia: anoReferencia,
+                limite
+            }
+        }),
+
+    // Obter dados já extraídos
+    dadosExtraidos: (faturaId: number) =>
+        api.get<{ success: boolean; fatura_id: number; dados: any | null }>(`/faturas/${faturaId}/dados-extraidos`),
+
+    // Reprocessar extração
+    reprocessarExtracao: (faturaId: number) =>
+        api.post<{ success: boolean; fatura_id: number; message: string; dados: any }>(`/faturas/${faturaId}/reprocessar-extracao`),
 };
 
 /**

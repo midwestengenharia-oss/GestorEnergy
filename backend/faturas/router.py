@@ -144,6 +144,72 @@ async def obter_estatisticas(
 
 
 @router.get(
+    "/por-usina/{usina_id}",
+    summary="Faturas por usina",
+    description="Lista faturas de todos beneficiários de uma usina"
+)
+async def listar_faturas_por_usina(
+    usina_id: int,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    mes_referencia: Optional[int] = Query(None, ge=1, le=12, description="Mês de referência"),
+    ano_referencia: Optional[int] = Query(None, ge=2000, le=2100, description="Ano de referência"),
+):
+    """
+    Busca faturas de todos os beneficiários de uma usina.
+
+    Retorna lista de faturas com informações do beneficiário associado.
+    Útil para geração de cobranças em lote.
+    """
+    from backend.core.database import get_supabase_admin
+    supabase = get_supabase_admin()
+
+    # Buscar beneficiários da usina
+    benef_response = supabase.table("beneficiarios").select(
+        "id, nome, uc_id"
+    ).eq("usina_id", usina_id).eq("status", "ATIVO").execute()
+
+    if not benef_response.data:
+        return {"faturas": [], "total": 0}
+
+    uc_ids = [b["uc_id"] for b in benef_response.data if b.get("uc_id")]
+
+    if not uc_ids:
+        return {"faturas": [], "total": 0}
+
+    # Buscar faturas dessas UCs
+    query = supabase.table("faturas").select(
+        "id, uc_id, numero_fatura, mes_referencia, ano_referencia, extracao_status, extracao_score, dados_extraidos"
+    ).in_("uc_id", uc_ids)
+
+    if mes_referencia:
+        query = query.eq("mes_referencia", mes_referencia)
+    if ano_referencia:
+        query = query.eq("ano_referencia", ano_referencia)
+
+    faturas_response = query.execute()
+
+    # Mapear beneficiários às faturas
+    benef_map = {b["uc_id"]: b for b in benef_response.data}
+
+    faturas_com_benef = []
+    for fatura in faturas_response.data:
+        beneficiario = benef_map.get(fatura["uc_id"])
+        if beneficiario:
+            faturas_com_benef.append({
+                **fatura,
+                "beneficiario": {
+                    "id": beneficiario["id"],
+                    "nome": beneficiario["nome"]
+                }
+            })
+
+    return {
+        "faturas": faturas_com_benef,
+        "total": len(faturas_com_benef)
+    }
+
+
+@router.get(
     "/uc/{uc_id}/comparativo",
     response_model=list[ComparativoMensalResponse],
     summary="Comparativo mensal",

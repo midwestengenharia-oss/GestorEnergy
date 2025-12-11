@@ -104,10 +104,50 @@ class CobrancaCalculator:
         "TRIFASICO": 100
     }
 
+    def extrair_tarifa_real_fatura(self, dados: FaturaExtraidaSchema) -> Decimal:
+        """
+        Extrai a tarifa REAL da fatura (já com impostos PIS/COFINS/ICMS).
+
+        Calcula a partir de: valor_energia_injetada / kwh_injetado
+        ou valor_consumo / kwh_consumo
+
+        Returns:
+            Tarifa efetiva em R$/kWh (já com todos os tributos)
+        """
+        # Tentar pegar da energia injetada primeiro (mais preciso)
+        injetada_total = dados.calcular_injetada_total()
+
+        # GD II (mUC)
+        if dados.itens_fatura.energia_injetada_muc:
+            for item in dados.itens_fatura.energia_injetada_muc:
+                if item.quantidade and item.quantidade > 0 and item.valor:
+                    tarifa = abs(item.valor) / Decimal(str(item.quantidade))
+                    logger.info(f"Tarifa extraída da injetada mUC: R$ {tarifa:.6f}/kWh")
+                    return tarifa
+
+        # GD I (oUC)
+        if dados.itens_fatura.energia_injetada_ouc:
+            for item in dados.itens_fatura.energia_injetada_ouc:
+                if item.quantidade and item.quantidade > 0 and item.valor:
+                    tarifa = abs(item.valor) / Decimal(str(item.quantidade))
+                    logger.info(f"Tarifa extraída da injetada oUC: R$ {tarifa:.6f}/kWh")
+                    return tarifa
+
+        # Fallback: usar consumo
+        if dados.itens_fatura.consumo_kwh:
+            consumo = dados.itens_fatura.consumo_kwh
+            if consumo.quantidade and consumo.quantidade > 0 and consumo.valor:
+                tarifa = abs(consumo.valor) / Decimal(str(consumo.quantidade))
+                logger.info(f"Tarifa extraída do consumo: R$ {tarifa:.6f}/kWh")
+                return tarifa
+
+        logger.warning("Não foi possível extrair tarifa da fatura, usando padrão R$ 0.76")
+        return Decimal("0.76")
+
     def calcular_cobranca(
         self,
         dados_extraidos: FaturaExtraidaSchema,
-        tarifa_aneel: Decimal,
+        tarifa_aneel: Optional[Decimal] = None,
         fio_b: Optional[Decimal] = None,
         desconto_personalizado: Optional[Decimal] = None
     ) -> CobrancaCalculada:
@@ -116,7 +156,7 @@ class CobrancaCalculator:
 
         Args:
             dados_extraidos: Dados estruturados da fatura
-            tarifa_aneel: Tarifa base da ANEEL (R$/kWh)
+            tarifa_aneel: Tarifa base da ANEEL (R$/kWh) - OPCIONAL, será extraída da fatura se não fornecida
             fio_b: Valor do Fio B (opcional)
             desconto_personalizado: Desconto diferente de 30% (opcional)
 
@@ -141,10 +181,18 @@ class CobrancaCalculator:
 
         resultado.gap_kwh = max(0, resultado.consumo_kwh - resultado.compensado_kwh)
 
-        # 3. Tarifas
+        # 3. Tarifas - USAR TARIFA REAL DA FATURA (com impostos)
         desconto = desconto_personalizado or self.DESCONTO_ASSINATURA
-        resultado.tarifa_base = tarifa_aneel
-        resultado.tarifa_assinatura = tarifa_aneel * (Decimal("1") - desconto)
+
+        # Extrair tarifa real da fatura se não foi fornecida
+        if tarifa_aneel is None:
+            resultado.tarifa_base = self.extrair_tarifa_real_fatura(dados_extraidos)
+            logger.info(f"Usando tarifa REAL extraída da fatura: R$ {resultado.tarifa_base:.6f}/kWh (JÁ COM IMPOSTOS)")
+        else:
+            resultado.tarifa_base = tarifa_aneel
+            logger.info(f"Usando tarifa fornecida: R$ {resultado.tarifa_base:.6f}/kWh")
+
+        resultado.tarifa_assinatura = resultado.tarifa_base * (Decimal("1") - desconto)
         resultado.fio_b = fio_b or Decimal("0")
 
         # 4. Valores de energia (base vs assinatura)

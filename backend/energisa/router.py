@@ -258,17 +258,48 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
 
         # Extração
         telefones = []
+        emails = []
         try:
             data_obj = json_data.get("pageProps", {}).get("data", {})
             telefones = data_obj.get("listaTelefone", [])
 
+            # Processa listaEmail (estrutura aninhada)
+            lista_email_raw = data_obj.get("listaEmail", [])
+            for item_email in lista_email_raw:
+                enderecos_array = item_email.get("endereco", [])
+                for endereco_obj in enderecos_array:
+                    email_texto = endereco_obj.get("endereco")
+                    if email_texto:
+                        emails.append({
+                            "email": email_texto,
+                            "codigoEmpresaWeb": item_email.get("codigoEmpresaWeb", 6),
+                            "cdc": item_email.get("cdc", 0),
+                            "digitoVerificador": item_email.get("digitoVerificador", 0),
+                            "posicao": endereco_obj.get("posicaoDoEmail", 0)
+                        })
+
+            # Fallback: Se não tiver telefone, pega do dadosUsuario
             if not telefones:
                 dados_user = data_obj.get("dadosUsuario", {})
                 celular_unico = dados_user.get("celular")
                 if celular_unico:
                     telefones.append({"celular": celular_unico, "cdc": 0, "posicao": 1})
+
+            # Fallback: Se não tiver email na lista, pega do dadosUsuario
+            if not emails:
+                dados_user = data_obj.get("dadosUsuario", {})
+                email_unico = dados_user.get("email")
+                if email_unico:
+                    emails.append({"email": email_unico, "cdc": 0, "posicao": 0})
+
         except Exception as e:
-            print(f"   [ERROR] Erro extracao telefones: {e}")
+            print(f"   [ERROR] Erro extracao telefones/emails: {e}")
+
+        # Log para debug
+        print(f"   [DEBUG] Telefones extraidos: {len(telefones)}")
+        print(f"   [DEBUG] Emails extraidos: {len(emails)}")
+        if emails:
+            print(f"   [DEBUG] Emails: {emails}")
 
         transaction_id = f"{cpf}_{int(time.time())}"
 
@@ -277,25 +308,31 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
             "phase": "selection_pending",
             "transaction_id": transaction_id,
             "listaTelefone": telefones,
+            "listaEmail": emails,
             "full_data": json_data
         })
 
         # Fase 2: Seleção
-        print("   [Worker] Aguardando escolha do telefone...")
+        print("   [Worker] Aguardando escolha do contato (telefone/e-mail)...")
         cmd = cmd_queue.get(timeout=300)
         if cmd.get("action") != "select_phone":
             raise Exception("Comando inválido")
 
-        telefone_raw = cmd.get("telefone")
-        tel_clean = telefone_raw.strip()[-4:]
+        contato_raw = cmd.get("telefone")
 
-        print(f"   [Worker] Buscando opcao... {tel_clean}")
+        # Se for telefone, pega últimos 4 dígitos. Se for e-mail, usa completo
+        if "@" in contato_raw:
+            contato_busca = contato_raw.strip()
+        else:
+            contato_busca = contato_raw.strip()[-4:]
 
-        page.wait_for_selector('text=/contato|telefone|sms/i', timeout=30000)
+        print(f"   [Worker] Buscando opcao... {contato_busca}")
+
+        page.wait_for_selector('text=/contato|telefone|sms|e-mail|email/i', timeout=30000)
 
         clicked = False
         try:
-            elements = page.get_by_text(tel_clean).all()
+            elements = page.get_by_text(contato_busca).all()
             for el in elements:
                 if el.is_visible():
                     el.click()
@@ -412,7 +449,8 @@ async def login_start(req: LoginStartRequest, current_user: CurrentUser = Depend
 
     return {
         "transaction_id": transaction_id,
-        "listaTelefone": result.get("listaTelefone", [])
+        "listaTelefone": result.get("listaTelefone", []),
+        "listaEmail": result.get("listaEmail", [])
     }
 
 
@@ -468,7 +506,16 @@ async def login_finish(req: LoginFinishRequest, current_user: CurrentUser = Depe
 
 @router.post("/ucs", summary="Listar UCs do usuário")
 async def list_ucs(req: UcRequest, current_user: CurrentUser = Depends(get_current_active_user)):
-    """Lista todas as UCs vinculadas ao CPF."""
+    """
+    Lista todas as UCs vinculadas ao CPF com informações enriquecidas.
+
+    Retorna para cada UC:
+    - Dados básicos (numeroUc, digitoVerificador, endereco, etc.)
+    - isGD: boolean indicando se possui Geração Distribuída
+    - gdInfo: detalhes da GD (se aplicável)
+    - badge: badge de status (UC Inativa, GD, etc.)
+    - badges: array de múltiplos badges (quando aplicável)
+    """
     svc = EnergisaService(req.cpf)
     if not svc.is_authenticated():
         raise HTTPException(401, "Não autenticado na Energisa")
@@ -622,7 +669,8 @@ async def public_simulation_start(req: PublicSimulationStart, request: Request):
 
         return {
             "transaction_id": session_id,
-            "listaTelefone": result.get("listaTelefone", [])
+            "listaTelefone": result.get("listaTelefone", []),
+            "listaEmail": result.get("listaEmail", [])
         }
 
     except HTTPException:

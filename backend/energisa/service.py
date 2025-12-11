@@ -88,7 +88,7 @@ class EnergisaService:
         ]
 
         browser = playwright.chromium.launch(
-            headless=False,
+            headless=True,
             args=args,
             ignore_default_args=["--enable-automation"]
         )
@@ -432,7 +432,13 @@ class EnergisaService:
             print(f"   ❌ Exceção UC Info: {e}")
             return {"errored": True, "message": str(e)}
 
-    def listar_ucs(self):
+    def listar_ucs(self, enriquecer_gd=True):
+        """
+        Lista UCs do usuário.
+
+        Args:
+            enriquecer_gd: Se True, verifica GD e adiciona badge de status
+        """
         url = f"{self.base_url}/api/usuarios/UnidadeConsumidora?doc={self.cpf}"
 
         payload = self._get_tokens_payload()
@@ -447,9 +453,81 @@ class EnergisaService:
                 raise Exception("Sessão expirada e falha ao renovar token.")
 
         if resp.status_code == 200:
-            return resp.json().get('infos', [])
+            ucs = resp.json().get('infos', [])
+
+            if enriquecer_gd:
+                return self._enriquecer_ucs(ucs)
+
+            return ucs
 
         raise Exception(f"Erro API Energisa: {resp.status_code} - {resp.text}")
+
+    def _enriquecer_ucs(self, ucs):
+        """Enriquece lista de UCs com informações de GD e badges de status."""
+        ucs_enriquecidas = []
+
+        for uc in ucs:
+            uc_copia = uc.copy()
+
+            # Verifica se UC está ativa
+            uc_ativa = uc.get('ucAtiva', True)
+
+            # Adiciona badge de status
+            if not uc_ativa:
+                uc_copia['badge'] = {
+                    "tipo": "inativa",
+                    "texto": "UC Inativa",
+                    "cor": "gray"
+                }
+
+            # Verifica se é GD (Geração Distribuída)
+            uc_copia['isGD'] = False
+            uc_copia['gdInfo'] = None
+
+            try:
+                uc_data = {
+                    'codigoEmpresaWeb': uc.get('codigoEmpresaWeb', 6),
+                    'cdc': uc.get('numeroUc'),
+                    'digitoVerificadorCdc': uc.get('digitoVerificador')
+                }
+
+                gd_info = self.get_gd_info(uc_data)
+
+                if gd_info and not gd_info.get('errored'):
+                    infos = gd_info.get('infos', {})
+                    # Verifica se possui GD ativa
+                    if infos.get('possuiGD') or infos.get('ucGeradora'):
+                        uc_copia['isGD'] = True
+                        uc_copia['gdInfo'] = {
+                            "possuiGD": infos.get('possuiGD', False),
+                            "ucGeradora": infos.get('ucGeradora', False),
+                            "tipoGD": infos.get('tipoGD'),
+                            "percentualCompensacao": infos.get('percentualCompensacao')
+                        }
+
+                        # Adiciona badge de GD
+                        if not uc_copia.get('badge'):  # Só adiciona se não tiver badge de inativa
+                            uc_copia['badge'] = {
+                                "tipo": "gd",
+                                "texto": "Geração Distribuída",
+                                "cor": "green"
+                            }
+                        else:
+                            # Se já tem badge de inativa, adiciona GD como segundo badge
+                            uc_copia['badges'] = [
+                                uc_copia['badge'],
+                                {
+                                    "tipo": "gd",
+                                    "texto": "GD",
+                                    "cor": "green"
+                                }
+                            ]
+            except Exception as e:
+                print(f"   ⚠️ Erro ao verificar GD para UC {uc.get('numeroUc')}: {e}")
+
+            ucs_enriquecidas.append(uc_copia)
+
+        return ucs_enriquecidas
 
     def listar_faturas(self, uc_data: dict):
         try:

@@ -18,16 +18,29 @@ import {
     ArrowRight,
     RefreshCw,
     Plus,
-    Check
+    Check,
+    Mail
 } from 'lucide-react';
 
-type Step = 'cpf' | 'telefone' | 'sms' | 'ucs' | 'sucesso';
+type Step = 'cpf' | 'contato' | 'sms' | 'ucs' | 'sucesso';
 
 interface Telefone {
     celular: string;
     cdc?: number;
     posicao?: number;
 }
+
+interface Email {
+    email: string;
+    codigoEmpresaWeb?: number;
+    cdc?: number;
+    digitoVerificador?: number;
+    posicao?: number;
+}
+
+type ContatoOpcao =
+    | { tipo: 'telefone'; dados: Telefone }
+    | { tipo: 'email'; dados: Email };
 
 export function ConectarEnergisa() {
     const navigate = useNavigate();
@@ -41,7 +54,8 @@ export function ConectarEnergisa() {
     const [cpf, setCpf] = useState(usuario?.cpf || '');
     const [transactionId, setTransactionId] = useState<string | null>(null);
     const [telefones, setTelefones] = useState<Telefone[]>([]);
-    const [telefoneSelecionado, setTelefoneSelecionado] = useState<string | null>(null);
+    const [emails, setEmails] = useState<Email[]>([]);
+    const [contatoSelecionado, setContatoSelecionado] = useState<string | null>(null);
     const [codigoSms, setCodigoSms] = useState('');
     const [ucsEnergisa, setUcsEnergisa] = useState<UcEnergisa[]>([]);
     const [ucsSelecionadas, setUcsSelecionadas] = useState<number[]>([]);
@@ -80,7 +94,8 @@ export function ConectarEnergisa() {
             const response = await energisaApi.loginStart(cpf);
             setTransactionId(response.data.transaction_id);
             setTelefones(response.data.listaTelefone || []);
-            setStep('telefone');
+            setEmails(response.data.listaEmail || []);
+            setStep('contato');
         } catch (err: any) {
             console.error('Erro ao iniciar login:', err);
             setError(err.response?.data?.detail || 'Erro ao conectar com a Energisa. Tente novamente.');
@@ -89,10 +104,10 @@ export function ConectarEnergisa() {
         }
     };
 
-    // Step 2: Selecionar telefone e enviar SMS
-    const enviarSms = async () => {
-        if (!telefoneSelecionado || !transactionId) {
-            setError('Selecione um telefone');
+    // Step 2: Selecionar contato (telefone ou e-mail) e enviar código
+    const enviarCodigo = async () => {
+        if (!contatoSelecionado || !transactionId) {
+            setError('Selecione um contato');
             return;
         }
 
@@ -100,7 +115,7 @@ export function ConectarEnergisa() {
             setLoading(true);
             setError(null);
 
-            await energisaApi.loginSelectOption(transactionId, telefoneSelecionado);
+            await energisaApi.loginSelectOption(transactionId, contatoSelecionado);
             setStep('sms');
         } catch (err: any) {
             console.error('Erro ao enviar SMS:', err);
@@ -226,8 +241,8 @@ export function ConectarEnergisa() {
     // Voltar
     const voltar = () => {
         setError(null);
-        if (step === 'telefone') setStep('cpf');
-        else if (step === 'sms') setStep('telefone');
+        if (step === 'contato') setStep('cpf');
+        else if (step === 'sms') setStep('contato');
         else if (step === 'ucs') setStep('sms');
     };
 
@@ -237,7 +252,8 @@ export function ConectarEnergisa() {
         setError(null);
         setTransactionId(null);
         setTelefones([]);
-        setTelefoneSelecionado(null);
+        setEmails([]);
+        setContatoSelecionado(null);
         setCodigoSms('');
         setUcsEnergisa([]);
         setUcsSelecionadas([]);
@@ -272,8 +288,8 @@ export function ConectarEnergisa() {
 
             {/* Progress Steps */}
             <div className="flex items-center justify-between mb-8">
-                {['CPF', 'Telefone', 'SMS', 'UCs'].map((label, index) => {
-                    const stepNames: Step[] = ['cpf', 'telefone', 'sms', 'ucs'];
+                {['CPF', 'Contato', 'SMS', 'UCs'].map((label, index) => {
+                    const stepNames: Step[] = ['cpf', 'contato', 'sms', 'ucs'];
                     const currentIndex = stepNames.indexOf(step);
                     const isActive = index <= currentIndex;
                     const isCurrent = stepNames[index] === step;
@@ -353,44 +369,115 @@ export function ConectarEnergisa() {
                     </div>
                 )}
 
-                {/* Step: Telefone */}
-                {step === 'telefone' && (
+                {/* Step: Contato */}
+                {step === 'contato' && (
                     <div className="space-y-6">
                         <div className="text-center">
-                            <Phone className="w-12 h-12 text-blue-500 mx-auto mb-4" />
+                            <div className="flex items-center justify-center gap-2 mb-4">
+                                <Phone className="w-12 h-12 text-blue-500" />
+                                <Mail className="w-12 h-12 text-purple-500" />
+                            </div>
                             <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-                                Selecione seu telefone
+                                Selecione como receber o código
                             </h2>
                             <p className="text-slate-500 dark:text-slate-400">
-                                Enviaremos um código SMS para verificação
+                                Escolha um telefone ou e-mail para receber o código de verificação
                             </p>
                         </div>
 
                         <div className="space-y-3">
-                            {telefones.map((tel, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => setTelefoneSelecionado(tel.celular)}
-                                    className={`w-full p-4 rounded-lg border-2 transition flex items-center gap-4 ${
-                                        telefoneSelecionado === tel.celular
-                                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-                                    }`}
-                                >
-                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                                        telefoneSelecionado === tel.celular
-                                            ? 'border-blue-500 bg-blue-500'
-                                            : 'border-slate-300 dark:border-slate-600'
-                                    }`}>
-                                        {telefoneSelecionado === tel.celular && (
-                                            <Check className="text-white" size={14} />
-                                        )}
+                            {/* Telefones */}
+                            {telefones.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 px-2">
+                                        <Phone size={16} />
+                                        <span>Telefones</span>
                                     </div>
-                                    <span className="text-lg text-slate-900 dark:text-white">
-                                        {mascararTelefone(tel.celular)}
-                                    </span>
-                                </button>
-                            ))}
+                                    {telefones.map((tel, index) => (
+                                        <button
+                                            key={`tel-${index}`}
+                                            onClick={() => setContatoSelecionado(tel.celular)}
+                                            className={`w-full p-4 rounded-lg border-2 transition flex items-center gap-4 ${
+                                                contatoSelecionado === tel.celular
+                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                                            }`}
+                                        >
+                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                                contatoSelecionado === tel.celular
+                                                    ? 'border-blue-500 bg-blue-500'
+                                                    : 'border-slate-300 dark:border-slate-600'
+                                            }`}>
+                                                {contatoSelecionado === tel.celular && (
+                                                    <Check className="text-white" size={14} />
+                                                )}
+                                            </div>
+                                            <Phone size={18} className="text-blue-500" />
+                                            <span className="text-lg text-slate-900 dark:text-white">
+                                                {mascararTelefone(tel.celular)}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* E-mails */}
+                            {emails.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 px-2 mt-4">
+                                        <Mail size={16} />
+                                        <span>E-mails</span>
+                                    </div>
+                                    {emails.map((emailObj, index) => {
+                                        // Mascara o e-mail: m***@***.com
+                                        const mascararEmail = (email: string) => {
+                                            const [local, domain] = email.split('@');
+                                            if (!local || !domain) return email;
+                                            const localMascarado = local[0] + '***';
+                                            const domainParts = domain.split('.');
+                                            const domainMascarado = domainParts.map((part, idx) =>
+                                                idx === domainParts.length - 1 ? part : '***'
+                                            ).join('.');
+                                            return `${localMascarado}@${domainMascarado}`;
+                                        };
+
+                                        return (
+                                            <button
+                                                key={`email-${index}`}
+                                                onClick={() => setContatoSelecionado(emailObj.email)}
+                                                className={`w-full p-4 rounded-lg border-2 transition flex items-center gap-4 ${
+                                                    contatoSelecionado === emailObj.email
+                                                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                                                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                                                }`}
+                                            >
+                                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                                    contatoSelecionado === emailObj.email
+                                                        ? 'border-purple-500 bg-purple-500'
+                                                        : 'border-slate-300 dark:border-slate-600'
+                                                }`}>
+                                                    {contatoSelecionado === emailObj.email && (
+                                                        <Check className="text-white" size={14} />
+                                                    )}
+                                                </div>
+                                                <Mail size={18} className="text-purple-500" />
+                                                <span className="text-lg text-slate-900 dark:text-white">
+                                                    {mascararEmail(emailObj.email)}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {telefones.length === 0 && emails.length === 0 && (
+                                <div className="text-center py-8">
+                                    <AlertCircle className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                                    <p className="text-slate-500 dark:text-slate-400">
+                                        Nenhum contato disponível
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex gap-3">
@@ -401,8 +488,8 @@ export function ConectarEnergisa() {
                                 Voltar
                             </button>
                             <button
-                                onClick={enviarSms}
-                                disabled={loading || !telefoneSelecionado}
+                                onClick={enviarCodigo}
+                                disabled={loading || !contatoSelecionado}
                                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? (
@@ -412,7 +499,7 @@ export function ConectarEnergisa() {
                                     </>
                                 ) : (
                                     <>
-                                        Enviar SMS
+                                        Enviar código
                                         <ArrowRight size={20} />
                                     </>
                                 )}
@@ -427,10 +514,13 @@ export function ConectarEnergisa() {
                         <div className="text-center">
                             <MessageSquare className="w-12 h-12 text-blue-500 mx-auto mb-4" />
                             <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-                                Digite o código SMS
+                                Digite o código de verificação
                             </h2>
                             <p className="text-slate-500 dark:text-slate-400">
-                                Enviamos um código para {mascararTelefone(telefoneSelecionado || '')}
+                                {contatoSelecionado?.includes('@')
+                                    ? `Enviamos um código para ${contatoSelecionado}`
+                                    : `Enviamos um código SMS para ${mascararTelefone(contatoSelecionado || '')}`
+                                }
                             </p>
                         </div>
 

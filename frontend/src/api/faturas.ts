@@ -128,6 +128,15 @@ export const faturasApi = {
     // Reprocessar extração
     reprocessarExtracao: (faturaId: number) =>
         api.post<{ success: boolean; fatura_id: number; message: string; dados: any }>(`/faturas/${faturaId}/reprocessar-extracao`),
+
+    // Buscar faturas por usina
+    porUsina: (usinaId: number, mesReferencia?: number, anoReferencia?: number) =>
+        api.get<{ faturas: any[]; total: number }>(`/faturas/por-usina/${usinaId}`, {
+            params: {
+                mes_referencia: mesReferencia,
+                ano_referencia: anoReferencia
+            }
+        }),
 };
 
 /**

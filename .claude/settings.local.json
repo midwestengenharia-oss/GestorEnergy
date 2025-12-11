@@ -15,7 +15,15 @@
       "Bash(git pull:*)",
       "Bash(git add:*)",
       "Bash(docker exec:*)",
-      "Bash(docker-compose up:*)"
+      "Bash(docker-compose up:*)",
+      "Bash(test:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(timeout /t 30 /nobreak)",
+      "Bash(nul)",
+      "Bash(timeout /t 20 /nobreak)",
+      "Bash(docker version:*)",
+      "Bash(timeout /t 5 /nobreak)"
     ],
     "deny": [],
     "ask": []

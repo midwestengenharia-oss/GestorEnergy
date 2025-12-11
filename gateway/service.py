@@ -140,10 +140,9 @@ class EnergisaService:
             "--disable-gpu"
         ]
 
-        # O SEGREDO: headless=False
-        # Isso engana o site, fazendo ele achar que tem um monitor real (o Xvfb)
+        # Rodando em modo headless para compatibilidade com Docker
         browser = playwright.chromium.launch(
-            headless=False, 
+            headless=True,
             args=args,
             ignore_default_args=["--enable-automation"] # Remove barra amarela do Chrome
         )

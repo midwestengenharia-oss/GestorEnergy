@@ -31,6 +31,21 @@ interface Cobranca {
     tipo_modelo_gd?: string;
 }
 
+interface FaturaDisponivel {
+    id: number;
+    uc_id: number;
+    numero_fatura: string;
+    mes_referencia: number;
+    ano_referencia: number;
+    extracao_status: string;
+    extracao_score?: number;
+    beneficiario?: {
+        id: number;
+        nome: string;
+    };
+    uc_formatada?: string;
+}
+
 export function CobrancasAutomaticas() {
     const [loading, setLoading] = useState(false);
     const [usinas, setUsinas] = useState<Usina[]>([]);
@@ -40,10 +55,14 @@ export function CobrancasAutomaticas() {
     const [forcarReprocessamento, setForcarReprocessamento] = useState(false);
 
     // Estados do processo
-    const [etapa, setEtapa] = useState<'selecao' | 'extraindo' | 'gerando' | 'concluido'>('selecao');
+    const [etapa, setEtapa] = useState<'selecao' | 'listando_faturas' | 'extraindo' | 'gerando' | 'concluido'>('selecao');
     const [resultadoExtracao, setResultadoExtracao] = useState<any>(null);
     const [resultadoGeracao, setResultadoGeracao] = useState<any>(null);
     const [cobrancasGeradas, setCobrancasGeradas] = useState<Cobranca[]>([]);
+
+    // Faturas disponíveis para seleção
+    const [faturasDisponiveis, setFaturasDisponiveis] = useState<FaturaDisponivel[]>([]);
+    const [faturasSelecionadas, setFaturasSelecionadas] = useState<Set<number>>(new Set());
 
     // Modal de detalhes
     const [cobrancaSelecionada, setCobrancaSelecionada] = useState<Cobranca | null>(null);
@@ -69,7 +88,7 @@ export function CobrancasAutomaticas() {
         }
     };
 
-    const handleExtrairEGerar = async () => {
+    const handleBuscarFaturas = async () => {
         if (!usinaId) {
             alert('Selecione uma usina');
             return;
@@ -77,37 +96,105 @@ export function CobrancasAutomaticas() {
 
         try {
             setLoading(true);
-            setEtapa('extraindo');
+            setEtapa('listando_faturas');
 
-            // Passo 1: Extrair faturas em lote
-            const extracaoResponse = await faturasApi.extrairLote(undefined, mes, ano, 50, forcarReprocessamento);
-            setResultadoExtracao(extracaoResponse.data);
+            // Buscar faturas da usina (já vem com info do beneficiário)
+            const response = await faturasApi.porUsina(usinaId, mes, ano);
+            const faturas = response.data.faturas || [];
 
-            if (extracaoResponse.data.sucesso === 0) {
-                alert('Nenhuma fatura foi extraída com sucesso');
+            setFaturasDisponiveis(faturas);
+
+            if (faturas.length === 0) {
+                alert('Nenhuma fatura encontrada para este período');
                 setEtapa('selecao');
-                return;
             }
+        } catch (err: any) {
+            console.error('Erro:', err);
+            alert(err.response?.data?.detail || 'Erro ao buscar faturas');
+            setEtapa('selecao');
+        } finally {
+            setLoading(false);
+        }
+    };
 
-            // Pequeno delay para feedback visual
-            await new Promise(resolve => setTimeout(resolve, 1000));
+    const handleGerarCobrancasSelecionadas = async () => {
+        if (faturasSelecionadas.size === 0) {
+            alert('Selecione pelo menos uma fatura');
+            return;
+        }
 
+        try {
+            setLoading(true);
             setEtapa('gerando');
 
-            // Passo 2: Gerar cobranças automáticas
-            const geracaoResponse = await cobrancasApi.gerarLoteUsina(usinaId, mes, ano);
-            setResultadoGeracao(geracaoResponse.data);
+            const resultados = [];
+            let sucesso = 0;
+            let erro = 0;
 
-            // Buscar cobranças geradas (status RASCUNHO)
+            // Gerar cobrança para cada fatura selecionada
+            for (const faturaId of Array.from(faturasSelecionadas)) {
+                const fatura = faturasDisponiveis.find(f => f.id === faturaId);
+                if (!fatura || !fatura.beneficiario) continue;
+
+                try {
+                    await cobrancasApi.gerarAutomatica(
+                        faturaId,
+                        fatura.beneficiario.id
+                    );
+                    sucesso++;
+                    resultados.push({
+                        beneficiario_id: fatura.beneficiario.id,
+                        beneficiario_nome: fatura.beneficiario.nome,
+                        status: 'sucesso'
+                    });
+                } catch (err: any) {
+                    erro++;
+                    resultados.push({
+                        beneficiario_id: fatura.beneficiario?.id,
+                        beneficiario_nome: fatura.beneficiario?.nome,
+                        status: 'erro',
+                        erro: err.response?.data?.detail || err.message
+                    });
+                }
+            }
+
+            setResultadoGeracao({
+                total: faturasSelecionadas.size,
+                processadas: faturasSelecionadas.size,
+                sucesso,
+                erro,
+                ja_existentes: 0,
+                resultados
+            });
+
+            // Buscar cobranças geradas
             await fetchCobrancasRascunho();
 
             setEtapa('concluido');
         } catch (err: any) {
             console.error('Erro:', err);
-            alert(err.response?.data?.detail || 'Erro ao processar');
-            setEtapa('selecao');
+            alert(err.response?.data?.detail || 'Erro ao gerar cobranças');
+            setEtapa('listando_faturas');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const toggleFatura = (faturaId: number) => {
+        const novaSelecao = new Set(faturasSelecionadas);
+        if (novaSelecao.has(faturaId)) {
+            novaSelecao.delete(faturaId);
+        } else {
+            novaSelecao.add(faturaId);
+        }
+        setFaturasSelecionadas(novaSelecao);
+    };
+
+    const toggleTodasFaturas = () => {
+        if (faturasSelecionadas.size === faturasDisponiveis.length) {
+            setFaturasSelecionadas(new Set());
+        } else {
+            setFaturasSelecionadas(new Set(faturasDisponiveis.map(f => f.id)));
         }
     };
 
@@ -449,7 +536,9 @@ export function CobrancasAutomaticas() {
                     <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
                         <h3 className="font-medium text-blue-900 dark:text-blue-300 mb-2">Como funciona:</h3>
                         <ol className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
-                            <li>Extrai dados das faturas PDF usando Python (OCR + Regex)</li>
+                            <li>Busca faturas disponíveis do período selecionado</li>
+                            <li>Permite selecionar quais faturas usar</li>
+                            <li>Extrai dados das faturas PDF usando LLMWhisperer + OpenAI</li>
                             <li>Detecta automaticamente modelo GD I ou GD II</li>
                             <li>Calcula cobranças com 30% de desconto</li>
                             <li>Gera relatórios HTML profissionais</li>
@@ -471,13 +560,107 @@ export function CobrancasAutomaticas() {
                     </div>
 
                     <button
-                        onClick={handleExtrairEGerar}
+                        onClick={handleBuscarFaturas}
                         disabled={!usinaId || loading}
                         className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                     >
-                        <Zap size={20} />
-                        Extrair Faturas e Gerar Cobranças
+                        <FileText size={20} />
+                        Buscar Faturas Disponíveis
                     </button>
+                </div>
+            )}
+
+            {/* Etapa 1.5: Listagem de Faturas */}
+            {etapa === 'listando_faturas' && !loading && (
+                <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                                Selecione as Faturas ({faturasDisponiveis.length} disponíveis)
+                            </h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                                Marque as faturas que deseja usar para gerar cobranças
+                            </p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={toggleTodasFaturas}
+                                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-medium"
+                            >
+                                {faturasSelecionadas.size === faturasDisponiveis.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Lista de Faturas */}
+                    <div className="space-y-2 mb-6 max-h-96 overflow-y-auto">
+                        {faturasDisponiveis.map((fatura) => (
+                            <label
+                                key={fatura.id}
+                                className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${
+                                    faturasSelecionadas.has(fatura.id)
+                                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900'
+                                }`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={faturasSelecionadas.has(fatura.id)}
+                                    onChange={() => toggleFatura(fatura.id)}
+                                    className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <span className="font-medium text-slate-900 dark:text-white">
+                                            {fatura.beneficiario?.nome || 'Beneficiário não identificado'}
+                                        </span>
+                                        <span className="text-sm text-slate-500">
+                                            Fatura #{fatura.numero_fatura || fatura.id}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+                                        <span>UC: {fatura.uc_formatada || `ID ${fatura.uc_id}`}</span>
+                                        {fatura.extracao_status && (
+                                            <span className={`px-2 py-0.5 rounded text-xs ${
+                                                fatura.extracao_status === 'CONCLUIDA'
+                                                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                                    : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                                            }`}>
+                                                {fatura.extracao_status}
+                                            </span>
+                                        )}
+                                        {fatura.extracao_score && (
+                                            <span className="text-xs">
+                                                Score: {fatura.extracao_score}/100
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </label>
+                        ))}
+                    </div>
+
+                    {/* Ações */}
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => {
+                                setEtapa('selecao');
+                                setFaturasDisponiveis([]);
+                                setFaturasSelecionadas(new Set());
+                            }}
+                            className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600"
+                        >
+                            Voltar
+                        </button>
+                        <button
+                            onClick={handleGerarCobrancasSelecionadas}
+                            disabled={faturasSelecionadas.size === 0}
+                            className="flex-1 flex items-center justify-center gap-2 px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                        >
+                            <Zap size={20} />
+                            Gerar Cobranças ({faturasSelecionadas.size})
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -700,6 +883,8 @@ export function CobrancasAutomaticas() {
                                 setResultadoExtracao(null);
                                 setResultadoGeracao(null);
                                 setCobrancasGeradas([]);
+                                setFaturasDisponiveis([]);
+                                setFaturasSelecionadas(new Set());
                             }}
                             className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600"
                         >

@@ -7,7 +7,8 @@ import json
 import logging
 from typing import Optional
 
-from unstract.llmwhisperer import LLMWhispererClient, LLMWhispererClientException
+from unstract.llmwhisperer import LLMWhispererClientV2
+from unstract.llmwhisperer.client_v2 import LLMWhispererClientException
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,10 @@ class LLMWhispererExtractor:
     """Extrai texto de PDF usando LLMWhisperer"""
 
     def __init__(self, api_key: str):
-        self.client = LLMWhispererClient(api_key=api_key)
+        self.client = LLMWhispererClientV2(
+            base_url="https://llmwhisperer-api.us-central.unstract.com/api/v2",
+            api_key=api_key
+        )
 
     def extract_from_pdf(self, pdf_base64: str) -> str:
         """
@@ -29,32 +33,73 @@ class LLMWhispererExtractor:
         Returns:
             Texto extraído otimizado para LLMs
         """
+        import tempfile
+        import os
+
+        temp_file = None
         try:
             # Decodificar base64
             pdf_bytes = base64.b64decode(pdf_base64)
 
-            logger.info("Chamando LLMWhisperer API...")
+            # Salvar PDF temporariamente
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False) as f:
+                f.write(pdf_bytes)
+                temp_file = f.name
 
-            # Usar cliente oficial
+            logger.info(f"Chamando LLMWhisperer API (arquivo temp: {temp_file})...")
+
+            # Usar cliente oficial V2 com file_path
             result = self.client.whisper(
-                file_data=pdf_bytes,
-                processing_mode="high_quality",
-                output_mode="line-printer",
+                file_path=temp_file,
+                mode="high_quality",
+                output_mode="layout_preserving",
                 page_seperator="<<<NOVA_PAGINA>>>",
-                force_text_processing=False
+                lang="por",  # Português para faturas brasileiras
+                wait_for_completion=True,
+                wait_timeout=180
             )
 
             # Obter o texto extraído
-            texto = result.get("extracted_text", "")
+            # A API V2 retorna um dicionário com estrutura: result['extraction']['result_text']
+            logger.debug(f"Tipo de resultado: {type(result)}")
+            logger.debug(f"Chaves disponíveis: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+
+            if isinstance(result, dict):
+                # Estrutura correta: result -> extraction -> result_text
+                extraction = result.get("extraction", {})
+                texto = extraction.get("result_text", "")
+
+                if not texto:
+                    logger.warning(f"Campo 'result_text' vazio ou ausente. Chaves de extraction: {list(extraction.keys())}")
+            else:
+                # Se retornar string diretamente
+                texto = str(result)
+
             logger.info(f"LLMWhisperer extraiu {len(texto)} caracteres")
+
+            if len(texto) == 0:
+                logger.error("ERRO: LLMWhisperer retornou 0 caracteres! Possíveis causas:")
+                logger.error("  1. PDF é uma imagem escaneada sem OCR")
+                logger.error("  2. PDF corrompido ou protegido")
+                logger.error("  3. Problema com parâmetros da API")
+                logger.error(f"  4. Estrutura da resposta: {result.keys() if isinstance(result, dict) else 'não é dict'}")
+
             return texto
 
         except LLMWhispererClientException as e:
-            logger.error(f"Erro no LLMWhisperer: {e}")
+            logger.error(f"Erro LLMWhisperer API: {e.message}, Status: {e.status_code}")
             raise
         except Exception as e:
-            logger.error(f"Erro inesperado no LLMWhisperer: {e}")
+            logger.error(f"Erro no LLMWhisperer: {e}")
             raise
+        finally:
+            # Limpar arquivo temporário
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.unlink(temp_file)
+                    logger.debug(f"Arquivo temporário {temp_file} removido")
+                except Exception as e:
+                    logger.warning(f"Não foi possível remover arquivo temporário {temp_file}: {e}")
 
 
 class OpenAIParser:

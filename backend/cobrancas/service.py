@@ -416,7 +416,7 @@ class CobrancasService:
         from backend.faturas.service import faturas_service
         from backend.faturas.extraction_schemas import FaturaExtraidaSchema
         from backend.cobrancas.calculator import CobrancaCalculator
-        from backend.cobrancas.report_generator import report_generator
+        from backend.cobrancas.report_generator_v3 import report_generator_v3
         from backend.core.exceptions import NotFoundError, ValidationError
 
         # 1. Verificar se fatura existe e tem dados extraídos
@@ -457,6 +457,20 @@ class CobrancasService:
         beneficiario = benef_result.data
         uc = beneficiario.get("unidades_consumidoras")
 
+        # 2.1 Verificar se já existe cobrança para este beneficiário/mês/ano
+        mes_ref = fatura.get("mes_referencia")
+        ano_ref = fatura.get("ano_referencia")
+
+        cobranca_existente = self.supabase.table("cobrancas").select("id").eq(
+            "beneficiario_id", beneficiario_id
+        ).eq("mes", mes_ref).eq("ano", ano_ref).execute()
+
+        if cobranca_existente.data and len(cobranca_existente.data) > 0:
+            raise ValidationError(
+                f"Já existe uma cobrança para o beneficiário {beneficiario_id} "
+                f"no período {mes_ref:02d}/{ano_ref}"
+            )
+
         # 3. Obter tarifa ANEEL se não informada
         if not tarifa_aneel:
             # TODO: Integrar com calculadora ANEEL existente
@@ -483,8 +497,13 @@ class CobrancasService:
             fio_b=fio_b
         )
 
-        # 5. Gerar relatório HTML
-        html_relatorio = report_generator.gerar_html(
+        # 5. Gerar relatório HTML (usando V3 baseado no código n8n)
+        # Buscar economia acumulada do beneficiário (se houver)
+        economia_acumulada = 0.0
+        if beneficiario.get("economia_acumulada"):
+            economia_acumulada = float(beneficiario.get("economia_acumulada", 0))
+
+        html_relatorio = report_generator_v3.gerar_html(
             cobranca=cobranca_calc,
             dados_fatura=dados_extraidos,
             beneficiario={
@@ -494,7 +513,8 @@ class CobrancasService:
                 "cidade": uc.get("cidade") if uc else None
             },
             qr_code_pix=fatura.get("qr_code_pix_image"),
-            pix_copia_cola=fatura.get("qr_code_pix")
+            pix_copia_cola=fatura.get("qr_code_pix"),
+            economia_acumulada=economia_acumulada
         )
 
         # 6. Preparar dados para salvar
@@ -537,9 +557,9 @@ class CobrancasService:
             "disponibilidade_valor": float(cobranca_calc.disponibilidade_valor) if cobranca_calc.disponibilidade_valor > 0 else None,
 
             # Extras
-            "bandeiras_valor": float(cobranca_calc.bandeiras_valor) if cobranca_calc.bandeiras_valor > 0 else None,
-            "iluminacao_publica_valor": float(cobranca_calc.iluminacao_publica_valor) if cobranca_calc.iluminacao_publica_valor > 0 else None,
-            "servicos_valor": float(cobranca_calc.servicos_valor) if cobranca_calc.servicos_valor > 0 else None,
+            "bandeiras_valor": float(cobranca_calc.bandeiras_valor),
+            "iluminacao_publica_valor": float(cobranca_calc.iluminacao_publica_valor),
+            "servicos_valor": float(cobranca_calc.servicos_valor),
 
             # Totais
             "valor_sem_assinatura": float(cobranca_calc.valor_sem_assinatura),
@@ -582,16 +602,20 @@ class CobrancasService:
     async def gerar_lote_usina_automatico(
         self,
         usina_id: int,
-        mes: int,
-        ano: int
+        mes_referencia: int,
+        ano_referencia: int,
+        tarifa_aneel: Optional[Decimal] = None,
+        fio_b: Optional[Decimal] = None
     ) -> dict:
         """
         Gera cobranças automaticamente para todos os beneficiários de uma usina.
 
         Args:
             usina_id: ID da usina
-            mes: Mês de referência
-            ano: Ano de referência
+            mes_referencia: Mês de referência
+            ano_referencia: Ano de referência
+            tarifa_aneel: Tarifa ANEEL opcional (R$/kWh)
+            fio_b: Valor do Fio B opcional
 
         Returns:
             Resultado do processamento em lote
@@ -626,7 +650,7 @@ class CobrancasService:
                 # Verificar se já existe cobrança para este período
                 existe = self.supabase.table("cobrancas").select("id").eq(
                     "beneficiario_id", benef["id"]
-                ).eq("mes", mes).eq("ano", ano).execute()
+                ).eq("mes", mes_referencia).eq("ano", ano_referencia).execute()
 
                 if existe.data:
                     ja_existentes_count += 1
@@ -641,7 +665,7 @@ class CobrancasService:
                 # Buscar fatura do beneficiário para o período
                 fatura_result = self.supabase.table("faturas").select("id").eq(
                     "uc_id", benef["uc_id"]
-                ).eq("mes_referencia", mes).eq("ano_referencia", ano).execute()
+                ).eq("mes_referencia", mes_referencia).eq("ano_referencia", ano_referencia).execute()
 
                 if not fatura_result.data:
                     erro_count += 1

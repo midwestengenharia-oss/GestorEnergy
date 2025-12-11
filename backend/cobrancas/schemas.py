@@ -108,16 +108,18 @@ class CobrancaResponse(BaseModel):
     usina_id: Optional[int] = None
 
     # Tipo e referência
-    tipo: str
+    tipo: Optional[str] = None
     mes: int  # Coluna real do banco
     ano: int  # Coluna real do banco
     referencia_formatada: Optional[str] = None
 
-    # Valores
-    valor_energia_injetada: Decimal
-    desconto_percentual: Decimal
-    valor_desconto: Decimal
-    valor_final: Decimal
+    # Valores - campos legados opcionais
+    valor_energia_injetada: Optional[Decimal] = None
+    desconto_percentual: Optional[Decimal] = None
+    valor_desconto: Optional[Decimal] = None
+
+    # Mapeia 'valor_total' do banco para 'valor_final' no schema
+    valor_final: Optional[Decimal] = Field(None, alias="valor_total")
 
     # Pagamento
     valor_pago: Optional[Decimal] = None
@@ -126,7 +128,9 @@ class CobrancaResponse(BaseModel):
 
     # Status e datas
     status: str
-    data_vencimento: date
+
+    # Mapeia 'vencimento' do banco para 'data_vencimento' no schema
+    data_vencimento: Optional[date] = Field(None, alias="vencimento")
     data_emissao: Optional[date] = None
 
     # PIX/Boleto
@@ -147,6 +151,7 @@ class CobrancaResponse(BaseModel):
 
     class Config:
         from_attributes = True
+        populate_by_name = True  # Permite popular tanto pelo nome do campo quanto pelo alias
 
     def __init__(self, **data):
         super().__init__(**data)

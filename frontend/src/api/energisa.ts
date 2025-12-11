@@ -12,6 +12,13 @@ export interface LoginStartResponse {
         cdc?: number;
         posicao?: number;
     }>;
+    listaEmail: Array<{
+        email: string;
+        codigoEmpresaWeb?: number;
+        cdc?: number;
+        digitoVerificador?: number;
+        posicao?: number;
+    }>;
 }
 
 export interface UcEnergisa {

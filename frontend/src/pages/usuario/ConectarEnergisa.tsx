@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { energisaApi, UcEnergisa } from '../../api/energisa';
 import { ucsApi } from '../../api/ucs';
+import { UnidadeConsumidora } from '../../api/types';
 import {
     Zap,
     Phone,
@@ -59,7 +60,10 @@ export function ConectarEnergisa() {
     const [codigoSms, setCodigoSms] = useState('');
     const [ucsEnergisa, setUcsEnergisa] = useState<UcEnergisa[]>([]);
     const [ucsSelecionadas, setUcsSelecionadas] = useState<number[]>([]);
+    const [ucsJaVinculadas, setUcsJaVinculadas] = useState<UnidadeConsumidora[]>([]);
+    const [mapaUcVinculada, setMapaUcVinculada] = useState<Map<number, UnidadeConsumidora>>(new Map());
     const [ucsVinculadas, setUcsVinculadas] = useState<number>(0);
+    const [ucsDesvinculadas, setUcsDesvinculadas] = useState<number>(0);
 
     // Formatar CPF
     const formatarCpf = (value: string) => {
@@ -78,6 +82,16 @@ export function ConectarEnergisa() {
             return `(**) *****-${limpo.slice(-4)}`;
         }
         return tel;
+    };
+
+    // Comparar UC da Energisa com UC vinculada
+    const saoUcsIguais = (ucEnergisa: UcEnergisa, ucVinculada: UnidadeConsumidora): boolean => {
+        const codEmpresa = ucEnergisa.codigoEmpresaWeb ?? 6;
+        return (
+            codEmpresa === ucVinculada.cod_empresa &&
+            ucEnergisa.numeroUc === ucVinculada.cdc &&
+            ucEnergisa.digitoVerificador === ucVinculada.digito_verificador
+        );
     };
 
     // Step 1: Iniciar login
@@ -138,9 +152,30 @@ export function ConectarEnergisa() {
 
             await energisaApi.loginFinish(transactionId, codigoSms);
 
-            // Buscar UCs
+            // Buscar UCs da Energisa
             const ucsResponse = await energisaApi.listarUcs(cpf);
-            setUcsEnergisa(ucsResponse.data || []);
+            const ucsEnergisaList = ucsResponse.data || [];
+            setUcsEnergisa(ucsEnergisaList);
+
+            // Buscar UCs já vinculadas no banco
+            const vinculadasResponse = await ucsApi.minhas();
+            const vinculadas = vinculadasResponse.data.ucs || [];
+            setUcsJaVinculadas(vinculadas);
+
+            // Comparar e pré-selecionar UCs já vinculadas
+            const indicesSelecionados: number[] = [];
+            const mapa = new Map<number, UnidadeConsumidora>();
+
+            ucsEnergisaList.forEach((ucEnergisa, indice) => {
+                const ucVinculada = vinculadas.find(uc => saoUcsIguais(ucEnergisa, uc));
+                if (ucVinculada) {
+                    indicesSelecionados.push(indice);
+                    mapa.set(indice, ucVinculada);
+                }
+            });
+
+            setUcsSelecionadas(indicesSelecionados);
+            setMapaUcVinculada(mapa);
             setStep('ucs');
         } catch (err: any) {
             console.error('Erro ao validar SMS:', err);
@@ -150,24 +185,45 @@ export function ConectarEnergisa() {
         }
     };
 
-    // Step 4: Vincular UCs selecionadas
+    // Step 4: Sincronizar UCs (vincular/desvincular)
     const vincularUcs = async () => {
-        if (ucsSelecionadas.length === 0) {
-            setError('Selecione pelo menos uma UC');
-            return;
-        }
-
         try {
             setLoading(true);
             setError(null);
 
-            let vinculadas = 0;
             const cpfLimpo = cpf.replace(/\D/g, '');
+            let vinculadas = 0;
+            let desvinculadas = 0;
 
-            for (const ucIndex of ucsSelecionadas) {
+            // 1. Identificar UCs para DESVINCULAR (estavam no mapa mas não estão mais selecionadas)
+            const indicesParaDesvincular: number[] = [];
+            mapaUcVinculada.forEach((ucVinculada, indice) => {
+                if (!ucsSelecionadas.includes(indice)) {
+                    indicesParaDesvincular.push(indice);
+                }
+            });
+
+            // 2. Desvincular UCs desmarcadas
+            for (const indice of indicesParaDesvincular) {
+                const ucVinculada = mapaUcVinculada.get(indice);
+                if (ucVinculada) {
+                    try {
+                        console.log(`Desvinculando UC ${ucVinculada.id} (${ucVinculada.cod_empresa}/${ucVinculada.cdc}-${ucVinculada.digito_verificador})`);
+                        await ucsApi.desvincular(ucVinculada.id);
+                        desvinculadas++;
+                    } catch (err: any) {
+                        console.warn(`Erro ao desvincular UC ${ucVinculada.id}:`, err);
+                    }
+                }
+            }
+
+            // 3. Identificar UCs para VINCULAR (estão selecionadas mas não estavam no mapa)
+            const indicesParaVincular = ucsSelecionadas.filter(indice => !mapaUcVinculada.has(indice));
+
+            // 4. Vincular UCs novas
+            for (const ucIndex of indicesParaVincular) {
                 const uc = ucsEnergisa[ucIndex];
                 try {
-                    // Garante que os valores sejam números válidos (0 é válido)
                     const codEmpresa = uc.codigoEmpresaWeb ?? 6;
                     const numeroUc = uc.numeroUc ?? 0;
                     const digito = uc.digitoVerificador ?? 0;
@@ -189,7 +245,7 @@ export function ConectarEnergisa() {
                         longitude: uc.longitude,
                         classe_leitura: uc.classeLeitura,
                         grupo_leitura: uc.grupoLeitura,
-                        is_geradora: uc.geracaoDistribuida != null, // Se tem valor, é geradora
+                        is_geradora: uc.geracaoDistribuida != null,
                     });
 
                     // Sincroniza faturas automaticamente após vincular
@@ -200,7 +256,6 @@ export function ConectarEnergisa() {
                             console.log(`Faturas sincronizadas para UC ${response.data.id}`);
                         } catch (syncErr: any) {
                             console.warn(`Aviso: Não foi possível sincronizar faturas da UC ${response.data.id}:`, syncErr);
-                            // Não falha a vinculação se a sincronização falhar
                         }
                     }
 
@@ -210,7 +265,9 @@ export function ConectarEnergisa() {
                 }
             }
 
+            // Armazena resultados para exibir na tela de sucesso
             setUcsVinculadas(vinculadas);
+            setUcsDesvinculadas(desvinculadas);
             setStep('sucesso');
         } catch (err: any) {
             console.error('Erro ao vincular UCs:', err);
@@ -257,6 +314,8 @@ export function ConectarEnergisa() {
         setCodigoSms('');
         setUcsEnergisa([]);
         setUcsSelecionadas([]);
+        setUcsJaVinculadas([]);
+        setMapaUcVinculada(new Map());
     };
 
     return (
@@ -574,6 +633,14 @@ export function ConectarEnergisa() {
                             <p className="text-slate-500 dark:text-slate-400">
                                 Encontramos {ucsEnergisa.length} UC(s) no seu CPF
                             </p>
+                            {mapaUcVinculada.size > 0 && (
+                                <div className="mt-3 inline-flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                    <CheckCircle className="text-blue-500" size={16} />
+                                    <span className="text-sm text-blue-700 dark:text-blue-400">
+                                        {mapaUcVinculada.size} UC(s) já vinculada(s) • {ucsEnergisa.length - mapaUcVinculada.size} nova(s)
+                                    </span>
+                                </div>
+                            )}
                         </div>
 
                         {ucsEnergisa.length > 0 && (
@@ -623,6 +690,16 @@ export function ConectarEnergisa() {
                                                     <p className="font-medium text-slate-900 dark:text-white">
                                                         UC {uc.codigoEmpresaWeb}/{uc.numeroUc}-{uc.digitoVerificador}
                                                     </p>
+                                                    {mapaUcVinculada.has(index) && (
+                                                        <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded font-medium">
+                                                            JÁ VINCULADA
+                                                        </span>
+                                                    )}
+                                                    {uc.ucAtiva === false && (
+                                                        <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded font-medium">
+                                                            INATIVA
+                                                        </span>
+                                                    )}
                                                     {uc.geracaoDistribuida != null && (
                                                         <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">
                                                             GD
@@ -682,6 +759,16 @@ export function ConectarEnergisa() {
                                                     <p className="font-medium text-slate-900 dark:text-white">
                                                         UC {uc.codigoEmpresaWeb}/{uc.numeroUc}-{uc.digitoVerificador}
                                                     </p>
+                                                    {mapaUcVinculada.has(index) && (
+                                                        <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded font-medium">
+                                                            JÁ VINCULADA
+                                                        </span>
+                                                    )}
+                                                    {uc.ucAtiva === false && (
+                                                        <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded font-medium">
+                                                            INATIVA
+                                                        </span>
+                                                    )}
                                                     {uc.geracaoDistribuida != null && (
                                                         <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">
                                                             GD
@@ -747,18 +834,18 @@ export function ConectarEnergisa() {
                             </button>
                             <button
                                 onClick={vincularUcs}
-                                disabled={loading || ucsSelecionadas.length === 0}
+                                disabled={loading}
                                 className="flex-1 flex items-center justify-center gap-2 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? (
                                     <>
                                         <Loader2 size={20} className="animate-spin" />
-                                        Vinculando...
+                                        Sincronizando...
                                     </>
                                 ) : (
                                     <>
-                                        <Plus size={20} />
-                                        Vincular {ucsSelecionadas.length} UC(s)
+                                        <RefreshCw size={20} />
+                                        Sincronizar UCs
                                     </>
                                 )}
                             </button>

@@ -16,6 +16,12 @@ venv/
 backend/sessions/
 sessions/
 
+# Test data and mocks
+responses/
+gestor_faturas/
+test_*.py
+test_*.html
+
 # Node
 node_modules/
 dist/

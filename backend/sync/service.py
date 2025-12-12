@@ -14,6 +14,7 @@ import re
 from backend.core.database import SupabaseClient
 from backend.energisa.service import EnergisaService
 from backend.energisa.session_manager import SessionManager
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +311,16 @@ class SyncService:
             if not faturas:
                 logger.debug(f"      ℹ️ Nenhuma fatura encontrada para UC {cdc}")
                 return 0
+
+            # Limita ao número máximo de faturas configurado (mais recentes)
+            total_faturas_disponiveis = len(faturas)
+            faturas = faturas[:settings.SYNC_MAX_FATURAS_POR_UC]
+
+            if total_faturas_disponiveis > settings.SYNC_MAX_FATURAS_POR_UC:
+                logger.debug(
+                    f"      ⚡ Processando {len(faturas)} de {total_faturas_disponiveis} "
+                    f"faturas disponíveis (limite: {settings.SYNC_MAX_FATURAS_POR_UC})"
+                )
 
             faturas_salvas = 0
 

@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     MAX_BENEFICIARIOS_POR_USINA: int = 100
     MAX_UCS_POR_USUARIO: int = 50
 
+    # ========================
+    # Sincronização de Faturas
+    # ========================
+    SYNC_MAX_FATURAS_POR_UC: int = 3  # Número máximo de faturas a verificar por UC em cada sincronização
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -309,29 +309,35 @@ class FaturaExtraidaSchema(BaseModel):
         """
         Detecta o modelo de geração distribuída (GD I ou GD II)
 
-        Lógica:
-        1. Se tem ajuste Lei 14.300 com valor → GD II
-        2. Se algum item de energia injetada tem tipo_gd=GDII → GD II
-        3. Se algum item tem tipo_gd=GDI → GD I
-        4. Senão → DESCONHECIDO
+        Lógica (alinhada com N8N):
+        1. Verifica tipo_gd dos itens de energia injetada (prioridade)
+        2. Valida ajuste Lei 14.300 verificando descrição
+        3. Senão → DESCONHECIDO
         """
-        # Verifica ajuste Lei 14.300 (GD II)
-        if self.itens_fatura.ajuste_lei_14300 and self.itens_fatura.ajuste_lei_14300.valor:
-            return "GDII"
+        import re
 
-        # Verifica itens de energia injetada
+        # Verifica itens de energia injetada (prioridade)
         todos_itens = (
             self.itens_fatura.energia_injetada_ouc +
             self.itens_fatura.energia_injetada_muc
         )
 
+        # Primeiro verifica se algum item tem tipo_gd=GDII
         for item in todos_itens:
             if item.tipo_gd == "GDII":
                 return "GDII"
 
+        # Depois verifica se algum item tem tipo_gd=GDI
         for item in todos_itens:
             if item.tipo_gd == "GDI":
                 return "GDI"
+
+        # Verifica ajuste Lei 14.300 COM VALIDAÇÃO de descrição
+        if self.itens_fatura.ajuste_lei_14300 and self.itens_fatura.ajuste_lei_14300.valor:
+            desc = self.itens_fatura.ajuste_lei_14300.descricao or ""
+            # Só considera GD II se descrição menciona Lei 14.300 ou GDII
+            if re.search(r'Lei\s*14\.?300|GDII|GD\s*II', desc, re.IGNORECASE):
+                return "GDII"
 
         return "DESCONHECIDO"
 

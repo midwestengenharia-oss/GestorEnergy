@@ -1,31 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker-compose restart:*)",
-      "Bash(docker-compose ps:*)",
-      "Bash(docker logs:*)",
-      "Bash(npm run dev:*)",
-      "Bash(netstat:*)",
-      "Bash(findstr:*)",
-      "Bash(taskkill:*)",
       "Bash(cat:*)",
-      "Bash(python -c:*)",
-      "Bash(python:*)",
-      "Bash(npm run build:*)",
-      "Bash(git pull:*)",
-      "Bash(git add:*)",
-      "Bash(docker exec:*)",
-      "Bash(docker-compose up:*)",
-      "Bash(test:*)",
-      "Bash(docker-compose build:*)",
-      "Bash(docker-compose down:*)",
-      "Bash(timeout /t 30 /nobreak)",
-      "Bash(nul)",
-      "Bash(timeout /t 20 /nobreak)",
-      "Bash(docker version:*)",
-      "Bash(timeout /t 5 /nobreak)"
-    ],
-    "deny": [],
-    "ask": []
+      "Bash(python -m pytest:*)",
+      "Bash(pip install:*)"
+    ]
   }
 }

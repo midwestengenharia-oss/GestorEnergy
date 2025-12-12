@@ -2,12 +2,15 @@
 Cobranças Service - Lógica de negócio para Cobranças
 """
 
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 from decimal import Decimal
 from ..core.database import get_supabase_admin
 from ..core.exceptions import NotFoundError, ValidationError, ForbiddenError
 from .schemas import StatusCobranca, TipoCobranca
+
+logger = logging.getLogger(__name__)
 
 
 class CobrancasService:

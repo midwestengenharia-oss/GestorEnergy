@@ -153,89 +153,199 @@ class OpenAIParser:
             raise
 
     def _criar_prompt(self, texto: str) -> str:
-        """Cria o prompt para o OpenAI"""
-        return f"""Extraia os seguintes dados desta fatura de energia elétrica e retorne um JSON:
+        """Cria o prompt para o OpenAI - Versão alinhada com n8n"""
+        return f"""Você é um extrator rigoroso de dados de faturas de energia recebendo como entrada texto cru obtido de OCR/parsers. Sua tarefa é identificar, normalizar e estruturar os campos abaixo exatamente no formato JSON especificado.
+
+Regras:
+
+Campos ausentes → null.
+Datas → YYYY-MM-DD. Mês/ano → YYYY-MM.
+Números → ponto decimal (ex.: 99.90). Não inclua "R$". Preserve sinal (linhas de energia injetada geralmente são negativas no "Valor").
+ligacao ∈ MONOFASICO|BIFASICO|TRIFASICO|null.
+tipo_gd ∈ GDI|GDII|NENHUM|DESCONHECIDO|null. Detecte "GD I/GDI" e "GD II/GDII" (variações de espaço/caixa).
 
 TEXTO DA FATURA:
 {texto}
 
-RETORNE UM JSON COM ESTA ESTRUTURA EXATA:
+Coleta de dados:
+
+Código do Cliente → Geralmente número no padrão 6/XXXXXXXX-X (ex.: 6/4998834-8).
+
+Tipo de ligação → a partir de LIGAÇÃO (ex.: MONOFASICO, BIFASICO ou TRIFASICO).
+
+Mês e ano de referência → extraia e normalize (ex.: "Setembro / 2025" → 2025-09).
+
+Datas → data de apresentação, data de vencimento, data da leitura atual, data da leitura anterior, data da próxima leitura e quantidade de dias.
+
+Leituras → valores em kWh da leitura anterior e da leitura atual.
+
+Itens da fatura:
+
+Quadro típico com colunas:
+[Descrição] | Unid. | Quant. | Preço unit (R$) com tributos | Valor (R$) | PIS/COFINS (R$) - Evitar utilizar | Base Calc. ICMS (R$) - Evitar utilizar | % Alíq. ICMS - Evitar utilizar | ICMS (R$) - Evitar utilizar | Tarifa Unit (R$) - Evitar utilizar
+
+Consumo:
+
+Linha "Consumo em kWh" → {{ unidade, quantidade, preco_unit_com_tributos, valor }}.
+
+Energia Injetada (múltiplas linhas, oUC e mUC, de meses distintos):
+
+Reconhecer descrições tipo: "Energia Atv/Ativa Injetada ...", com marcações "GDII/GDI", e escopo "oUC" ou "mUC", possivelmente com referência de mês "... 9/2025 ...", "... 07/2025 ...".
+
+Classificação por token com limites de palavra:
+• oUC → regex: \\b[oO]\\s?UC\\b (aceitar "oUC", "o UC", "OUC").
+• mUC → regex: \\b[mM]\\s?UC\\b (aceitar "mUC", "m UC", "MUC").
+
+Para cada linha encontrada, crie um item:
 {{
-  "codigo_cliente": "string (ex: 6/5036150-0)",
-  "ligacao": "string (MONOFASICO, BIFASICO ou TRIFASICO)",
-  "data_apresentacao": "string (formato YYYY-MM-DD)",
-  "mes_ano_referencia": "string (formato YYYY-MM, ex: 2024-11)",
-  "vencimento": "string (formato YYYY-MM-DD)",
-  "total_a_pagar": "number (decimal)",
-  "leitura_anterior_data": "string (formato YYYY-MM-DD ou null)",
-  "leitura_atual_data": "string (formato YYYY-MM-DD ou null)",
-  "dias": "number (quantidade de dias do período)",
-  "proxima_leitura_data": "string (formato YYYY-MM-DD ou null)",
+"descricao": "string original do item",
+"tipo_gd": "GDI|GDII|NENHUM|DESCONHECIDO|null",
+"unidade": "KWH|null",
+"quantidade": number|null,
+"preco_unit_com_tributos": number|null,
+"valor": number|null,
+"mes_ano_referencia_item": "YYYY-MM|null"
+}}
+
+Separe SEMPRE em listas:
+itens_fatura["energia_injetada oUC"]: []
+itens_fatura["energia_injetada mUC"]: []
+
+tipo_gd: se a linha mencionar GD II/GDII → GDII; se GD I/GDI → GDI. Sem evidência → DESCONHECIDO.
+
+IMPORTANTE - DIFERENCIAÇÃO BANDEIRA vs AJUSTE LEI 14.300:
+
+NÃO CONFUNDIR:
+
+| Item | Vai para | Exemplos de descrição |
+|------|----------|----------------------|
+| Bandeira Tarifária | totais.adicionais_bandeira | "Adic. B. Vermelha", "Adic. B. Amarela", "Adic Bandeira Vermelha", "Bandeira Tarifária" |
+| Ajuste Lei 14.300 | itens_fatura.ajuste_lei_14300 | "Ajuste GDII - TRF Reduzida(Lei 14.300/22)", "Ajuste GD II - Tarifa Reduzida Lei 14.300" |
+
+REGRAS:
+1. ajuste_lei_14300 SOMENTE se a descrição contiver:
+   - "Lei 14.300" OU
+   - "TRF Reduzida" OU
+   - "Tarifa Reduzida" OU
+   - "GDII" junto com "Ajuste"
+
+2. Itens com "Bandeira" ou "B. Vermelha/Amarela/Verde" → SEMPRE vão para totais.adicionais_bandeira
+
+3. Se a fatura for GD I (não tem ajuste 14.300), o campo ajuste_lei_14300 deve ter todos os valores como null
+
+Ajuste Lei 14.300/22 (SOMENTE GDII – tarifa reduzida):
+
+Linhas tipo: "Ajuste GDII - TRF Reduzida (Lei 14.300/22) - ...".
+Preencher itens_fatura.ajuste_lei_14300: {{ descricao, unidade, quantidade, preco_unit_com_tributos, valor }}.
+
+Lançamentos e Serviços:
+
+Capturar todas as linhas do bloco "LANÇAMENTOS E SERVIÇOS" (ex.: "Contrib de Ilum Pub", "JUROS DE MORA …", "MULTA …", etc.).
+itens_fatura.lancamentos_e_servicos = lista de {{ descricao, valor }} com sinal conforme a fatura.
+totais.lancamentos_e_servicos = soma dos valores em itens_fatura.lancamentos_e_servicos.
+
+TOTAIS
+
+totais.adicionais_bandeira: soma de itens com "Bandeira" no nome (0 se não houver). NUNCA colocar ajuste Lei 14.300 aqui.
+totais.total_geral_fatura: valor total geral exibido (preferir "TOTAL A PAGAR", senão "VALOR COBRADO/VALOR DO DOCUMENTO").
+
+QUADRO ATENÇÃO (se existir)
+
+quadro_atencao.saldo_acumulado (ex.: "Saldo Acumulado: 140" → 140.00)
+quadro_atencao.a_expirar_proximo_ciclo (ex.: "A expirar no próximo ciclo: 0" → 0.00)
+
+MÉDIA DOS ÚLTIMOS 13 MESES (se existir)
+
+Ler "CONSUMO DOS ÚLTIMOS 13 MESES". Converter "SET/25" → 2025-09, "AGO/25" → 2025-08, etc.
+media_consumo_13m.meses = lista (ordem cronológica quando claro, senão a da fatura).
+media_consumo_13m.media_kwh = média simples dos kWh capturados (se nenhum mês for numérico, null).
+
+Não invente. Não explique. Apenas JSON com as chaves especificadas.
+
+Formato de resposta JSON
+
+{{
+  "codigo_cliente": "string|null",
+  "ligacao": "MONOFASICO|BIFASICO|TRIFASICO|null",
+  "data_apresentacao": "string|null",
+  "mes_ano_referencia": "string|null",
+  "vencimento": "string|null",
+  "total_a_pagar": "number|null",
+
+  "leitura_anterior_data": "string|null",
+  "leitura_atual_data": "string|null",
+  "dias": "number|null",
+  "proxima_leitura_data": "string|null",
+  "leitura_anterior": "number|null",
+  "leitura_atual": "number|null",
+
   "itens_fatura": {{
     "consumo_kwh": {{
-      "descricao": "string",
-      "quantidade": "number",
-      "preco_unitario": "number",
-      "valor": "number"
+      "unidade": "string|null",
+      "quantidade": "number|null",
+      "preco_unit_com_tributos": "number|null",
+      "valor": "number|null"
     }},
-    "energia_injetada_ouc": [
+    "energia_injetada oUC": [
       {{
-        "descricao": "string",
-        "quantidade": "number",
-        "preco_unitario": "number",
-        "valor": "number"
+        "descricao": "string|null",
+        "tipo_gd": "GDI|GDII|NENHUM|DESCONHECIDO|null",
+        "unidade": "string|null",
+        "quantidade": "number|null",
+        "preco_unit_com_tributos": "number|null",
+        "valor": "number|null",
+        "mes_ano_referencia_item": "string|null"
       }}
     ],
-    "energia_injetada_muc": [
+    "energia_injetada mUC": [
       {{
-        "descricao": "string",
-        "quantidade": "number",
-        "preco_unitario": "number",
-        "valor": "number"
+        "descricao": "string|null",
+        "tipo_gd": "GDI|GDII|NENHUM|DESCONHECIDO|null",
+        "unidade": "string|null",
+        "quantidade": "number|null",
+        "preco_unit_com_tributos": "number|null",
+        "valor": "number|null",
+        "mes_ano_referencia_item": "string|null"
       }}
     ],
     "ajuste_lei_14300": {{
-      "descricao": "string",
-      "quantidade": "number",
-      "preco_unitario": "number",
-      "valor": "number"
+      "descricao": "string|null",
+      "unidade": "string|null",
+      "quantidade": "number|null",
+      "preco_unit_com_tributos": "number|null",
+      "valor": "number|null"
     }},
     "lancamentos_e_servicos": [
       {{
-        "descricao": "string",
-        "valor": "number"
+        "descricao": "string|null",
+        "valor": "number|null"
       }}
     ]
   }},
+
   "totais": {{
-    "itens": "number",
-    "adicionais_bandeira": "number",
-    "total": "number"
+    "adicionais_bandeira": "number|null",
+    "lancamentos_e_servicos": "number|null",
+    "total_geral_fatura": "number|null"
   }},
-  "historico_gd": [
-    {{
-      "mes_ano": "string (MM/YYYY)",
-      "saldo_anterior": "number",
-      "creditos_mes": "number",
-      "energia_compensada": "number",
-      "energia_injetada": "number",
-      "saldo_final": "number"
-    }}
-  ]
+
+  "quadro_atencao": {{
+    "saldo_acumulado": "number|null",
+    "a_expirar_proximo_ciclo": "number|null"
+  }},
+
+  "media_consumo_13m": {{
+    "media_kwh": "number|null",
+    "meses": [
+      {{
+        "mes": "string|null",
+        "kwh": "number|null"
+      }}
+    ]
+  }}
 }}
 
-INSTRUÇÕES IMPORTANTES:
-- Se um campo não for encontrado, use null
-- Para valores monetários, use apenas números (ex: 123.45, não "R$ 123,45")
-- Para datas, use formato YYYY-MM-DD
-- Para mes_ano_referencia, extraia do formato "Referência: NOVEMBRO/2024" → "2024-11"
-- Para tipo de ligação, procure por "BIFASICO", "MONOFASICO" ou "TRIFASICO"
-- Energia injetada pode estar como "ENERGIA ATIVA INJETADA oUC" (outras unidades consumidoras) ou "mUC" (mesma unidade)
-- Ajuste Lei 14.300 indica modelo GD II
-- Extraia TODOS os lançamentos e serviços listados
-- Para histórico GD, se houver tabela com meses anteriores, extraia todos os dados
-
-Retorne APENAS o JSON, sem texto adicional."""
+JSON"""
 
 
 def criar_extrator_llm():

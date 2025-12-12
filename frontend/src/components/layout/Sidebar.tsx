@@ -23,6 +23,7 @@ import {
     PlugZap,
     Sun,
     RefreshCw,
+    Kanban,
 } from 'lucide-react';
 import { usePerfil, PERFIL_LABELS, PERFIL_CORES } from '../../contexts/PerfilContext';
 import type { PerfilTipo } from '../../api/types';
@@ -93,9 +94,9 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
         {
             title: 'Gestão',
             items: [
+                { label: 'Kanban Faturas', path: '/app/gestor/kanban', icon: Kanban },
                 { label: 'Usinas', path: '/app/gestor/usinas', icon: Building2 },
                 { label: 'UCs Gerenciadas', path: '/app/usuario/ucs', icon: Zap },
-                { label: 'Faturas', path: '/app/usuario/faturas', icon: FileText },
                 { label: 'Beneficiários', path: '/app/gestor/beneficiarios', icon: Users },
                 { label: 'Rateio', path: '/app/gestor/rateio', icon: PieChart },
             ],
@@ -104,7 +105,7 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
             title: 'Financeiro',
             items: [
                 { label: 'Cobranças', path: '/app/gestor/cobrancas', icon: FileText },
-                { label: 'Cobranças Automáticas', path: '/app/gestor/cobrancas-automaticas', icon: Zap },
+                { label: 'Gerar Relatórios', path: '/app/gestor/cobrancas-automaticas', icon: Zap },
                 { label: 'Financeiro', path: '/app/gestor/financeiro', icon: Wallet },
                 { label: 'Contratos', path: '/app/gestor/contratos', icon: FileSignature },
             ],

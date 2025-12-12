@@ -44,6 +44,12 @@ interface FaturaDisponivel {
         nome: string;
     };
     uc_formatada?: string;
+    // Campos enriquecidos da extração
+    consumo_kwh?: number;
+    injetada_kwh?: number;
+    tipo_gd?: 'GDI' | 'GDII' | null;
+    bandeira_valor?: number;
+    valor_fatura?: number;
 }
 
 export function CobrancasAutomaticas() {
@@ -593,47 +599,103 @@ export function CobrancasAutomaticas() {
                     </div>
 
                     {/* Lista de Faturas */}
-                    <div className="space-y-2 mb-6 max-h-96 overflow-y-auto">
+                    <div className="space-y-2 mb-6 max-h-[500px] overflow-y-auto">
                         {faturasDisponiveis.map((fatura) => (
                             <label
                                 key={fatura.id}
-                                className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition ${
+                                className={`block p-4 border rounded-lg cursor-pointer transition ${
                                     faturasSelecionadas.has(fatura.id)
                                         ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                                         : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900'
                                 }`}
                             >
-                                <input
-                                    type="checkbox"
-                                    checked={faturasSelecionadas.has(fatura.id)}
-                                    onChange={() => toggleFatura(fatura.id)}
-                                    className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                                />
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <span className="font-medium text-slate-900 dark:text-white">
-                                            {fatura.beneficiario?.nome || 'Beneficiário não identificado'}
-                                        </span>
-                                        <span className="text-sm text-slate-500">
-                                            Fatura #{fatura.numero_fatura || fatura.id}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
-                                        <span>UC: {fatura.uc_formatada || `ID ${fatura.uc_id}`}</span>
-                                        {fatura.extracao_status && (
-                                            <span className={`px-2 py-0.5 rounded text-xs ${
-                                                fatura.extracao_status === 'CONCLUIDA'
-                                                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                                    : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                                            }`}>
-                                                {fatura.extracao_status}
-                                            </span>
-                                        )}
-                                        {fatura.extracao_score && (
-                                            <span className="text-xs">
-                                                Score: {fatura.extracao_score}/100
-                                            </span>
-                                        )}
+                                <div className="flex items-start gap-4">
+                                    <input
+                                        type="checkbox"
+                                        checked={faturasSelecionadas.has(fatura.id)}
+                                        onChange={() => toggleFatura(fatura.id)}
+                                        className="w-5 h-5 mt-1 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                    />
+                                    <div className="flex-1">
+                                        {/* Header da fatura */}
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-medium text-slate-900 dark:text-white">
+                                                    {fatura.beneficiario?.nome || 'Beneficiário não identificado'}
+                                                </span>
+                                                <span className="text-sm text-slate-500">
+                                                    UC: {fatura.uc_formatada || `ID ${fatura.uc_id}`}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {fatura.tipo_gd && (
+                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                        fatura.tipo_gd === 'GDI'
+                                                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                                                            : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                                                    }`}>
+                                                        {fatura.tipo_gd}
+                                                    </span>
+                                                )}
+                                                {fatura.extracao_status && (
+                                                    <span className={`px-2 py-0.5 rounded text-xs ${
+                                                        fatura.extracao_status === 'CONCLUIDA'
+                                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                                            : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                                                    }`}>
+                                                        {fatura.extracao_status}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Grid de dados extraídos */}
+                                        <div className="grid grid-cols-5 gap-4 text-sm">
+                                            <div>
+                                                <span className="text-xs text-slate-400 dark:text-slate-500">Consumo</span>
+                                                <div className="font-medium text-slate-700 dark:text-slate-300">
+                                                    {fatura.consumo_kwh ? `${fatura.consumo_kwh.toLocaleString('pt-BR')} kWh` : '-'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-xs text-slate-400 dark:text-slate-500">Injetada</span>
+                                                <div className="font-medium text-slate-700 dark:text-slate-300">
+                                                    {fatura.injetada_kwh ? `${fatura.injetada_kwh.toLocaleString('pt-BR')} kWh` : '-'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-xs text-slate-400 dark:text-slate-500">Bandeira</span>
+                                                <div className={`font-medium ${
+                                                    fatura.bandeira_valor && fatura.bandeira_valor > 0
+                                                        ? 'text-red-600 dark:text-red-400'
+                                                        : 'text-slate-700 dark:text-slate-300'
+                                                }`}>
+                                                    {fatura.bandeira_valor !== undefined && fatura.bandeira_valor !== null
+                                                        ? `R$ ${fatura.bandeira_valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                                        : '-'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-xs text-slate-400 dark:text-slate-500">Total Fatura</span>
+                                                <div className="font-medium text-slate-700 dark:text-slate-300">
+                                                    {fatura.valor_fatura
+                                                        ? `R$ ${fatura.valor_fatura.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                                        : '-'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-xs text-slate-400 dark:text-slate-500">Score</span>
+                                                <div className={`font-medium ${
+                                                    fatura.extracao_score && fatura.extracao_score >= 90
+                                                        ? 'text-green-600 dark:text-green-400'
+                                                        : fatura.extracao_score && fatura.extracao_score >= 70
+                                                            ? 'text-yellow-600 dark:text-yellow-400'
+                                                            : 'text-slate-700 dark:text-slate-300'
+                                                }`}>
+                                                    {fatura.extracao_score ? `${fatura.extracao_score}/100` : '-'}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </label>

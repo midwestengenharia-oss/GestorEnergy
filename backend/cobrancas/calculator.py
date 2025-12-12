@@ -275,7 +275,17 @@ class CobrancaCalculator:
         """Calcula valores extras (bandeiras, iluminação, serviços)"""
 
         # Bandeiras
-        resultado.bandeiras_valor = dados.totais.adicionais_bandeira or Decimal("0")
+        bandeiras = dados.totais.adicionais_bandeira or Decimal("0")
+
+        # Fallback: se ajuste_lei_14300 tem descrição de bandeira, usar esse valor
+        # Isso acontece quando a extração por IA coloca bandeira no campo errado
+        if bandeiras == Decimal("0") and dados.itens_fatura.ajuste_lei_14300:
+            desc = (dados.itens_fatura.ajuste_lei_14300.descricao or "").lower()
+            if "bandeira" in desc or "b. verm" in desc or "b. amar" in desc or "b. verde" in desc:
+                bandeiras = abs(dados.itens_fatura.ajuste_lei_14300.valor or Decimal("0"))
+                logger.info(f"Fallback: Bandeira detectada em ajuste_lei_14300: R$ {bandeiras:.2f}")
+
+        resultado.bandeiras_valor = bandeiras
 
         # Iluminação pública
         resultado.iluminacao_publica_valor = dados.extrair_valor_iluminacao_publica()

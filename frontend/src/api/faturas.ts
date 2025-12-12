@@ -137,7 +137,51 @@ export const faturasApi = {
                 ano_referencia: anoReferencia
             }
         }),
+
+    // Kanban de faturas
+    kanban: (params?: { usina_id?: number; mes_referencia?: number; ano_referencia?: number; busca?: string }) =>
+        api.get<KanbanResponse>('/faturas/kanban', { params }),
 };
+
+// Tipos para o Kanban
+export interface FaturaKanban {
+    id: number;
+    uc_id: number;
+    uc_formatada: string;
+    uc_apelido?: string;
+    numero_fatura?: string;
+    mes_referencia: number;
+    ano_referencia: number;
+    beneficiario: {
+        id: number;
+        nome: string;
+    };
+    usina_id?: number;
+    extracao_status?: string;
+    extracao_score?: number;
+    consumo_kwh?: number;
+    injetada_kwh?: number;
+    tipo_gd?: 'GDI' | 'GDII' | null;
+    valor_fatura?: number;
+    cobranca?: {
+        id: number;
+        status: string;
+    } | null;
+    tem_pdf: boolean;
+}
+
+export interface KanbanResponse {
+    sem_pdf: FaturaKanban[];
+    pdf_recebido: FaturaKanban[];
+    extraida: FaturaKanban[];
+    relatorio_gerado: FaturaKanban[];
+    totais: {
+        sem_pdf: number;
+        pdf_recebido: number;
+        extraida: number;
+        relatorio_gerado: number;
+    };
+}
 
 /**
  * Helper para download do PDF da fatura a partir do base64

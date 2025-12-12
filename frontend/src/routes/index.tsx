@@ -19,6 +19,7 @@ import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LogsAuditoria 
 import { DashboardProprietario } from '../pages/proprietario';
 import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor } from '../pages/gestor';
 import { CobrancasAutomaticas } from '../pages/gestor/CobrancasAutomaticas';
+import { KanbanFaturas } from '../pages/gestor/KanbanFaturas';
 import { DashboardBeneficiario } from '../pages/beneficiario';
 import { DashboardUsuario, MinhasUCs, FaturasUsuario, DetalheUC, ConectarEnergisa, GeracaoDistribuida } from '../pages/usuario';
 import { DashboardParceiro } from '../pages/parceiro';
@@ -227,6 +228,11 @@ export function AppRoutes() {
                 <Route path="gestor/cobrancas-automaticas" element={
                     <ProtectedRoute allowedPerfis={['gestor', 'superadmin', 'proprietario']}>
                         <CobrancasAutomaticas />
+                    </ProtectedRoute>
+                } />
+                <Route path="gestor/kanban" element={
+                    <ProtectedRoute allowedPerfis={['gestor', 'superadmin', 'proprietario']}>
+                        <KanbanFaturas />
                     </ProtectedRoute>
                 } />
                 <Route path="gestor/financeiro" element={

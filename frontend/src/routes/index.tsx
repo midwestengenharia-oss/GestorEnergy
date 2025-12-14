@@ -17,7 +17,7 @@ import { SignInPage, SignUpPage } from '../pages/auth';
 // Dashboards
 import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LeadDetail, LogsAuditoria } from '../pages/admin';
 import { DashboardProprietario, NovaUsina } from '../pages/proprietario';
-import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor } from '../pages/gestor';
+import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor, GestaoLeads as GestaoLeadsGestor, LeadDetail as LeadDetailGestor, KanbanLeads as KanbanLeadsGestor, ProcessamentoCobrancas } from '../pages/gestor';
 import { CobrancasAutomaticas } from '../pages/gestor/CobrancasAutomaticas';
 import { KanbanFaturas } from '../pages/gestor/KanbanFaturas';
 import { DashboardBeneficiario } from '../pages/beneficiario';
@@ -240,6 +240,11 @@ export function AppRoutes() {
                         <CobrancasAutomaticas />
                     </ProtectedRoute>
                 } />
+                <Route path="gestor/processar-cobrancas" element={
+                    <ProtectedRoute allowedPerfis={['gestor', 'superadmin', 'proprietario']}>
+                        <ProcessamentoCobrancas />
+                    </ProtectedRoute>
+                } />
                 <Route path="gestor/kanban" element={
                     <ProtectedRoute allowedPerfis={['gestor', 'superadmin', 'proprietario']}>
                         <KanbanFaturas />
@@ -253,6 +258,21 @@ export function AppRoutes() {
                 <Route path="gestor/contratos" element={
                     <ProtectedRoute allowedPerfis={['gestor']}>
                         <ContratosGestor />
+                    </ProtectedRoute>
+                } />
+                <Route path="gestor/leads" element={
+                    <ProtectedRoute allowedPerfis={['gestor', 'superadmin']}>
+                        <GestaoLeadsGestor />
+                    </ProtectedRoute>
+                } />
+                <Route path="gestor/leads/:id" element={
+                    <ProtectedRoute allowedPerfis={['gestor', 'superadmin']}>
+                        <LeadDetailGestor />
+                    </ProtectedRoute>
+                } />
+                <Route path="gestor/kanban-leads" element={
+                    <ProtectedRoute allowedPerfis={['gestor', 'superadmin']}>
+                        <KanbanLeadsGestor />
                     </ProtectedRoute>
                 } />
 

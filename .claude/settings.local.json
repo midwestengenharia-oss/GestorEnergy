@@ -5,7 +5,14 @@
       "Bash(python -m pytest:*)",
       "Bash(pip install:*)",
       "Bash(find:*)",
-      "Bash(ls -la \"C:\\Users\\Paulo Seze\\Documents\\Aplicações\\Nova pasta\\PROJETO_ENERGISA\\frontend\\src\\pages\\gestor\"\" 2>/dev/null || echo \"Directory not found \")"
+      "Bash(ls -la \"C:\\Users\\Paulo Seze\\Documents\\Aplicações\\Nova pasta\\PROJETO_ENERGISA\\frontend\\src\\pages\\gestor\"\" 2>/dev/null || echo \"Directory not found \")",
+      "Bash(wc:*)",
+      "Bash(dir:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(cd:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx vite build)",
+      "Bash(npm install)"
     ]
   }
 }

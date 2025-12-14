@@ -5,3 +5,7 @@ export { CobrancasGestor } from './CobrancasGestor';
 export { RateioGestor } from './RateioGestor';
 export { FinanceiroGestor } from './FinanceiroGestor';
 export { ContratosGestor } from './ContratosGestor';
+export { GestaoLeads } from './GestaoLeads';
+export { LeadDetail } from './LeadDetail';
+export { KanbanLeads } from './KanbanLeads';
+export { ProcessamentoCobrancas } from './ProcessamentoCobrancas';

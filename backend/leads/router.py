@@ -73,7 +73,7 @@ async def listar_leads(
     origem: Optional[str] = None,
     responsavel_id: Optional[str] = None,
     busca: Optional[str] = None,
-    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor", "parceiro"))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Lista leads com filtros e paginação"""
     return await service.listar(
@@ -105,7 +105,7 @@ async def funil_vendas(
 @router.get("/{lead_id}", response_model=LeadResponse)
 async def buscar_lead(
     lead_id: int,
-    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor", "parceiro"))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Busca lead por ID"""
     return await service.buscar(lead_id=lead_id)
@@ -128,7 +128,7 @@ async def atualizar_lead(
 async def registrar_contato(
     lead_id: int,
     data: LeadContatoRequest,
-    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor", "parceiro"))
+    current_user: CurrentUser = Depends(require_perfil("superadmin", "proprietario", "gestor"))
 ):
     """Registra contato com lead"""
     contato_data = data.model_dump()

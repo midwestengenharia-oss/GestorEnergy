@@ -24,6 +24,7 @@ import {
     Sun,
     RefreshCw,
     Kanban,
+    DollarSign,
 } from 'lucide-react';
 import { usePerfil, PERFIL_LABELS, PERFIL_CORES } from '../../contexts/PerfilContext';
 import type { PerfilTipo } from '../../api/types';
@@ -92,9 +93,16 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
             ],
         },
         {
+            title: 'CRM',
+            items: [
+                { label: 'Leads', path: '/app/gestor/leads', icon: Target },
+                { label: 'Kanban Leads', path: '/app/gestor/kanban-leads', icon: Kanban },
+                { label: 'Kanban Faturas', path: '/app/gestor/kanban', icon: Kanban },
+            ],
+        },
+        {
             title: 'Gestão',
             items: [
-                { label: 'Kanban Faturas', path: '/app/gestor/kanban', icon: Kanban },
                 { label: 'Usinas', path: '/app/gestor/usinas', icon: Building2 },
                 { label: 'UCs Gerenciadas', path: '/app/usuario/ucs', icon: Zap },
                 { label: 'Beneficiários', path: '/app/gestor/beneficiarios', icon: Users },
@@ -104,9 +112,9 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
         {
             title: 'Financeiro',
             items: [
-                { label: 'Cobranças', path: '/app/gestor/cobrancas', icon: FileText },
-                { label: 'Gerar Relatórios', path: '/app/gestor/cobrancas-automaticas', icon: Zap },
-                { label: 'Financeiro', path: '/app/gestor/financeiro', icon: Wallet },
+                { label: 'Processar Faturas', path: '/app/gestor/processar-cobrancas', icon: FileText },
+                { label: 'Cobranças', path: '/app/gestor/cobrancas', icon: Wallet },
+                { label: 'Financeiro', path: '/app/gestor/financeiro', icon: DollarSign },
                 { label: 'Contratos', path: '/app/gestor/contratos', icon: FileSignature },
             ],
         },
@@ -157,19 +165,6 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
         {
             items: [
                 { label: 'Dashboard', path: '/app/parceiro', icon: LayoutDashboard },
-            ],
-        },
-        {
-            title: 'Vendas',
-            items: [
-                { label: 'Projetos', path: '/app/parceiro/projetos', icon: Package },
-                { label: 'Leads', path: '/app/parceiro/leads', icon: Target },
-            ],
-        },
-        {
-            title: 'Financeiro',
-            items: [
-                { label: 'Comissões', path: '/app/parceiro/comissoes', icon: Wallet },
             ],
         },
     ],

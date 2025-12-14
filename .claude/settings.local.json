@@ -4,7 +4,8 @@
       "Bash(cat:*)",
       "Bash(python -m pytest:*)",
       "Bash(pip install:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ls -la \"C:\\Users\\Paulo Seze\\Documents\\Aplicações\\Nova pasta\\PROJETO_ENERGISA\\frontend\\src\\pages\\gestor\"\" 2>/dev/null || echo \"Directory not found \")"
     ]
   }
 }

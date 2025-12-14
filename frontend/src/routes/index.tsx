@@ -16,7 +16,7 @@ import { SignInPage, SignUpPage } from '../pages/auth';
 
 // Dashboards
 import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LogsAuditoria } from '../pages/admin';
-import { DashboardProprietario } from '../pages/proprietario';
+import { DashboardProprietario, NovaUsina } from '../pages/proprietario';
 import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor } from '../pages/gestor';
 import { CobrancasAutomaticas } from '../pages/gestor/CobrancasAutomaticas';
 import { KanbanFaturas } from '../pages/gestor/KanbanFaturas';
@@ -180,7 +180,12 @@ export function AppRoutes() {
                 } />
                 <Route path="proprietario/usinas" element={
                     <ProtectedRoute allowedPerfis={['proprietario']}>
-                        <PlaceholderPage title="Minhas Usinas" />
+                        <UsinasGestor />
+                    </ProtectedRoute>
+                } />
+                <Route path="proprietario/usinas/nova" element={
+                    <ProtectedRoute allowedPerfis={['proprietario']}>
+                        <NovaUsina />
                     </ProtectedRoute>
                 } />
                 <Route path="proprietario/gestores" element={

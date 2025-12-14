@@ -310,7 +310,7 @@ export function GestaoLeads() {
                                     {estatisticas.leads_convertidos}
                                 </p>
                                 <p className="text-xs text-green-500 mt-1">
-                                    {estatisticas.taxa_conversao.toFixed(1)}% conversao
+                                    {(Number(estatisticas.taxa_conversao) || 0).toFixed(1)}% conversao
                                 </p>
                             </div>
                             <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
@@ -342,7 +342,7 @@ export function GestaoLeads() {
                     <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                         Funil de Vendas
                         <span className="text-sm font-normal text-slate-500 ml-2">
-                            ({funil.taxa_conversao_geral.toFixed(1)}% conversao geral)
+                            ({(Number(funil.taxa_conversao_geral) || 0).toFixed(1)}% conversao geral)
                         </span>
                     </h2>
                     <div className="flex items-end gap-2 overflow-x-auto pb-2">

@@ -308,7 +308,7 @@ async def kanban_test_public():
 
     # Testar tabela gestores_usina
     try:
-        gestores_response = supabase.table("gestores_usina").select("usuario_id, usina_id").limit(3).execute()
+        gestores_response = supabase.table("gestores_usina").select("gestor_id, usina_id").limit(3).execute()
         resultado["etapas"]["tabela_gestores_usina"] = {
             "status": "ok",
             "count": len(gestores_response.data or []),
@@ -354,7 +354,7 @@ async def kanban_debug(
     try:
         gestores_response = supabase.table("gestores_usina").select(
             "usina_id"
-        ).eq("usuario_id", str(current_user.id)).execute()
+        ).eq("gestor_id", str(current_user.id)).execute()
 
         usina_ids = [g["usina_id"] for g in (gestores_response.data or [])]
 
@@ -518,7 +518,7 @@ async def listar_faturas_kanban(
         else:
             gestores_response = supabase.table("gestores_usina").select(
                 "usina_id"
-            ).eq("usuario_id", str(current_user.id)).execute()
+            ).eq("gestor_id", str(current_user.id)).execute()
 
             usina_ids = [g["usina_id"] for g in (gestores_response.data or [])]
 

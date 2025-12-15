@@ -204,20 +204,17 @@ async def listar_faturas_por_usina(
             consumo_obj = itens.get("consumo_kwh") or {}
             consumo_kwh = consumo_obj.get("quantidade")
 
-            # Energia injetada total (oUC + mUC)
-            injetada_ouc = sum(
-                (item.get("quantidade") or 0)
-                for item in (itens.get("energia_injetada oUC") or [])
-            )
-            injetada_muc = sum(
-                (item.get("quantidade") or 0)
-                for item in (itens.get("energia_injetada mUC") or [])
-            )
+            # Energia injetada total (oUC + mUC) - suporta ambos formatos de chave
+            ouc_items = itens.get("energia_injetada oUC") or itens.get("energia_injetada_ouc") or []
+            muc_items = itens.get("energia_injetada mUC") or itens.get("energia_injetada_muc") or []
+
+            injetada_ouc = sum((item.get("quantidade") or 0) for item in ouc_items)
+            injetada_muc = sum((item.get("quantidade") or 0) for item in muc_items)
             injetada_total = injetada_ouc + injetada_muc
 
             # Tipo GD (detectar dos itens)
             tipo_gd = None
-            all_items = (itens.get("energia_injetada oUC") or []) + (itens.get("energia_injetada mUC") or [])
+            all_items = ouc_items + muc_items
             for item in all_items:
                 if item.get("tipo_gd") in ["GDI", "GDII"]:
                     tipo_gd = item.get("tipo_gd")
@@ -318,11 +315,11 @@ async def listar_faturas_kanban(
         busca_lower = busca.lower()
         beneficiarios = [
             b for b in beneficiarios
-            if busca_lower in b["nome"].lower()
+            if b.get("nome") and busca_lower in b["nome"].lower()
         ]
 
     uc_ids = [b["uc_id"] for b in beneficiarios if b.get("uc_id")]
-    benef_map = {b["uc_id"]: b for b in beneficiarios}
+    benef_map = {b["uc_id"]: b for b in beneficiarios if b.get("uc_id")}
 
     if not uc_ids:
         return {
@@ -392,12 +389,16 @@ async def listar_faturas_kanban(
         consumo_obj = itens.get("consumo_kwh") or {}
         consumo_kwh = consumo_obj.get("quantidade")
 
-        injetada_ouc = sum((item.get("quantidade") or 0) for item in (itens.get("energia_injetada oUC") or []))
-        injetada_muc = sum((item.get("quantidade") or 0) for item in (itens.get("energia_injetada mUC") or []))
+        # Suportar ambos os formatos de chave (com espaço ou underscore)
+        ouc_items = itens.get("energia_injetada oUC") or itens.get("energia_injetada_ouc") or []
+        muc_items = itens.get("energia_injetada mUC") or itens.get("energia_injetada_muc") or []
+
+        injetada_ouc = sum((item.get("quantidade") or 0) for item in ouc_items)
+        injetada_muc = sum((item.get("quantidade") or 0) for item in muc_items)
         injetada_total = injetada_ouc + injetada_muc
 
         tipo_gd = None
-        all_items = (itens.get("energia_injetada oUC") or []) + (itens.get("energia_injetada mUC") or [])
+        all_items = ouc_items + muc_items
         for item in all_items:
             if item.get("tipo_gd") in ["GDI", "GDII"]:
                 tipo_gd = item.get("tipo_gd")

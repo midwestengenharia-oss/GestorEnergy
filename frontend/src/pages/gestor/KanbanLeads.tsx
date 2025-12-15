@@ -141,9 +141,9 @@ export function KanbanLeads() {
             setLoading(true);
             setError(null);
 
-            // Buscar todos os leads (sem paginacao para o kanban)
+            // Buscar leads (maximo 100 por requisicao conforme API)
             const response = await leadsApi.listar({
-                per_page: 500,
+                per_page: 100,
                 origem: filterOrigem || undefined
             });
 

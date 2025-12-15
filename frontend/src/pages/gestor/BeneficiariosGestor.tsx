@@ -51,8 +51,12 @@ export function BeneficiariosGestor() {
     }, []);
 
     useEffect(() => {
-        fetchBeneficiarios();
-    }, [usinaFiltro]);
+        // Só busca beneficiários quando usinas já foram carregadas
+        // ou quando há um filtro de usina específico
+        if (usinas.length > 0 || usinaFiltro) {
+            fetchBeneficiarios();
+        }
+    }, [usinaFiltro, usinas]);
 
     const fetchUsinas = async () => {
         try {

@@ -161,8 +161,8 @@ export function ProcessamentoCobrancas() {
             setError(null);
 
             const response = await faturasApi.kanban({
-                mes: filterMes,
-                ano: filterAno
+                mes_referencia: filterMes,
+                ano_referencia: filterAno
             });
 
             setKanbanData(response.data);

@@ -129,6 +129,10 @@ export const faturasApi = {
     reprocessarExtracao: (faturaId: number) =>
         api.post<{ success: boolean; fatura_id: number; message: string; dados: any }>(`/faturas/${faturaId}/reprocessar-extracao`),
 
+    // Refazer fatura (reset para aguardar extração + exclui cobrança)
+    refazer: (faturaId: number) =>
+        api.post<{ success: boolean; fatura_id: number; status: string; cobranca_excluida: boolean; message: string }>(`/faturas/${faturaId}/refazer`),
+
     // Buscar faturas por usina
     porUsina: (usinaId: number, mesReferencia?: number, anoReferencia?: number) =>
         api.get<{ faturas: any[]; total: number }>(`/faturas/por-usina/${usinaId}`, {

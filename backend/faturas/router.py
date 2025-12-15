@@ -711,3 +711,36 @@ async def reprocessar_extracao(
         "message": "Extração reprocessada com sucesso",
         "dados": dados
     }
+
+
+@router.post(
+    "/{fatura_id}/refazer",
+    summary="Refazer fatura",
+    description="Reseta fatura para aguardar nova extração, excluindo cobrança existente",
+    dependencies=[Depends(require_perfil("superadmin", "gestor"))]
+)
+async def refazer_fatura(
+    fatura_id: int,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+):
+    """
+    Refaz uma fatura, voltando para o estado de aguardando extração.
+
+    Fluxo:
+    1. Exclui cobrança associada (se existir e não for PAGA)
+    2. Limpa dados extraídos
+    3. Reseta status para PENDENTE
+    4. Fatura volta para aba "Aguardando Extração"
+
+    Não executa extração automaticamente - usuário deve clicar em "Extrair".
+
+    Raises:
+        404: Fatura não encontrada
+        400: Cobrança está PAGA (não pode refazer)
+    """
+    resultado = await faturas_service.refazer_fatura(fatura_id)
+    return {
+        "success": True,
+        **resultado,
+        "message": "Fatura resetada para aguardar nova extração"
+    }

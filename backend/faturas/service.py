@@ -853,6 +853,56 @@ class FaturasService:
         # Processar novamente
         return await self.processar_extracao_fatura(fatura_id)
 
+    async def refazer_fatura(self, fatura_id: int) -> dict:
+        """
+        Reseta fatura para aguardar nova extração.
+        Exclui cobrança associada (se existir e não for PAGA).
+        NÃO executa extração automaticamente.
+
+        Args:
+            fatura_id: ID da fatura
+
+        Returns:
+            Dict com status e se cobrança foi excluída
+
+        Raises:
+            NotFoundError: Se fatura não existir
+            ValidationError: Se cobrança estiver PAGA
+        """
+        # Verificar se fatura existe
+        fatura_result = self.db.table("faturas").select("id").eq("id", fatura_id).single().execute()
+        if not fatura_result.data:
+            raise NotFoundError(f"Fatura {fatura_id} não encontrada")
+
+        # Buscar e excluir cobrança associada
+        cobranca_result = self.db.table("cobrancas").select("id, status").eq("fatura_id", fatura_id).execute()
+        cobranca_excluida = False
+
+        if cobranca_result.data:
+            for cobranca in cobranca_result.data:
+                if cobranca.get("status") == "PAGA":
+                    raise ValidationError(f"Não é possível refazer: cobrança {cobranca['id']} está PAGA")
+                logger.info(f"Refazer fatura {fatura_id}: excluindo cobrança {cobranca['id']}")
+                self.db.table("cobrancas").delete().eq("id", cobranca["id"]).execute()
+                cobranca_excluida = True
+
+        # Limpar dados extraídos e resetar status
+        logger.info(f"Refazer fatura {fatura_id}: resetando para PENDENTE")
+        self.db.table("faturas").update({
+            "extracao_status": "PENDENTE",
+            "dados_extraidos": None,
+            "extracao_avisos": None,
+            "extracao_score": None,
+            "extraido_em": None,
+            "extracao_error": None
+        }).eq("id", fatura_id).execute()
+
+        return {
+            "fatura_id": fatura_id,
+            "status": "resetado",
+            "cobranca_excluida": cobranca_excluida
+        }
+
 
 # Instância global do serviço
 faturas_service = FaturasService()

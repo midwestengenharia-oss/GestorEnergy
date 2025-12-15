@@ -27,7 +27,6 @@ import {
     BarChart3,
     Receipt,
     Sparkles,
-    MoreVertical,
     RotateCcw
 } from 'lucide-react';
 import { faturasApi } from '../../api/faturas';
@@ -254,19 +253,19 @@ export function ProcessamentoCobrancas() {
         }
     };
 
-    const handleReprocessarExtracao = async (faturaId: number) => {
+    const handleRefazer = async (faturaId: number) => {
         const confirmar = confirm(
-            'Tem certeza que deseja reprocessar a extracao desta fatura?\n\n' +
-            'Os dados extraidos serao substituidos pelos novos dados do PDF.'
+            'Deseja refazer esta fatura?\n\n' +
+            'A cobranca existente sera excluida e voce precisara extrair novamente.'
         );
         if (!confirmar) return;
 
         try {
             setLoadingAction(faturaId);
-            await faturasApi.reprocessarExtracao(faturaId);
+            await faturasApi.refazer(faturaId);
             await fetchKanban();
         } catch (err: any) {
-            alert(err.response?.data?.detail || 'Erro ao reprocessar extracao');
+            alert(err.response?.data?.detail || 'Erro ao refazer fatura');
         } finally {
             setLoadingAction(null);
         }
@@ -505,7 +504,7 @@ export function ProcessamentoCobrancas() {
                                 onGerarCobranca={handleGerarCobranca}
                                 onAprovar={handleAprovar}
                                 onVerRelatorio={handleVerRelatorio}
-                                onReprocessarExtracao={handleReprocessarExtracao}
+                                onRefazer={handleRefazer}
                                 formatarMoeda={formatarMoeda}
                                 formatarData={formatarData}
                                 calcularInjetadaTotal={calcularInjetadaTotal}
@@ -571,7 +570,7 @@ interface FaturaAccordionItemProps {
     onGerarCobranca: (fatura: FaturaKanban, forcarReprocessamento?: boolean) => void;
     onAprovar: (cobrancaId: number, enviarEmail: boolean) => void;
     onVerRelatorio: (cobrancaId: number) => void;
-    onReprocessarExtracao: (faturaId: number) => void;
+    onRefazer: (faturaId: number) => void;
     formatarMoeda: (valor: number | null | undefined) => string;
     formatarData: (data: string | null) => string;
     calcularInjetadaTotal: (dados: DadosExtraidos) => number;
@@ -588,13 +587,12 @@ function FaturaAccordionItem({
     onGerarCobranca,
     onAprovar,
     onVerRelatorio,
-    onReprocessarExtracao,
+    onRefazer,
     formatarMoeda,
     formatarData,
     calcularInjetadaTotal,
     detectarModeloGD
 }: FaturaAccordionItemProps) {
-    const [showDropdown, setShowDropdown] = useState(false);
     const dados = fatura.dados_extraidos as DadosExtraidos;
     const isLoading = loadingAction === fatura.id || loadingAction === fatura.cobranca?.id;
 
@@ -675,10 +673,10 @@ function FaturaAccordionItem({
                     {activeTab === 'extraida' && (
                         <>
                             <button
-                                onClick={() => onReprocessarExtracao(fatura.id)}
+                                onClick={() => onRefazer(fatura.id)}
                                 disabled={isLoading}
-                                className="p-1.5 text-slate-400 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition"
-                                title="Reprocessar Extracao"
+                                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+                                title="Refazer (volta para Aguardando Extracao)"
                             >
                                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
                             </button>
@@ -702,62 +700,16 @@ function FaturaAccordionItem({
                                 {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
                                 Ver Relatorio
                             </button>
-                            {/* Menu Dropdown de Acoes */}
-                            <div className="relative">
+                            {fatura.cobranca.status !== 'PAGA' && (
                                 <button
-                                    onClick={() => setShowDropdown(!showDropdown)}
-                                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+                                    onClick={() => onRefazer(fatura.id)}
+                                    disabled={isLoading}
+                                    className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+                                    title="Refazer (volta para Aguardando Extracao)"
                                 >
-                                    <MoreVertical size={18} />
+                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
                                 </button>
-                                {showDropdown && (
-                                    <>
-                                        <div
-                                            className="fixed inset-0 z-10"
-                                            onClick={() => setShowDropdown(false)}
-                                        />
-                                        <div className="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-20">
-                                            <button
-                                                onClick={() => {
-                                                    setShowDropdown(false);
-                                                    onReprocessarExtracao(fatura.id);
-                                                }}
-                                                disabled={isLoading}
-                                                className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"
-                                            >
-                                                <RotateCcw size={16} className="text-yellow-500" />
-                                                Reprocessar Extracao
-                                            </button>
-                                            {fatura.cobranca.status !== 'PAGA' && (
-                                                <button
-                                                    onClick={() => {
-                                                        setShowDropdown(false);
-                                                        onGerarCobranca(fatura, true);
-                                                    }}
-                                                    disabled={isLoading}
-                                                    className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"
-                                                >
-                                                    <RefreshCw size={16} className="text-orange-500" />
-                                                    Reprocessar Cobranca
-                                                </button>
-                                            )}
-                                            {fatura.cobranca.status === 'RASCUNHO' && (
-                                                <button
-                                                    onClick={() => {
-                                                        setShowDropdown(false);
-                                                        onAprovar(fatura.cobranca!.id, false);
-                                                    }}
-                                                    disabled={isLoading}
-                                                    className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"
-                                                >
-                                                    <CheckCircle2 size={16} className="text-green-500" />
-                                                    Aprovar Cobranca
-                                                </button>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                            )}
                         </>
                     )}
                 </div>
@@ -892,13 +844,13 @@ function FaturaAccordionItem({
                                     {activeTab === 'extraida' && (
                                         <>
                                             <button
-                                                onClick={() => onReprocessarExtracao(fatura.id)}
+                                                onClick={() => onRefazer(fatura.id)}
                                                 disabled={isLoading}
-                                                className="px-4 py-2 border border-yellow-300 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400 rounded-lg hover:bg-yellow-50 dark:hover:bg-yellow-900/20 disabled:opacity-50 flex items-center gap-2"
-                                                title="Refazer extracao do PDF"
+                                                className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-2"
+                                                title="Volta para Aguardando Extracao"
                                             >
                                                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                                                Reprocessar Extracao
+                                                Refazer
                                             </button>
                                             <button
                                                 onClick={() => onGerarCobranca(fatura)}
@@ -912,24 +864,15 @@ function FaturaAccordionItem({
                                     )}
                                     {activeTab === 'relatorio_gerado' && fatura.cobranca && (
                                         <>
-                                            <button
-                                                onClick={() => onReprocessarExtracao(fatura.id)}
-                                                disabled={isLoading}
-                                                className="px-4 py-2 border border-yellow-300 dark:border-yellow-700 text-yellow-600 dark:text-yellow-400 rounded-lg hover:bg-yellow-50 dark:hover:bg-yellow-900/20 disabled:opacity-50 flex items-center gap-2"
-                                                title="Refazer extracao do PDF"
-                                            >
-                                                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                                                Reextrair
-                                            </button>
                                             {fatura.cobranca.status !== 'PAGA' && (
                                                 <button
-                                                    onClick={() => onGerarCobranca(fatura, true)}
+                                                    onClick={() => onRefazer(fatura.id)}
                                                     disabled={isLoading}
-                                                    className="px-4 py-2 border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 flex items-center gap-2"
-                                                    title="Excluir cobranca atual e gerar nova com calculos atualizados"
+                                                    className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-2"
+                                                    title="Exclui cobranca e volta para Aguardando Extracao"
                                                 >
-                                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-                                                    Reprocessar
+                                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                                                    Refazer
                                                 </button>
                                             )}
                                             <button

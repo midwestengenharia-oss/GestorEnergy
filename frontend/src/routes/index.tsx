@@ -15,7 +15,7 @@ import { AuthLayout } from '../layouts/AuthLayout';
 import { SignInPage, SignUpPage } from '../pages/auth';
 
 // Dashboards
-import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LeadDetail, LogsAuditoria } from '../pages/admin';
+import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LeadDetail, LogsAuditoria, Impostos } from '../pages/admin';
 import { DashboardProprietario, NovaUsina } from '../pages/proprietario';
 import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor, GestaoLeads as GestaoLeadsGestor, LeadDetail as LeadDetailGestor, KanbanLeads as KanbanLeadsGestor, ProcessamentoCobrancas } from '../pages/gestor';
 import { CobrancasAutomaticas } from '../pages/gestor/CobrancasAutomaticas';
@@ -174,6 +174,11 @@ export function AppRoutes() {
                 <Route path="admin/sync" element={
                     <ProtectedRoute allowedPerfis={['superadmin']}>
                         <SyncStatus />
+                    </ProtectedRoute>
+                } />
+                <Route path="admin/impostos" element={
+                    <ProtectedRoute allowedPerfis={['superadmin']}>
+                        <Impostos />
                     </ProtectedRoute>
                 } />
 

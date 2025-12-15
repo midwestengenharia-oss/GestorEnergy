@@ -4,6 +4,7 @@ Baseado nas regulamentações da ANEEL e tarifas vigentes
 """
 
 from datetime import datetime
+from decimal import Decimal
 
 # ====== TRIBUTAÇÃO ======
 PIS = 0.012102
@@ -34,8 +35,36 @@ def get_fiob_fator():
     return FIOB_RAMP.get(ano_atual, FIOB_FALLBACK)
 
 # ====== BANDEIRA TARIFÁRIA ======
-# Valores em R$/kWh para bandeira vermelha (patamar 1)
-BANDEIRA_VALOR_KWH = 0.04463
+# Valores em R$/kWh SEM impostos - Resolução ANEEL
+BANDEIRA_VERDE = Decimal("0.00")
+BANDEIRA_AMARELA = Decimal("0.0188")
+BANDEIRA_VERMELHA_P1 = Decimal("0.0446")  # Vermelha Patamar 1
+BANDEIRA_VERMELHA_P2 = Decimal("0.0787")  # Vermelha Patamar 2
+
+# Mapeamento de nomes para valores
+BANDEIRA_VALORES = {
+    "verde": BANDEIRA_VERDE,
+    "amarela": BANDEIRA_AMARELA,
+    "vermelha": BANDEIRA_VERMELHA_P1,  # Default: P1 quando não especificado
+    "vermelha p1": BANDEIRA_VERMELHA_P1,
+    "vermelha p2": BANDEIRA_VERMELHA_P2,
+    "vermelha patamar 1": BANDEIRA_VERMELHA_P1,
+    "vermelha patamar 2": BANDEIRA_VERMELHA_P2,
+}
+
+def get_bandeira_valor(nome_bandeira: str) -> Decimal:
+    """
+    Retorna o valor por kWh da bandeira tarifária.
+    Args:
+        nome_bandeira: Nome da bandeira (case-insensitive)
+    Returns:
+        Valor em R$/kWh SEM impostos
+    """
+    nome_lower = nome_bandeira.lower().strip()
+    return BANDEIRA_VALORES.get(nome_lower, BANDEIRA_VERDE)
+
+# Legacy: valor único para compatibilidade
+BANDEIRA_VALOR_KWH = float(BANDEIRA_VERMELHA_P1)
 
 # ====== TAXA MÍNIMA POR TIPO DE LIGAÇÃO ======
 # Valores em kWh/mês

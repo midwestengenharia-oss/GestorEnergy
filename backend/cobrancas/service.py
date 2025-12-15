@@ -390,7 +390,8 @@ class CobrancasService:
         fatura_id: int,
         beneficiario_id: int,
         tarifa_aneel: Optional[Decimal] = None,
-        fio_b: Optional[Decimal] = None
+        fio_b: Optional[Decimal] = None,
+        forcar_reprocessamento: bool = False
     ) -> dict:
         """
         Gera cobrança automaticamente a partir de uma fatura.
@@ -398,16 +399,19 @@ class CobrancasService:
         Fluxo completo:
         1. Verifica/processa extração da fatura
         2. Busca dados do beneficiário e UC
-        3. Calcula cobrança usando dados extraídos
-        4. Gera relatório HTML
-        5. Prepara PIX
-        6. Salva no banco com status RASCUNHO
+        3. Busca impostos vigentes do banco
+        4. Calcula bandeira proporcional (se dados disponíveis)
+        5. Calcula cobrança usando dados extraídos
+        6. Gera relatório HTML
+        7. Prepara PIX
+        8. Salva no banco com status RASCUNHO
 
         Args:
             fatura_id: ID da fatura
             beneficiario_id: ID do beneficiário
             tarifa_aneel: Tarifa ANEEL (busca automaticamente se não informada)
             fio_b: Valor Fio B (opcional)
+            forcar_reprocessamento: Se True, exclui cobrança existente antes de criar nova
 
         Returns:
             Dados da cobrança criada
@@ -421,10 +425,11 @@ class CobrancasService:
         from backend.cobrancas.calculator import CobrancaCalculator
         from backend.cobrancas.report_generator_v3 import report_generator_v3
         from backend.core.exceptions import NotFoundError, ValidationError
+        from backend.configuracoes.service import impostos_service
 
         # 1. Verificar se fatura existe e tem dados extraídos
         fatura_result = self.supabase.table("faturas").select(
-            "id, uc_id, dados_extraidos, extracao_status, qr_code_pix, qr_code_pix_image, numero_fatura, mes_referencia, ano_referencia"
+            "id, uc_id, dados_extraidos, dados_api, extracao_status, qr_code_pix, qr_code_pix_image, numero_fatura, mes_referencia, ano_referencia"
         ).eq("id", fatura_id).single().execute()
 
         if not fatura_result.data:
@@ -439,7 +444,7 @@ class CobrancasService:
 
             # Recarregar fatura com dados extraídos
             fatura_result = self.supabase.table("faturas").select(
-                "id, uc_id, dados_extraidos, extracao_status, qr_code_pix, qr_code_pix_image, numero_fatura, mes_referencia, ano_referencia"
+                "id, uc_id, dados_extraidos, dados_api, extracao_status, qr_code_pix, qr_code_pix_image, numero_fatura, mes_referencia, ano_referencia"
             ).eq("id", fatura_id).single().execute()
             fatura = fatura_result.data
 
@@ -464,15 +469,29 @@ class CobrancasService:
         mes_ref = fatura.get("mes_referencia")
         ano_ref = fatura.get("ano_referencia")
 
-        cobranca_existente = self.supabase.table("cobrancas").select("id").eq(
+        cobranca_existente = self.supabase.table("cobrancas").select("id, status").eq(
             "beneficiario_id", beneficiario_id
         ).eq("mes", mes_ref).eq("ano", ano_ref).execute()
 
         if cobranca_existente.data and len(cobranca_existente.data) > 0:
-            raise ValidationError(
-                f"Já existe uma cobrança para o beneficiário {beneficiario_id} "
-                f"no período {mes_ref:02d}/{ano_ref}"
-            )
+            if forcar_reprocessamento:
+                # Excluir cobrança existente para reprocessar
+                cobranca_id_existente = cobranca_existente.data[0]["id"]
+                status_existente = cobranca_existente.data[0].get("status", "")
+
+                # Não permitir excluir cobranças já pagas
+                if status_existente == "PAGA":
+                    raise ValidationError(
+                        f"Não é possível reprocessar cobrança já paga (ID: {cobranca_id_existente})"
+                    )
+
+                logger.info(f"Reprocessamento: Excluindo cobrança existente ID {cobranca_id_existente}")
+                self.supabase.table("cobrancas").delete().eq("id", cobranca_id_existente).execute()
+            else:
+                raise ValidationError(
+                    f"Já existe uma cobrança para o beneficiário {beneficiario_id} "
+                    f"no período {mes_ref:02d}/{ano_ref}. Use forcar_reprocessamento=true para recriar."
+                )
 
         # 3. Obter tarifa ANEEL se não informada
         if not tarifa_aneel:
@@ -486,7 +505,19 @@ class CobrancasService:
                 if consumo_item.preco_unit_com_tributos:
                     tarifa_aneel = consumo_item.preco_unit_com_tributos
 
-        # 4. Calcular cobrança
+        # 4. Buscar impostos vigentes
+        imposto_vigente = impostos_service.buscar_vigente()
+        pis_cofins = Decimal("0.067845")  # Default
+        icms = Decimal("0.17")  # Default
+
+        if imposto_vigente:
+            pis_cofins = Decimal(str(imposto_vigente["pis"])) + Decimal(str(imposto_vigente["cofins"]))
+            icms = Decimal(str(imposto_vigente["icms"]))
+            logger.info(f"Usando impostos vigentes: PIS+COFINS={pis_cofins}, ICMS={icms}")
+        else:
+            logger.warning("Nenhum imposto vigente encontrado, usando valores default")
+
+        # 5. Calcular cobrança
         calculator = CobrancaCalculator()
 
         # Validar dados mínimos
@@ -500,7 +531,22 @@ class CobrancasService:
             fio_b=fio_b
         )
 
-        # 5. Gerar relatório HTML (usando V3 baseado no código n8n)
+        # 5.1 Calcular bandeira proporcional se dados_api disponível
+        dados_api = fatura.get("dados_api")
+        if dados_api:
+            bandeira_proporcional = calculator.calcular_bandeira_com_dados_api(
+                dados_api=dados_api,
+                pis_cofins=pis_cofins,
+                icms=icms
+            )
+            if bandeira_proporcional is not None:
+                logger.info(f"Bandeira proporcional calculada: R$ {bandeira_proporcional:.2f}")
+                # Substituir valor de bandeira pelo calculado proporcionalmente
+                cobranca_calc.bandeiras_valor = bandeira_proporcional
+                # Recalcular totais
+                calculator._calcular_totais(cobranca_calc)
+
+        # 6. Gerar relatório HTML (usando V3 baseado no código n8n)
         # Buscar economia acumulada do beneficiário (se houver)
         economia_acumulada = 0.0
         if beneficiario.get("economia_acumulada"):
@@ -520,7 +566,7 @@ class CobrancasService:
             economia_acumulada=economia_acumulada
         )
 
-        # 6. Preparar dados para salvar
+        # 7. Preparar dados para salvar
         from datetime import datetime, timezone
 
         cobranca_data = {
@@ -586,7 +632,7 @@ class CobrancasService:
             "data_calculo": datetime.now(timezone.utc).isoformat()
         }
 
-        # 7. Salvar no banco
+        # 8. Salvar no banco
         result = self.supabase.table("cobrancas").insert(cobranca_data).execute()
 
         if not result.data:

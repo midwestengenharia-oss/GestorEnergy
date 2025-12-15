@@ -5,12 +5,13 @@ Implementa a lógica de cálculo de cobranças baseada em dados extraídos de fa
 Segue as regras de GD I/II com desconto de assinatura de 30%.
 """
 
-from typing import Optional, Literal
+from typing import Optional, Literal, List, Any
 from decimal import Decimal
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import logging
 
 from backend.faturas.extraction_schemas import FaturaExtraidaSchema
+from backend.energisa.constants import BANDEIRA_VALORES, get_bandeira_valor
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +329,123 @@ class CobrancaCalculator:
 
         # Valor total a pagar (com assinatura)
         resultado.valor_total = resultado.valor_com_assinatura
+
+    def _calcular_bandeira_proporcional(
+        self,
+        consumo_total: Decimal,
+        dias_total: int,
+        detalhamento_bandeira: List[List[str]],
+        pis_cofins: Decimal,
+        icms: Decimal
+    ) -> Decimal:
+        """
+        Calcula valor de bandeira tarifária proporcional por período.
+
+        Args:
+            consumo_total: Consumo em kWh do período
+            dias_total: Total de dias do período de faturamento
+            detalhamento_bandeira: Lista de [bandeira, data_inicio, data_fim]
+                Ex: [["Vermelha", "03/11/2025", "30/11/2025"], ["Verde", "01/12/2025", "02/12/2025"]]
+            pis_cofins: Percentual PIS+COFINS combinado (ex: 0.067845)
+            icms: Percentual ICMS (ex: 0.17)
+
+        Returns:
+            Valor total de bandeira com impostos
+        """
+        if not detalhamento_bandeira or dias_total <= 0:
+            logger.debug("Sem detalhamento de bandeira ou dias inválido, retornando 0")
+            return Decimal("0")
+
+        consumo_diario = consumo_total / Decimal(str(dias_total))
+        valor_total = Decimal("0")
+
+        logger.info(f"Calculando bandeira proporcional: {consumo_total} kWh em {dias_total} dias")
+        logger.info(f"Consumo médio diário: {consumo_diario:.4f} kWh/dia")
+
+        for item in detalhamento_bandeira:
+            if len(item) < 3:
+                logger.warning(f"Item de bandeira inválido: {item}")
+                continue
+
+            bandeira_nome = item[0]
+            data_inicio_str = item[1]
+            data_fim_str = item[2]
+
+            try:
+                # Parse das datas (formato dd/mm/yyyy)
+                data_inicio = datetime.strptime(data_inicio_str, "%d/%m/%Y").date()
+                data_fim = datetime.strptime(data_fim_str, "%d/%m/%Y").date()
+            except ValueError as e:
+                logger.warning(f"Erro ao parsear datas: {e}")
+                continue
+
+            # Calcular dias deste período
+            dias_bandeira = (data_fim - data_inicio).days + 1
+
+            # Consumo proporcional
+            consumo_bandeira = consumo_diario * Decimal(str(dias_bandeira))
+
+            # Valor por kWh da bandeira (sem impostos)
+            valor_kwh = get_bandeira_valor(bandeira_nome)
+
+            # Valor sem impostos
+            valor_sem_impostos = consumo_bandeira * valor_kwh
+
+            # Aplicar impostos: valor / ((1 - PIS_COFINS) × (1 - ICMS))
+            divisor = (Decimal("1") - pis_cofins) * (Decimal("1") - icms)
+            if divisor > 0:
+                valor_com_impostos = valor_sem_impostos / divisor
+            else:
+                valor_com_impostos = valor_sem_impostos
+
+            valor_total += valor_com_impostos
+
+            logger.info(
+                f"  Bandeira {bandeira_nome}: {dias_bandeira} dias, "
+                f"{consumo_bandeira:.2f} kWh, R$ {valor_kwh}/kWh sem impostos, "
+                f"R$ {valor_com_impostos:.2f} com impostos"
+            )
+
+        resultado_final = valor_total.quantize(Decimal("0.01"))
+        logger.info(f"Total bandeira proporcional: R$ {resultado_final}")
+        return resultado_final
+
+    def calcular_bandeira_com_dados_api(
+        self,
+        dados_api: dict,
+        pis_cofins: Decimal,
+        icms: Decimal
+    ) -> Optional[Decimal]:
+        """
+        Calcula valor de bandeira usando dados da API Energisa.
+
+        Args:
+            dados_api: Dicionário com dados da API Energisa
+            pis_cofins: PIS + COFINS combinado
+            icms: ICMS
+
+        Returns:
+            Valor calculado ou None se não houver dados suficientes
+        """
+        if not dados_api:
+            return None
+
+        # Extrair dados necessários
+        detalhamento = dados_api.get("bandeiraTarifariaDetalhamento")
+        consumo = dados_api.get("consumo")
+        dias = dados_api.get("quantidadeDiaConsumo")
+
+        if not detalhamento or not consumo or not dias:
+            logger.debug("Dados insuficientes para cálculo proporcional de bandeira")
+            return None
+
+        return self._calcular_bandeira_proporcional(
+            consumo_total=Decimal(str(consumo)),
+            dias_total=int(dias),
+            detalhamento_bandeira=detalhamento,
+            pis_cofins=pis_cofins,
+            icms=icms
+        )
 
     def calcular_vencimento_sugerido(self, vencimento_fatura: date) -> date:
         """

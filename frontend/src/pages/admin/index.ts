@@ -4,3 +4,4 @@ export { GestaoUsuarios } from './GestaoUsuarios';
 export { GestaoLeads } from './GestaoLeads';
 export { LeadDetail } from './LeadDetail';
 export { LogsAuditoria } from './LogsAuditoria';
+export { Impostos } from './Impostos';

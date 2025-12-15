@@ -219,6 +219,7 @@ async def gerar_cobranca_automatica(
     beneficiario_id: int = Query(..., description="ID do beneficiário"),
     tarifa_aneel: Optional[Decimal] = Query(None, description="Tarifa ANEEL (R$/kWh). Se não fornecida, será extraída da fatura"),
     fio_b: Optional[Decimal] = Query(None, description="Valor do Fio B (opcional)"),
+    forcar_reprocessamento: bool = Query(False, description="Se True, exclui cobrança existente e recria"),
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)] = None,
 ):
     """
@@ -230,11 +231,14 @@ async def gerar_cobranca_automatica(
     3. Gera relatório HTML profissional
     4. Salva no banco com status RASCUNHO
 
+    Se forcar_reprocessamento=True, exclui a cobrança existente antes de criar nova.
+
     Args:
         fatura_id: ID da fatura de origem
         beneficiario_id: ID do beneficiário
         tarifa_aneel: Tarifa base (opcional, extrai da fatura se não fornecida)
         fio_b: Valor Fio B (opcional)
+        forcar_reprocessamento: Se True, permite reprocessar mesmo se já existir cobrança
 
     Returns:
         Cobrança criada com todos os campos calculados
@@ -243,7 +247,8 @@ async def gerar_cobranca_automatica(
         fatura_id=fatura_id,
         beneficiario_id=beneficiario_id,
         tarifa_aneel=tarifa_aneel,
-        fio_b=fio_b
+        fio_b=fio_b,
+        forcar_reprocessamento=forcar_reprocessamento
     )
     return resultado
 

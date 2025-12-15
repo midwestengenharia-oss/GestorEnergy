@@ -242,6 +242,10 @@ app.include_router(notificacoes_router, prefix="/api/notificacoes", tags=["Notif
 from backend.admin.router import router as admin_router
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 
+# Configurações - Impostos e parâmetros do sistema
+from backend.configuracoes.router import router as configuracoes_router
+app.include_router(configuracoes_router, prefix="/api", tags=["Configurações"])
+
 # Sync - Sincronização com Energisa
 from backend.sync.router import router as sync_router
 app.include_router(sync_router, prefix="/api/sync", tags=["Sync"])

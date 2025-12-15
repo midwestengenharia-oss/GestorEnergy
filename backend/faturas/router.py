@@ -259,212 +259,206 @@ async def listar_faturas_kanban(
     busca: Optional[str] = Query(None, description="Buscar por nome do beneficiário ou UC"),
 ):
     """
-    Retorna faturas organizadas em colunas para Kanban:
-    - sem_pdf: Faturas sem PDF anexado
-    - pdf_recebido: PDF anexado, aguardando extração
-    - extraida: Dados extraídos, aguardando geração de cobrança
-    - relatorio_gerado: Cobrança já gerada
-
-    Usado para gestão visual do fluxo de processamento de faturas.
+    Retorna faturas organizadas em colunas para Kanban.
     """
-    from backend.core.database import get_supabase_admin
-    supabase = get_supabase_admin()
+    import logging
+    import traceback
 
-    # 1. Buscar usinas que o gestor tem acesso
-    if usina_id:
-        usina_ids = [usina_id]
-    else:
-        # Buscar todas as usinas do gestor
-        gestores_response = supabase.table("gestores_usina").select(
-            "usina_id"
-        ).eq("usuario_id", str(current_user.id)).execute()
+    logger = logging.getLogger(__name__)
 
-        usina_ids = [g["usina_id"] for g in gestores_response.data] if gestores_response.data else []
+    # Resposta vazia padrão
+    empty_response = {
+        "sem_pdf": [],
+        "pdf_recebido": [],
+        "extraida": [],
+        "relatorio_gerado": [],
+        "totais": {"sem_pdf": 0, "pdf_recebido": 0, "extraida": 0, "relatorio_gerado": 0}
+    }
 
-        # Se superadmin, buscar todas
-        if current_user.is_superadmin and not usina_ids:
-            usinas_response = supabase.table("usinas").select("id").execute()
-            usina_ids = [u["id"] for u in usinas_response.data] if usinas_response.data else []
+    try:
+        from backend.core.database import get_supabase_admin
+        supabase = get_supabase_admin()
 
-    if not usina_ids:
-        return {
-            "sem_pdf": [],
-            "pdf_recebido": [],
-            "extraida": [],
-            "relatorio_gerado": [],
-            "totais": {"sem_pdf": 0, "pdf_recebido": 0, "extraida": 0, "relatorio_gerado": 0}
-        }
+        # 1. Buscar usinas que o gestor tem acesso
+        if usina_id:
+            usina_ids = [usina_id]
+        else:
+            gestores_response = supabase.table("gestores_usina").select(
+                "usina_id"
+            ).eq("usuario_id", str(current_user.id)).execute()
 
-    # 2. Buscar beneficiários das usinas - incluir status para filtrar
-    benef_response = supabase.table("beneficiarios").select(
-        "id, nome, uc_id, usina_id, status"
-    ).in_("usina_id", usina_ids).execute()
+            usina_ids = [g["usina_id"] for g in (gestores_response.data or [])]
 
-    # Filtrar ativos (case insensitive)
-    beneficiarios_ativos = [
-        b for b in (benef_response.data or [])
-        if b.get("status", "").upper() == "ATIVO"
-    ] if benef_response.data else []
+            # Se superadmin, buscar todas
+            if current_user.is_superadmin and not usina_ids:
+                usinas_response = supabase.table("usinas").select("id").execute()
+                usina_ids = [u["id"] for u in (usinas_response.data or [])]
 
-    if not beneficiarios_ativos:
-        return {
-            "sem_pdf": [],
-            "pdf_recebido": [],
-            "extraida": [],
-            "relatorio_gerado": [],
-            "totais": {"sem_pdf": 0, "pdf_recebido": 0, "extraida": 0, "relatorio_gerado": 0}
-        }
+        if not usina_ids:
+            return empty_response
 
-    # Filtrar por busca se fornecido
-    beneficiarios = beneficiarios_ativos
-    if busca:
-        busca_lower = busca.lower()
-        beneficiarios = [
-            b for b in beneficiarios
-            if b.get("nome") and busca_lower in b["nome"].lower()
+        # 2. Buscar beneficiários das usinas
+        benef_response = supabase.table("beneficiarios").select(
+            "id, nome, uc_id, usina_id, status"
+        ).in_("usina_id", usina_ids).execute()
+
+        # Filtrar ativos (case insensitive)
+        beneficiarios_ativos = [
+            b for b in (benef_response.data or [])
+            if str(b.get("status", "")).upper() == "ATIVO"
         ]
 
-    uc_ids = [b["uc_id"] for b in beneficiarios if b.get("uc_id")]
-    benef_map = {b["uc_id"]: b for b in beneficiarios if b.get("uc_id")}
+        if not beneficiarios_ativos:
+            return empty_response
 
-    if not uc_ids:
-        return {
-            "sem_pdf": [],
-            "pdf_recebido": [],
-            "extraida": [],
-            "relatorio_gerado": [],
-            "totais": {"sem_pdf": 0, "pdf_recebido": 0, "extraida": 0, "relatorio_gerado": 0}
-        }
+        # Filtrar por busca se fornecido
+        beneficiarios = beneficiarios_ativos
+        busca_lower = ""
+        if busca:
+            busca_lower = busca.lower()
+            beneficiarios = [
+                b for b in beneficiarios
+                if b.get("nome") and busca_lower in str(b["nome"]).lower()
+            ]
 
-    # 3. Buscar UCs para ter o código formatado
-    ucs_response = supabase.table("unidades_consumidoras").select(
-        "id, cdc, digito_verificador, apelido"
-    ).in_("id", uc_ids).execute()
+        uc_ids = [b["uc_id"] for b in beneficiarios if b.get("uc_id")]
+        benef_map = {b["uc_id"]: b for b in beneficiarios if b.get("uc_id")}
 
-    uc_map = {}
-    for uc in (ucs_response.data or []):
-        uc_formatada = f"6/{uc['cdc']}-{uc['digito_verificador']}" if uc.get('cdc') else f"ID {uc['id']}"
-        uc_map[uc["id"]] = {
-            "uc_formatada": uc_formatada,
-            "apelido": uc.get("apelido")
-        }
+        if not uc_ids:
+            return empty_response
 
-    # 4. Buscar faturas
-    query = supabase.table("faturas").select(
-        "id, uc_id, numero_fatura, mes_referencia, ano_referencia, pdf_base64, extracao_status, extracao_score, dados_extraidos"
-    ).in_("uc_id", uc_ids)
+        # 3. Buscar UCs para ter o código formatado
+        ucs_response = supabase.table("unidades_consumidoras").select(
+            "id, cdc, digito_verificador, apelido"
+        ).in_("id", uc_ids).execute()
 
-    if mes_referencia:
-        query = query.eq("mes_referencia", mes_referencia)
-    if ano_referencia:
-        query = query.eq("ano_referencia", ano_referencia)
+        uc_map = {}
+        for uc in (ucs_response.data or []):
+            uc_formatada = f"6/{uc['cdc']}-{uc['digito_verificador']}" if uc.get('cdc') else f"ID {uc['id']}"
+            uc_map[uc["id"]] = {
+                "uc_formatada": uc_formatada,
+                "apelido": uc.get("apelido")
+            }
 
-    # Buscar por UC formatada se busca fornecida
-    faturas_response = query.order("ano_referencia", desc=True).order("mes_referencia", desc=True).execute()
+        # 4. Buscar faturas
+        query = supabase.table("faturas").select(
+            "id, uc_id, numero_fatura, mes_referencia, ano_referencia, pdf_base64, extracao_status, extracao_score, dados_extraidos"
+        ).in_("uc_id", uc_ids)
 
-    # 5. Buscar cobranças existentes para essas faturas
-    fatura_ids = [f["id"] for f in faturas_response.data] if faturas_response.data else []
+        if mes_referencia:
+            query = query.eq("mes_referencia", mes_referencia)
+        if ano_referencia:
+            query = query.eq("ano_referencia", ano_referencia)
 
-    cobrancas_map = {}
-    if fatura_ids:
-        cobrancas_response = supabase.table("cobrancas").select(
-            "id, fatura_id, status"
-        ).in_("fatura_id", fatura_ids).execute()
+        faturas_response = query.order("ano_referencia", desc=True).order("mes_referencia", desc=True).execute()
 
-        for c in (cobrancas_response.data or []):
-            cobrancas_map[c["fatura_id"]] = {"id": c["id"], "status": c["status"]}
+        # 5. Buscar cobranças existentes para essas faturas
+        fatura_ids = [f["id"] for f in (faturas_response.data or [])]
 
-    # 6. Classificar faturas por status
-    sem_pdf = []
-    pdf_recebido = []
-    extraida = []
-    relatorio_gerado = []
+        cobrancas_map = {}
+        if fatura_ids:
+            cobrancas_response = supabase.table("cobrancas").select(
+                "id, fatura_id, status"
+            ).in_("fatura_id", fatura_ids).execute()
 
-    for fatura in (faturas_response.data or []):
-        beneficiario = benef_map.get(fatura["uc_id"])
-        if not beneficiario:
-            continue
+            for c in (cobrancas_response.data or []):
+                cobrancas_map[c["fatura_id"]] = {"id": c["id"], "status": c["status"]}
 
-        uc_info = uc_map.get(fatura["uc_id"], {})
+        # 6. Classificar faturas por status
+        sem_pdf = []
+        pdf_recebido = []
+        extraida = []
+        relatorio_gerado = []
 
-        # Extrair dados se disponíveis
-        dados_ex = fatura.get("dados_extraidos") or {}
-        itens = dados_ex.get("itens_fatura") or {}
-        totais = dados_ex.get("totais") or {}
-
-        consumo_obj = itens.get("consumo_kwh") or {}
-        consumo_kwh = consumo_obj.get("quantidade")
-
-        # Suportar ambos os formatos de chave (com espaço ou underscore)
-        ouc_items = itens.get("energia_injetada oUC") or itens.get("energia_injetada_ouc") or []
-        muc_items = itens.get("energia_injetada mUC") or itens.get("energia_injetada_muc") or []
-
-        injetada_ouc = sum((item.get("quantidade") or 0) for item in ouc_items)
-        injetada_muc = sum((item.get("quantidade") or 0) for item in muc_items)
-        injetada_total = injetada_ouc + injetada_muc
-
-        tipo_gd = None
-        all_items = ouc_items + muc_items
-        for item in all_items:
-            if item.get("tipo_gd") in ["GDI", "GDII"]:
-                tipo_gd = item.get("tipo_gd")
-                break
-
-        valor_fatura = dados_ex.get("total_a_pagar")
-
-        # Montar item
-        item_fatura = {
-            "id": fatura["id"],
-            "uc_id": fatura["uc_id"],
-            "uc_formatada": uc_info.get("uc_formatada", f"ID {fatura['uc_id']}"),
-            "uc_apelido": uc_info.get("apelido"),
-            "numero_fatura": fatura.get("numero_fatura"),
-            "mes_referencia": fatura["mes_referencia"],
-            "ano_referencia": fatura["ano_referencia"],
-            "beneficiario": {
-                "id": beneficiario["id"],
-                "nome": beneficiario["nome"]
-            },
-            "usina_id": beneficiario.get("usina_id"),
-            "extracao_status": fatura.get("extracao_status"),
-            "extracao_score": fatura.get("extracao_score"),
-            "consumo_kwh": consumo_kwh,
-            "injetada_kwh": injetada_total if injetada_total > 0 else None,
-            "tipo_gd": tipo_gd,
-            "valor_fatura": valor_fatura,
-            "cobranca": cobrancas_map.get(fatura["id"]),
-            "tem_pdf": fatura.get("pdf_base64") is not None
-        }
-
-        # Filtrar por busca na UC se fornecido
-        if busca and busca_lower not in item_fatura["uc_formatada"].lower():
-            if busca_lower not in beneficiario["nome"].lower():
+        for fatura in (faturas_response.data or []):
+            beneficiario = benef_map.get(fatura["uc_id"])
+            if not beneficiario:
                 continue
 
-        # Classificar
-        cobranca = cobrancas_map.get(fatura["id"])
+            uc_info = uc_map.get(fatura["uc_id"], {})
 
-        if cobranca:
-            relatorio_gerado.append(item_fatura)
-        elif fatura.get("extracao_status") == "CONCLUIDA":
-            extraida.append(item_fatura)
-        elif fatura.get("pdf_base64"):
-            pdf_recebido.append(item_fatura)
-        else:
-            sem_pdf.append(item_fatura)
+            # Extrair dados se disponíveis
+            dados_ex = fatura.get("dados_extraidos") or {}
+            itens = dados_ex.get("itens_fatura") or {}
 
-    return {
-        "sem_pdf": sem_pdf,
-        "pdf_recebido": pdf_recebido,
-        "extraida": extraida,
-        "relatorio_gerado": relatorio_gerado,
-        "totais": {
-            "sem_pdf": len(sem_pdf),
-            "pdf_recebido": len(pdf_recebido),
-            "extraida": len(extraida),
-            "relatorio_gerado": len(relatorio_gerado)
+            consumo_obj = itens.get("consumo_kwh") or {}
+            consumo_kwh = consumo_obj.get("quantidade")
+
+            # Suportar ambos os formatos de chave
+            ouc_items = itens.get("energia_injetada oUC") or itens.get("energia_injetada_ouc") or []
+            muc_items = itens.get("energia_injetada mUC") or itens.get("energia_injetada_muc") or []
+
+            injetada_ouc = sum((item.get("quantidade") or 0) for item in ouc_items)
+            injetada_muc = sum((item.get("quantidade") or 0) for item in muc_items)
+            injetada_total = injetada_ouc + injetada_muc
+
+            tipo_gd = None
+            for item in (ouc_items + muc_items):
+                if item.get("tipo_gd") in ["GDI", "GDII"]:
+                    tipo_gd = item.get("tipo_gd")
+                    break
+
+            valor_fatura = dados_ex.get("total_a_pagar")
+
+            item_fatura = {
+                "id": fatura["id"],
+                "uc_id": fatura["uc_id"],
+                "uc_formatada": uc_info.get("uc_formatada", f"ID {fatura['uc_id']}"),
+                "uc_apelido": uc_info.get("apelido"),
+                "numero_fatura": fatura.get("numero_fatura"),
+                "mes_referencia": fatura["mes_referencia"],
+                "ano_referencia": fatura["ano_referencia"],
+                "beneficiario": {
+                    "id": beneficiario["id"],
+                    "nome": beneficiario.get("nome", "")
+                },
+                "usina_id": beneficiario.get("usina_id"),
+                "extracao_status": fatura.get("extracao_status"),
+                "extracao_score": fatura.get("extracao_score"),
+                "consumo_kwh": consumo_kwh,
+                "injetada_kwh": injetada_total if injetada_total > 0 else None,
+                "tipo_gd": tipo_gd,
+                "valor_fatura": valor_fatura,
+                "cobranca": cobrancas_map.get(fatura["id"]),
+                "tem_pdf": fatura.get("pdf_base64") is not None
+            }
+
+            # Filtrar por busca na UC
+            if busca and busca_lower:
+                uc_match = busca_lower in item_fatura["uc_formatada"].lower()
+                nome_match = busca_lower in str(beneficiario.get("nome", "")).lower()
+                if not uc_match and not nome_match:
+                    continue
+
+            # Classificar
+            cobranca = cobrancas_map.get(fatura["id"])
+
+            if cobranca:
+                relatorio_gerado.append(item_fatura)
+            elif fatura.get("extracao_status") == "CONCLUIDA":
+                extraida.append(item_fatura)
+            elif fatura.get("pdf_base64"):
+                pdf_recebido.append(item_fatura)
+            else:
+                sem_pdf.append(item_fatura)
+
+        return {
+            "sem_pdf": sem_pdf,
+            "pdf_recebido": pdf_recebido,
+            "extraida": extraida,
+            "relatorio_gerado": relatorio_gerado,
+            "totais": {
+                "sem_pdf": len(sem_pdf),
+                "pdf_recebido": len(pdf_recebido),
+                "extraida": len(extraida),
+                "relatorio_gerado": len(relatorio_gerado)
+            }
         }
-    }
+
+    except Exception as e:
+        logger.error(f"Erro no kanban de faturas: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 
 @router.get(

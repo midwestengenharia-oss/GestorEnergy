@@ -695,11 +695,13 @@ export function ConectarEnergisa() {
                                                             JÁ VINCULADA
                                                         </span>
                                                     )}
-                                                    {uc.ucAtiva === false && (
-                                                        <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded font-medium">
-                                                            INATIVA
-                                                        </span>
-                                                    )}
+                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                        uc.ucAtiva
+                                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                                    }`}>
+                                                        {uc.ucAtiva ? 'Ativa' : 'Inativa'}
+                                                    </span>
                                                     {uc.geracaoDistribuida != null && (
                                                         <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">
                                                             GD
@@ -764,11 +766,13 @@ export function ConectarEnergisa() {
                                                             JÁ VINCULADA
                                                         </span>
                                                     )}
-                                                    {uc.ucAtiva === false && (
-                                                        <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded font-medium">
-                                                            INATIVA
-                                                        </span>
-                                                    )}
+                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                        uc.ucAtiva
+                                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                                    }`}>
+                                                        {uc.ucAtiva ? 'Ativa' : 'Inativa'}
+                                                    </span>
                                                     {uc.geracaoDistribuida != null && (
                                                         <span className="px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">
                                                             GD

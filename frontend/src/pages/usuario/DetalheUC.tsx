@@ -233,17 +233,13 @@ export function DetalheUC() {
                         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
                             UC {formatarCodigoUC(uc)}
                         </h1>
-                        {uc.uc_ativa ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-sm rounded-full">
-                                <CheckCircle size={14} />
-                                Ativa
-                            </span>
-                        ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-full">
-                                <XCircle size={14} />
-                                Inativa
-                            </span>
-                        )}
+                        <span className={`px-2 py-1 text-sm font-medium rounded-full ${
+                            uc.uc_ativa
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                        }`}>
+                            {uc.uc_ativa ? 'Ativa' : 'Inativa'}
+                        </span>
                         {uc.is_geradora && (
                             <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-sm rounded-full">
                                 Geradora

@@ -422,20 +422,15 @@ export function MinhasUCs() {
                                                     {formatarEndereco(uc)}
                                                 </p>
                                                 <div className="flex items-center gap-2 mb-2">
-                                                    {uc.uc_ativa ? (
-                                                        <span className="flex items-center gap-1 text-xs text-green-600">
-                                                            <CheckCircle size={12} />
-                                                            Ativa
-                                                        </span>
-                                                    ) : (
-                                                        <span className="flex items-center gap-1 text-xs text-red-600">
-                                                            <XCircle size={12} />
-                                                            Inativa
-                                                        </span>
-                                                    )}
+                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                        uc.uc_ativa
+                                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                                    }`}>
+                                                        {uc.uc_ativa ? 'Ativa' : 'Inativa'}
+                                                    </span>
                                                     {uc.is_geradora && (
-                                                        <span className="flex items-center gap-1 text-xs text-yellow-600">
-                                                            <Sun size={12} />
+                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
                                                             Geradora
                                                         </span>
                                                     )}
@@ -545,19 +540,15 @@ export function MinhasUCs() {
                                                 </div>
                                             )}
                                             <div className="flex items-center gap-2 mt-1">
-                                                {uc.uc_ativa ? (
-                                                    <span className="flex items-center gap-1 text-xs text-green-500">
-                                                        <CheckCircle size={12} />
-                                                        Ativa
-                                                    </span>
-                                                ) : (
-                                                    <span className="flex items-center gap-1 text-xs text-red-500">
-                                                        <XCircle size={12} />
-                                                        Inativa
-                                                    </span>
-                                                )}
+                                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                    uc.uc_ativa
+                                                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                                }`}>
+                                                    {uc.uc_ativa ? 'Ativa' : 'Inativa'}
+                                                </span>
                                                 {uc.is_geradora && (
-                                                    <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-full">
+                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
                                                         Geradora
                                                     </span>
                                                 )}

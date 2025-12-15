@@ -246,6 +246,83 @@ async def listar_faturas_por_usina(
     }
 
 
+@router.get("/kanban-test-public")
+async def kanban_test_public():
+    """Teste público do kanban - verifica conexão e estrutura das tabelas."""
+    import traceback
+
+    resultado = {
+        "status": "ok",
+        "etapas": {}
+    }
+
+    try:
+        from backend.core.database import get_supabase_admin
+        supabase = get_supabase_admin()
+        resultado["etapas"]["conexao_db"] = {"status": "ok"}
+    except Exception as e:
+        resultado["etapas"]["conexao_db"] = {"status": "erro", "erro": str(e)}
+        resultado["status"] = "erro"
+        return resultado
+
+    # Testar tabela usinas
+    try:
+        usinas_response = supabase.table("usinas").select("id").limit(3).execute()
+        resultado["etapas"]["tabela_usinas"] = {
+            "status": "ok",
+            "count": len(usinas_response.data or []),
+            "amostra_ids": [u["id"] for u in (usinas_response.data or [])]
+        }
+    except Exception as e:
+        resultado["etapas"]["tabela_usinas"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    # Testar tabela beneficiarios
+    try:
+        benef_response = supabase.table("beneficiarios").select("id, status, uc_id").limit(5).execute()
+        status_values = list(set([b.get("status") for b in (benef_response.data or [])]))
+        resultado["etapas"]["tabela_beneficiarios"] = {
+            "status": "ok",
+            "count": len(benef_response.data or []),
+            "status_values": status_values,
+            "amostra": (benef_response.data or [])[:2]
+        }
+    except Exception as e:
+        resultado["etapas"]["tabela_beneficiarios"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    # Testar tabela faturas
+    try:
+        faturas_response = supabase.table("faturas").select("id, uc_id, mes_referencia, ano_referencia").limit(3).execute()
+        resultado["etapas"]["tabela_faturas"] = {
+            "status": "ok",
+            "count": len(faturas_response.data or []),
+            "amostra": (faturas_response.data or [])[:2]
+        }
+    except Exception as e:
+        resultado["etapas"]["tabela_faturas"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    # Testar tabela gestores_usina
+    try:
+        gestores_response = supabase.table("gestores_usina").select("usuario_id, usina_id").limit(3).execute()
+        resultado["etapas"]["tabela_gestores_usina"] = {
+            "status": "ok",
+            "count": len(gestores_response.data or []),
+            "amostra": (gestores_response.data or [])[:2]
+        }
+    except Exception as e:
+        resultado["etapas"]["tabela_gestores_usina"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    resultado["conclusao"] = "Todas as tabelas acessíveis!"
+    return resultado
+
+
 @router.get("/kanban-debug")
 async def kanban_debug(
     current_user: Annotated[CurrentUser, Depends(get_current_active_user)],

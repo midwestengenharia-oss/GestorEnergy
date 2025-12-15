@@ -2,7 +2,7 @@
 Faturas Router - Endpoints de Faturas
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from typing import Annotated, Optional
 from datetime import date
 import math
@@ -246,6 +246,157 @@ async def listar_faturas_por_usina(
     }
 
 
+@router.get("/kanban-debug")
+async def kanban_debug(
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    ano_referencia: Optional[int] = Query(None, ge=2000, le=2100, description="Ano para testar"),
+):
+    """Debug do kanban - retorna info detalhada sobre cada etapa."""
+    import traceback
+
+    resultado = {
+        "status": "ok",
+        "etapas": {},
+        "user": {
+            "id": str(current_user.id),
+            "is_superadmin": current_user.is_superadmin,
+            "perfis": current_user.perfis if hasattr(current_user, 'perfis') else []
+        }
+    }
+
+    try:
+        from backend.core.database import get_supabase_admin
+        supabase = get_supabase_admin()
+        resultado["etapas"]["conexao_db"] = {"status": "ok"}
+    except Exception as e:
+        resultado["etapas"]["conexao_db"] = {"status": "erro", "erro": str(e)}
+        resultado["status"] = "erro"
+        return resultado
+
+    # Etapa 1: Buscar usinas
+    try:
+        gestores_response = supabase.table("gestores_usina").select(
+            "usina_id"
+        ).eq("usuario_id", str(current_user.id)).execute()
+
+        usina_ids = [g["usina_id"] for g in (gestores_response.data or [])]
+
+        if current_user.is_superadmin and not usina_ids:
+            usinas_response = supabase.table("usinas").select("id").execute()
+            usina_ids = [u["id"] for u in (usinas_response.data or [])]
+
+        resultado["etapas"]["buscar_usinas"] = {
+            "status": "ok",
+            "usina_ids": usina_ids,
+            "count": len(usina_ids)
+        }
+    except Exception as e:
+        resultado["etapas"]["buscar_usinas"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    if not usina_ids:
+        resultado["etapas"]["buscar_usinas"]["aviso"] = "Nenhuma usina encontrada para este usuário"
+        return resultado
+
+    # Etapa 2: Buscar beneficiários
+    try:
+        benef_response = supabase.table("beneficiarios").select(
+            "id, nome, uc_id, usina_id, status"
+        ).in_("usina_id", usina_ids).execute()
+
+        benef_data = benef_response.data or []
+        status_values = list(set([b.get("status") for b in benef_data]))
+
+        # Filtrar ativos
+        beneficiarios_ativos = [
+            b for b in benef_data
+            if str(b.get("status", "")).upper() == "ATIVO"
+        ]
+
+        uc_ids = [b["uc_id"] for b in beneficiarios_ativos if b.get("uc_id")]
+
+        resultado["etapas"]["buscar_beneficiarios"] = {
+            "status": "ok",
+            "total": len(benef_data),
+            "ativos": len(beneficiarios_ativos),
+            "status_values_encontrados": status_values,
+            "uc_ids_count": len(uc_ids),
+            "amostra": benef_data[:3] if benef_data else []
+        }
+    except Exception as e:
+        resultado["etapas"]["buscar_beneficiarios"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    if not uc_ids:
+        resultado["etapas"]["buscar_beneficiarios"]["aviso"] = "Nenhum beneficiário ativo com UC encontrado"
+        return resultado
+
+    # Etapa 3: Buscar UCs
+    try:
+        ucs_response = supabase.table("unidades_consumidoras").select(
+            "id, cdc, digito_verificador, apelido"
+        ).in_("id", uc_ids[:10]).execute()  # Limitar a 10 para teste
+
+        resultado["etapas"]["buscar_ucs"] = {
+            "status": "ok",
+            "count": len(ucs_response.data or []),
+            "amostra": (ucs_response.data or [])[:2]
+        }
+    except Exception as e:
+        resultado["etapas"]["buscar_ucs"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    # Etapa 4: Buscar faturas
+    try:
+        query = supabase.table("faturas").select(
+            "id, uc_id, mes_referencia, ano_referencia, extracao_status"
+        ).in_("uc_id", uc_ids[:10])  # Limitar
+
+        if ano_referencia:
+            query = query.eq("ano_referencia", ano_referencia)
+
+        faturas_response = query.limit(5).execute()
+
+        resultado["etapas"]["buscar_faturas"] = {
+            "status": "ok",
+            "count": len(faturas_response.data or []),
+            "amostra": (faturas_response.data or [])[:2]
+        }
+    except Exception as e:
+        resultado["etapas"]["buscar_faturas"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    # Etapa 5: Buscar cobranças
+    try:
+        fatura_ids = [f["id"] for f in (faturas_response.data or [])]
+        if fatura_ids:
+            cobrancas_response = supabase.table("cobrancas").select(
+                "id, fatura_id, status"
+            ).in_("fatura_id", fatura_ids).execute()
+
+            resultado["etapas"]["buscar_cobrancas"] = {
+                "status": "ok",
+                "count": len(cobrancas_response.data or [])
+            }
+        else:
+            resultado["etapas"]["buscar_cobrancas"] = {
+                "status": "ok",
+                "count": 0,
+                "aviso": "Sem faturas para buscar cobranças"
+            }
+    except Exception as e:
+        resultado["etapas"]["buscar_cobrancas"] = {"status": "erro", "erro": str(e), "traceback": traceback.format_exc()}
+        resultado["status"] = "erro"
+        return resultado
+
+    resultado["conclusao"] = "Todas as etapas passaram com sucesso!"
+    return resultado
+
+
 @router.get(
     "/kanban",
     summary="Kanban de faturas",
@@ -265,6 +416,8 @@ async def listar_faturas_kanban(
     import traceback
 
     logger = logging.getLogger(__name__)
+    etapa_atual = "inicio"
+    logger.info(f"[KANBAN] Iniciando: user={current_user.id}, mes={mes_referencia}, ano={ano_referencia}")
 
     # Resposta vazia padrão
     empty_response = {
@@ -276,10 +429,13 @@ async def listar_faturas_kanban(
     }
 
     try:
+        etapa_atual = "conexao_db"
         from backend.core.database import get_supabase_admin
         supabase = get_supabase_admin()
+        logger.info(f"[KANBAN] Conexão DB OK")
 
         # 1. Buscar usinas que o gestor tem acesso
+        etapa_atual = "buscar_usinas"
         if usina_id:
             usina_ids = [usina_id]
         else:
@@ -295,9 +451,13 @@ async def listar_faturas_kanban(
                 usina_ids = [u["id"] for u in (usinas_response.data or [])]
 
         if not usina_ids:
+            logger.info(f"[KANBAN] Nenhuma usina encontrada")
             return empty_response
 
+        logger.info(f"[KANBAN] Usinas encontradas: {len(usina_ids)}")
+
         # 2. Buscar beneficiários das usinas
+        etapa_atual = "buscar_beneficiarios"
         benef_response = supabase.table("beneficiarios").select(
             "id, nome, uc_id, usina_id, status"
         ).in_("usina_id", usina_ids).execute()
@@ -309,9 +469,13 @@ async def listar_faturas_kanban(
         ]
 
         if not beneficiarios_ativos:
+            logger.info(f"[KANBAN] Nenhum beneficiário ativo")
             return empty_response
 
+        logger.info(f"[KANBAN] Beneficiários ativos: {len(beneficiarios_ativos)}")
+
         # Filtrar por busca se fornecido
+        etapa_atual = "filtrar_busca"
         beneficiarios = beneficiarios_ativos
         busca_lower = ""
         if busca:
@@ -325,9 +489,13 @@ async def listar_faturas_kanban(
         benef_map = {b["uc_id"]: b for b in beneficiarios if b.get("uc_id")}
 
         if not uc_ids:
+            logger.info(f"[KANBAN] Nenhuma UC encontrada")
             return empty_response
 
+        logger.info(f"[KANBAN] UCs encontradas: {len(uc_ids)}")
+
         # 3. Buscar UCs para ter o código formatado
+        etapa_atual = "buscar_ucs"
         ucs_response = supabase.table("unidades_consumidoras").select(
             "id, cdc, digito_verificador, apelido"
         ).in_("id", uc_ids).execute()
@@ -340,7 +508,10 @@ async def listar_faturas_kanban(
                 "apelido": uc.get("apelido")
             }
 
+        logger.info(f"[KANBAN] UCs mapeadas: {len(uc_map)}")
+
         # 4. Buscar faturas
+        etapa_atual = "buscar_faturas"
         query = supabase.table("faturas").select(
             "id, uc_id, numero_fatura, mes_referencia, ano_referencia, pdf_base64, extracao_status, extracao_score, dados_extraidos"
         ).in_("uc_id", uc_ids)
@@ -351,8 +522,10 @@ async def listar_faturas_kanban(
             query = query.eq("ano_referencia", ano_referencia)
 
         faturas_response = query.order("ano_referencia", desc=True).order("mes_referencia", desc=True).execute()
+        logger.info(f"[KANBAN] Faturas encontradas: {len(faturas_response.data or [])}")
 
         # 5. Buscar cobranças existentes para essas faturas
+        etapa_atual = "buscar_cobrancas"
         fatura_ids = [f["id"] for f in (faturas_response.data or [])]
 
         cobrancas_map = {}
@@ -363,8 +536,10 @@ async def listar_faturas_kanban(
 
             for c in (cobrancas_response.data or []):
                 cobrancas_map[c["fatura_id"]] = {"id": c["id"], "status": c["status"]}
+            logger.info(f"[KANBAN] Cobranças encontradas: {len(cobrancas_map)}")
 
         # 6. Classificar faturas por status
+        etapa_atual = "classificar_faturas"
         sem_pdf = []
         pdf_recebido = []
         extraida = []
@@ -456,9 +631,9 @@ async def listar_faturas_kanban(
         }
 
     except Exception as e:
-        logger.error(f"Erro no kanban de faturas: {str(e)}")
+        logger.error(f"[KANBAN] Erro na etapa '{etapa_atual}': {str(e)}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro na etapa '{etapa_atual}': {str(e)}")
 
 
 @router.get(

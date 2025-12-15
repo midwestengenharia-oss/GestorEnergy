@@ -15,7 +15,11 @@
       "Bash(npm install)",
       "Bash(python -m py_compile:*)",
       "Bash(npx tsc:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(dir \"C:\\Users\\Paulo Seze\\.claude\\plans\" /b /o-d)",
+      "Bash(dir \"C:\\Users\\Paulo Seze\\.claude\\plans\" /b /o-d /t:w)",
+      "Bash(ls:*)",
+      "Bash(done)"
     ]
   }
 }

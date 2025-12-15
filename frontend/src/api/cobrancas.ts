@@ -108,13 +108,14 @@ export const cobrancasApi = {
     // ========== NOVOS ENDPOINTS AUTOMÁTICOS ==========
 
     // Gerar cobrança automática a partir de fatura
-    gerarAutomatica: (faturaId: number, beneficiarioId: number, tarifaAneel?: number, fioB?: number) =>
+    gerarAutomatica: (faturaId: number, beneficiarioId: number, tarifaAneel?: number, fioB?: number, forcarReprocessamento?: boolean) =>
         api.post<Cobranca>('/cobrancas/gerar-automatica', null, {
             params: {
                 fatura_id: faturaId,
                 beneficiario_id: beneficiarioId,
                 tarifa_aneel: tarifaAneel,
-                fio_b: fioB
+                fio_b: fioB,
+                forcar_reprocessamento: forcarReprocessamento || false
             }
         }),
 

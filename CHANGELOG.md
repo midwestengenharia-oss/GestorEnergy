@@ -23,6 +23,12 @@ POST /api/cobrancas/gerar-automatica?fatura_id=213&beneficiario_id=1&forcar_repr
 - Cobranças em `RASCUNHO`, `EMITIDA`, `PENDENTE` ou `CANCELADA` podem ser reprocessadas
 - A cobrança antiga é excluída antes de criar a nova
 
+### Interface
+- Botão "Reprocessar" adicionado na aba "Relatório Gerado" do Processamento de Cobranças
+- Cor laranja para diferenciar do botão de aprovar
+- Confirmação antes de executar
+- Oculto para cobranças já pagas
+
 ---
 
 ## [2025-12-14] Cálculo Proporcional de Bandeira Tarifária

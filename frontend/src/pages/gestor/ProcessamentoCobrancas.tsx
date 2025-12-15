@@ -193,15 +193,30 @@ export function ProcessamentoCobrancas() {
         }
     };
 
-    const handleGerarCobranca = async (fatura: FaturaKanban) => {
+    const handleGerarCobranca = async (fatura: FaturaKanban, forcarReprocessamento: boolean = false) => {
         if (!fatura.beneficiario) {
             alert('Esta fatura nao tem beneficiario vinculado');
             return;
         }
 
+        // Confirmação para reprocessamento
+        if (forcarReprocessamento) {
+            const confirmar = confirm(
+                'Tem certeza que deseja reprocessar esta cobrança?\n\n' +
+                'A cobrança existente será excluída e uma nova será gerada com os cálculos atualizados.'
+            );
+            if (!confirmar) return;
+        }
+
         try {
             setLoadingAction(fatura.id);
-            await cobrancasApi.gerarAutomatica(fatura.id, fatura.beneficiario.id);
+            await cobrancasApi.gerarAutomatica(
+                fatura.id,
+                fatura.beneficiario.id,
+                undefined,
+                undefined,
+                forcarReprocessamento
+            );
             await fetchKanban();
             setExpandedId(null);
         } catch (err: any) {
@@ -532,7 +547,7 @@ interface FaturaAccordionItemProps {
     activeTab: string;
     loadingAction: number | null;
     onExtrair: (id: number) => void;
-    onGerarCobranca: (fatura: FaturaKanban) => void;
+    onGerarCobranca: (fatura: FaturaKanban, forcarReprocessamento?: boolean) => void;
     onAprovar: (cobrancaId: number, enviarEmail: boolean) => void;
     onVerRelatorio: (cobrancaId: number) => void;
     formatarMoeda: (valor: number | null | undefined) => string;
@@ -802,6 +817,17 @@ function FaturaAccordionItem({
                                                 <Eye size={16} />
                                                 Ver Relatorio
                                             </button>
+                                            {fatura.cobranca.status !== 'PAGA' && (
+                                                <button
+                                                    onClick={() => onGerarCobranca(fatura, true)}
+                                                    disabled={isLoading}
+                                                    className="px-4 py-2 border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 flex items-center gap-2"
+                                                    title="Excluir cobranca atual e gerar nova com calculos atualizados"
+                                                >
+                                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                                                    Reprocessar
+                                                </button>
+                                            )}
                                             {fatura.cobranca.status === 'RASCUNHO' && (
                                                 <button
                                                     onClick={() => onAprovar(fatura.cobranca!.id, false)}

@@ -7,8 +7,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from backend.auth.dependencies import get_current_user, require_admin
-from backend.auth.schemas import UsuarioLogado
+from ..core.security import get_current_user, require_perfil, CurrentUser
 from .schemas import ImpostoCreate, ImpostoUpdate, ImpostoResponse, ImpostoVigente
 from .service import impostos_service
 
@@ -17,7 +16,7 @@ router = APIRouter(prefix="/configuracoes", tags=["Configurações"])
 
 @router.get("/impostos", response_model=List[ImpostoResponse])
 async def listar_impostos(
-    current_user: UsuarioLogado = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """Lista todos os registros de impostos"""
     return impostos_service.listar_todos()
@@ -26,7 +25,7 @@ async def listar_impostos(
 @router.get("/impostos/vigente", response_model=ImpostoVigente)
 async def buscar_imposto_vigente(
     data_referencia: Optional[date] = Query(None, description="Data de referência (default: hoje)"),
-    current_user: UsuarioLogado = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """Busca o imposto vigente para uma data específica"""
     imposto = impostos_service.buscar_vigente(data_referencia)
@@ -38,7 +37,7 @@ async def buscar_imposto_vigente(
 @router.get("/impostos/{imposto_id}", response_model=ImpostoResponse)
 async def buscar_imposto(
     imposto_id: int,
-    current_user: UsuarioLogado = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """Busca um imposto por ID"""
     imposto = impostos_service.buscar_por_id(imposto_id)
@@ -50,7 +49,7 @@ async def buscar_imposto(
 @router.post("/impostos", response_model=ImpostoResponse)
 async def criar_imposto(
     dados: ImpostoCreate,
-    current_user: UsuarioLogado = Depends(require_admin)
+    current_user: CurrentUser = Depends(require_perfil("superadmin"))
 ):
     """
     Cria novo registro de imposto (apenas admin).
@@ -66,7 +65,7 @@ async def criar_imposto(
 async def atualizar_imposto(
     imposto_id: int,
     dados: ImpostoUpdate,
-    current_user: UsuarioLogado = Depends(require_admin)
+    current_user: CurrentUser = Depends(require_perfil("superadmin"))
 ):
     """Atualiza um registro de imposto (apenas admin)"""
     imposto = impostos_service.atualizar(imposto_id, dados.model_dump(exclude_unset=True))
@@ -78,7 +77,7 @@ async def atualizar_imposto(
 @router.delete("/impostos/{imposto_id}")
 async def excluir_imposto(
     imposto_id: int,
-    current_user: UsuarioLogado = Depends(require_admin)
+    current_user: CurrentUser = Depends(require_perfil("superadmin"))
 ):
     """Exclui um registro de imposto (apenas admin, não pode ser o vigente)"""
     try:

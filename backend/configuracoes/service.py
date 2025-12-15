@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from backend.database import get_supabase
+from ..core.database import get_supabase
 
 
 class ImpostosService:

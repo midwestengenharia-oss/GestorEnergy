@@ -295,12 +295,18 @@ async def listar_faturas_kanban(
             "totais": {"sem_pdf": 0, "pdf_recebido": 0, "extraida": 0, "relatorio_gerado": 0}
         }
 
-    # 2. Buscar beneficiários das usinas
+    # 2. Buscar beneficiários das usinas - incluir status para filtrar
     benef_response = supabase.table("beneficiarios").select(
-        "id, nome, uc_id, usina_id"
-    ).in_("usina_id", usina_ids).eq("status", "ATIVO").execute()
+        "id, nome, uc_id, usina_id, status"
+    ).in_("usina_id", usina_ids).execute()
 
-    if not benef_response.data:
+    # Filtrar ativos (case insensitive)
+    beneficiarios_ativos = [
+        b for b in (benef_response.data or [])
+        if b.get("status", "").upper() == "ATIVO"
+    ] if benef_response.data else []
+
+    if not beneficiarios_ativos:
         return {
             "sem_pdf": [],
             "pdf_recebido": [],
@@ -310,7 +316,7 @@ async def listar_faturas_kanban(
         }
 
     # Filtrar por busca se fornecido
-    beneficiarios = benef_response.data
+    beneficiarios = beneficiarios_ativos
     if busca:
         busca_lower = busca.lower()
         beneficiarios = [

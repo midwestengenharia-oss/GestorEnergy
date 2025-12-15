@@ -12,7 +12,8 @@
       "Bash(cd:*)",
       "Bash(npm run build:*)",
       "Bash(npx vite build)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(python -m py_compile:*)"
     ]
   }
 }

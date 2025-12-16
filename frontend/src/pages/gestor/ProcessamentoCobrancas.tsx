@@ -41,6 +41,24 @@ import { cobrancasApi, type Cobranca } from '../../api/cobrancas';
 // Types
 // ========================
 
+// Interface para períodos de bandeira
+interface PeriodoBandeira {
+    bandeira: string;
+    data_inicio: string;
+    data_fim: string;
+    dias: number;
+    consumo_proporcional: number;
+    valor_kwh: number;
+    valor_sem_impostos: number;
+}
+
+// Interface para previsão de bandeira
+interface BandeiraPrevista {
+    valor_total: number;
+    valor_sem_impostos: number;
+    periodos: PeriodoBandeira[];
+}
+
 interface FaturaKanban {
     id: number;
     uc_id: number;
@@ -52,7 +70,9 @@ interface FaturaKanban {
     valor_fatura: number;
     extracao_status: string;
     extracao_score: number | null;
-    dados_extraidos: any;
+    dados_extraidos: DadosExtraidos | null;
+    dados_api?: Record<string, any> | null;
+    dados_extraidos_editados?: Record<string, any> | null;
     tem_pdf: boolean;
     // Campos de energia (vindos do backend)
     consumo_kwh?: number;
@@ -94,6 +114,8 @@ interface FaturaKanban {
         telefone?: string;
         convertido_em?: string;
     } | null;
+    // Previsão de bandeira calculada pelo backend
+    bandeira_prevista?: BandeiraPrevista | null;
 }
 
 interface KanbanData {
@@ -1281,6 +1303,102 @@ function FaturaAccordionItem({
                                     </div>
                                 </div>
 
+                                {/* BANDEIRA TARIFARIA - Previsao vs Extracao */}
+                                {(fatura.bandeira_prevista || dados?.totais?.adicionais_bandeira) && (
+                                    <div className="border border-orange-200 dark:border-orange-800 rounded-lg overflow-hidden">
+                                        <div className="bg-orange-50 dark:bg-orange-900/20 px-4 py-2 border-b border-orange-200 dark:border-orange-800">
+                                            <h5 className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-2">
+                                                <AlertTriangle size={16} />
+                                                Bandeira Tarifaria - Comparacao
+                                            </h5>
+                                        </div>
+                                        <div className="p-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {/* Previsao (API) */}
+                                                <div className="bg-orange-50/50 dark:bg-orange-900/10 rounded-lg p-3">
+                                                    <span className="text-xs text-slate-500 block mb-2">Previsao (API - Calculo Proporcional)</span>
+                                                    <p className="font-bold text-xl text-orange-600 dark:text-orange-400">
+                                                        {fatura.bandeira_prevista
+                                                            ? formatarMoeda(fatura.bandeira_prevista.valor_total)
+                                                            : 'N/A'
+                                                        }
+                                                    </p>
+                                                    {fatura.bandeira_prevista?.periodos && (
+                                                        <div className="mt-2 space-y-1">
+                                                            {fatura.bandeira_prevista.periodos.map((p, idx) => (
+                                                                <div key={idx} className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                                                                    <span className={`px-1.5 py-0.5 rounded ${
+                                                                        p.bandeira.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
+                                                                        p.bandeira.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
+                                                                        'bg-red-100 text-red-700'
+                                                                    }`}>
+                                                                        {p.bandeira}
+                                                                    </span>
+                                                                    <span>{p.dias} dias</span>
+                                                                    <span>({p.consumo_proporcional} kWh)</span>
+                                                                    <span className="ml-auto font-medium">
+                                                                        {formatarMoeda(p.valor_sem_impostos)}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Extraido (PDF) */}
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3">
+                                                    <span className="text-xs text-slate-500 block mb-2">Extraido (PDF)</span>
+                                                    <p className="font-bold text-xl text-slate-900 dark:text-white">
+                                                        {dados?.totais?.adicionais_bandeira != null
+                                                            ? formatarMoeda(dados.totais.adicionais_bandeira)
+                                                            : 'N/A'
+                                                        }
+                                                    </p>
+                                                    <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                                                        <span className={`px-1.5 py-0.5 rounded ${
+                                                            dados?.bandeira_tarifaria?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
+                                                            dados?.bandeira_tarifaria?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
+                                                            dados?.bandeira_tarifaria?.toLowerCase().includes('vermelha') ? 'bg-red-100 text-red-700' :
+                                                            'bg-slate-100 text-slate-700'
+                                                        }`}>
+                                                            {dados?.bandeira_tarifaria || 'N/A'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Indicador de divergencia */}
+                                            {fatura.bandeira_prevista && dados?.totais?.adicionais_bandeira != null && (
+                                                <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-800">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                                                            Diferenca:
+                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`font-medium ${
+                                                                Math.abs(fatura.bandeira_prevista.valor_total - dados.totais.adicionais_bandeira) < 1
+                                                                    ? 'text-green-600'
+                                                                    : Math.abs(fatura.bandeira_prevista.valor_total - dados.totais.adicionais_bandeira) < 5
+                                                                    ? 'text-yellow-600'
+                                                                    : 'text-red-600'
+                                                            }`}>
+                                                                {formatarMoeda(Math.abs(fatura.bandeira_prevista.valor_total - dados.totais.adicionais_bandeira))}
+                                                            </span>
+                                                            {renderStatusIndicador(
+                                                                compararValores(
+                                                                    fatura.bandeira_prevista.valor_total,
+                                                                    dados.totais.adicionais_bandeira,
+                                                                    0.10
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Cliente Contratante */}
                                 {fatura.cliente && (
                                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
@@ -1322,11 +1440,19 @@ function FaturaAccordionItem({
                                             <button
                                                 onClick={async () => {
                                                     setSalvando(true);
-                                                    // TODO: Implementar salvamento no backend
-                                                    await new Promise(r => setTimeout(r, 500));
-                                                    setSalvando(false);
-                                                    setEditMode(false);
-                                                    alert('Funcionalidade em desenvolvimento. Valores serao considerados na geracao da cobranca.');
+                                                    try {
+                                                        await faturasApi.salvarDadosEditados(fatura.id, {
+                                                            consumo_kwh: camposEditados.consumo_kwh,
+                                                            injetada_ouc_kwh: camposEditados.injetada_ouc_kwh,
+                                                            injetada_muc_kwh: camposEditados.injetada_muc_kwh
+                                                        });
+                                                        setEditMode(false);
+                                                        alert('Alteracoes salvas com sucesso! Os valores serao considerados na geracao da cobranca.');
+                                                    } catch (err: any) {
+                                                        alert(err.response?.data?.detail || 'Erro ao salvar alteracoes');
+                                                    } finally {
+                                                        setSalvando(false);
+                                                    }
                                                 }}
                                                 disabled={salvando}
                                                 className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 flex items-center gap-2"

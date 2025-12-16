@@ -3,9 +3,12 @@ Faturas Router - Endpoints de Faturas
 """
 
 from fastapi import APIRouter, Depends, Query, status, HTTPException
-from typing import Annotated, Optional
-from datetime import date
+from typing import Annotated, Optional, List
+from datetime import date, datetime
+from decimal import Decimal
 import math
+
+from backend.energisa.constants import get_bandeira_valor, TRIB_DIVISOR
 
 from backend.faturas.schemas import (
     FaturaManualRequest,
@@ -16,6 +19,8 @@ from backend.faturas.schemas import (
     EstatisticasFaturaResponse,
     ComparativoMensalResponse,
     MessageResponse,
+    DadosExtraidosUpdate,
+    DadosExtraidosEditadosResponse,
 )
 from backend.faturas.service import faturas_service
 from backend.core.security import (
@@ -25,6 +30,88 @@ from backend.core.security import (
 )
 
 router = APIRouter()
+
+
+def calcular_bandeira_prevista(
+    detalhamento: List[List[str]],
+    consumo: int,
+    dias: int
+) -> Optional[dict]:
+    """
+    Calcula valor de bandeira previsto baseado no detalhamento da API.
+
+    Args:
+        detalhamento: Lista de listas [bandeira, data_inicio, data_fim]
+                      Ex: [["Vermelha", "10/11/2025", "30/11/2025"], ["Verde", "01/12/2025", "09/12/2025"]]
+        consumo: Consumo total em kWh
+        dias: Quantidade de dias do período
+
+    Returns:
+        Dict com valor_total (com impostos), valor_sem_impostos e periodos detalhados
+    """
+    if not detalhamento or not consumo or not dias or dias <= 0:
+        return None
+
+    try:
+        # Consumo médio diário
+        consumo_medio_diario = consumo / dias
+
+        periodos = []
+        valor_total_sem_impostos = Decimal("0")
+
+        for item in detalhamento:
+            if not isinstance(item, list) or len(item) < 3:
+                continue
+
+            bandeira_nome = item[0]
+            data_inicio_str = item[1]
+            data_fim_str = item[2]
+
+            # Calcular dias do período
+            try:
+                data_inicio = datetime.strptime(data_inicio_str, "%d/%m/%Y")
+                data_fim = datetime.strptime(data_fim_str, "%d/%m/%Y")
+                dias_periodo = (data_fim - data_inicio).days + 1
+            except ValueError:
+                continue
+
+            if dias_periodo <= 0:
+                continue
+
+            # Consumo proporcional do período
+            consumo_periodo = round(consumo_medio_diario * dias_periodo)
+
+            # Valor da bandeira por kWh (sem impostos)
+            valor_kwh = get_bandeira_valor(bandeira_nome)
+
+            # Valor do período (sem impostos)
+            valor_periodo = valor_kwh * consumo_periodo
+            valor_total_sem_impostos += valor_periodo
+
+            periodos.append({
+                "bandeira": bandeira_nome,
+                "data_inicio": data_inicio_str,
+                "data_fim": data_fim_str,
+                "dias": dias_periodo,
+                "consumo_proporcional": consumo_periodo,
+                "valor_kwh": float(valor_kwh),
+                "valor_sem_impostos": float(valor_periodo)
+            })
+
+        if not periodos:
+            return None
+
+        # Aplicar impostos (grossup)
+        valor_com_impostos = float(valor_total_sem_impostos) / TRIB_DIVISOR
+
+        return {
+            "valor_total": round(valor_com_impostos, 2),
+            "valor_sem_impostos": round(float(valor_total_sem_impostos), 2),
+            "periodos": periodos
+        }
+
+    except Exception:
+        return None
 
 
 @router.get(
@@ -340,7 +427,8 @@ async def listar_faturas_kanban(
         "valor_fatura, data_vencimento, consumo, bandeira_tarifaria, "
         "quantidade_dias, leitura_atual, leitura_anterior, "
         "situacao_pagamento, data_pagamento, valor_iluminacao_publica, "
-        "pdf_base64, pdf_baixado_em, extracao_status, extracao_score, dados_extraidos"
+        "pdf_base64, pdf_baixado_em, extracao_status, extracao_score, "
+        "dados_extraidos, dados_api, dados_extraidos_editados"
     ).in_("uc_id", uc_ids)
 
     if mes_referencia:
@@ -430,6 +518,21 @@ async def listar_faturas_kanban(
         # Valor da fatura: preferir extraído, senão usar da API
         valor_fatura = dados_ex.get("total_a_pagar") or fatura.get("valor_fatura")
 
+        # Dados da API para previsão de bandeira
+        dados_api = fatura.get("dados_api") or {}
+        detalhamento_bandeira = dados_api.get("bandeiraTarifariaDetalhamento")
+        consumo_para_bandeira = fatura.get("consumo") or dados_api.get("consumo")
+        dias_para_bandeira = fatura.get("quantidade_dias") or dados_api.get("quantidadeDiaConsumo")
+
+        # Calcular previsão de bandeira baseado no detalhamento da API
+        bandeira_prevista = None
+        if detalhamento_bandeira and consumo_para_bandeira and dias_para_bandeira:
+            bandeira_prevista = calcular_bandeira_prevista(
+                detalhamento=detalhamento_bandeira,
+                consumo=consumo_para_bandeira,
+                dias=dias_para_bandeira
+            )
+
         usina_id = beneficiario.get("usina_id")
         item_fatura = {
             "id": fatura["id"],
@@ -467,7 +570,15 @@ async def listar_faturas_kanban(
             "pdf_baixado_em": fatura.get("pdf_baixado_em"),
 
             # Cliente original (lead que foi convertido em beneficiário)
-            "cliente": leads_map.get(beneficiario["id"]) if beneficiario else None
+            "cliente": leads_map.get(beneficiario["id"]) if beneficiario else None,
+
+            # Dados completos para visualização/edição no frontend
+            "dados_extraidos": fatura.get("dados_extraidos"),
+            "dados_api": dados_api if dados_api else None,
+            "dados_extraidos_editados": fatura.get("dados_extraidos_editados"),
+
+            # Previsão de bandeira (calculada a partir do detalhamento da API)
+            "bandeira_prevista": bandeira_prevista
         }
 
         # Filtrar por busca na UC
@@ -797,3 +908,66 @@ async def refazer_fatura(
         **resultado,
         "message": "Fatura resetada para aguardar nova extração"
     }
+
+
+# ========== ENDPOINTS DE EDIÇÃO DE DADOS EXTRAÍDOS ==========
+
+@router.patch(
+    "/{fatura_id}/dados-editados",
+    response_model=DadosExtraidosEditadosResponse,
+    summary="Salvar edições de dados extraídos",
+    description="Salva correções manuais nos dados extraídos do PDF",
+    dependencies=[Depends(require_perfil("superadmin", "proprietario", "gestor"))]
+)
+async def atualizar_dados_editados(
+    fatura_id: int,
+    data: DadosExtraidosUpdate,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+):
+    """
+    Salva edições manuais nos dados extraídos.
+
+    Permite ao gestor corrigir valores extraídos incorretamente do PDF:
+    - consumo_kwh: Consumo total em kWh
+    - injetada_ouc_kwh: Energia injetada oUC em kWh
+    - injetada_muc_kwh: Energia injetada mUC em kWh
+    - bandeira_tarifaria: Nome da bandeira tarifária
+    - valor_bandeira: Valor da bandeira tarifária
+    - total_a_pagar: Total a pagar da fatura
+
+    Os dados originais são preservados em dados_extraidos.
+    As edições são salvas em dados_extraidos_editados.
+    """
+    from backend.core.database import get_supabase_admin
+    from datetime import timezone
+
+    supabase = get_supabase_admin()
+
+    # Verificar se fatura existe
+    fatura_response = supabase.table("faturas").select("id").eq("id", fatura_id).execute()
+    if not fatura_response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fatura não encontrada"
+        )
+
+    # Preparar dados para salvar (apenas campos com valor)
+    dados_editados = data.model_dump(exclude_unset=True)
+
+    # Converter Decimal para float para JSON
+    for key, value in dados_editados.items():
+        if hasattr(value, '__float__'):
+            dados_editados[key] = float(value)
+
+    # Salvar edições
+    supabase.table("faturas").update({
+        "dados_extraidos_editados": dados_editados,
+        "editado_em": datetime.now(timezone.utc).isoformat(),
+        "editado_por": str(current_user.id)
+    }).eq("id", fatura_id).execute()
+
+    return DadosExtraidosEditadosResponse(
+        success=True,
+        fatura_id=fatura_id,
+        dados_editados=dados_editados
+    )

@@ -133,6 +133,17 @@ export const faturasApi = {
     refazer: (faturaId: number) =>
         api.post<{ success: boolean; fatura_id: number; status: string; cobranca_excluida: boolean; message: string }>(`/faturas/${faturaId}/refazer`),
 
+    // Salvar dados editados (correções manuais)
+    salvarDadosEditados: (faturaId: number, dados: {
+        consumo_kwh?: number;
+        injetada_ouc_kwh?: number;
+        injetada_muc_kwh?: number;
+        bandeira_tarifaria?: string;
+        valor_bandeira?: number;
+        total_a_pagar?: number;
+    }) =>
+        api.patch<{ success: boolean; fatura_id: number; dados_editados: any }>(`/faturas/${faturaId}/dados-editados`, dados),
+
     // Buscar faturas por usina
     porUsina: (usinaId: number, mesReferencia?: number, anoReferencia?: number) =>
         api.get<{ faturas: any[]; total: number }>(`/faturas/por-usina/${usinaId}`, {

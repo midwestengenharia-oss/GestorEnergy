@@ -214,6 +214,27 @@ class ComparativoMensalResponse(BaseModel):
 
 
 # ========================
+# Edição de Dados Extraídos
+# ========================
+
+class DadosExtraidosUpdate(BaseModel):
+    """Schema para edição manual de dados extraídos do PDF"""
+    consumo_kwh: Optional[int] = Field(None, description="Consumo total em kWh")
+    injetada_ouc_kwh: Optional[int] = Field(None, description="Energia injetada oUC em kWh")
+    injetada_muc_kwh: Optional[int] = Field(None, description="Energia injetada mUC em kWh")
+    bandeira_tarifaria: Optional[str] = Field(None, description="Nome da bandeira tarifária")
+    valor_bandeira: Optional[Decimal] = Field(None, description="Valor da bandeira tarifária")
+    total_a_pagar: Optional[Decimal] = Field(None, description="Total a pagar da fatura")
+
+
+class DadosExtraidosEditadosResponse(BaseModel):
+    """Resposta ao salvar edições de dados extraídos"""
+    success: bool
+    fatura_id: int
+    dados_editados: dict
+
+
+# ========================
 # Respostas genéricas
 # ========================
 

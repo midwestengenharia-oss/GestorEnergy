@@ -19,7 +19,9 @@
       "Bash(dir \"C:\\Users\\Paulo Seze\\.claude\\plans\" /b /o-d)",
       "Bash(dir \"C:\\Users\\Paulo Seze\\.claude\\plans\" /b /o-d /t:w)",
       "Bash(ls:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(dir /s /b \"C:\\Users\\Paulo Seze\\Documents\\Aplicações\\Nova pasta\\PROJETO_ENERGISA\")",
+      "Bash(findstr:*)"
     ]
   }
 }

@@ -534,6 +534,11 @@ async def listar_faturas_kanban(
         # Valor da fatura: preferir extraído, senão usar da API
         valor_fatura = dados_ex.get("total_a_pagar") or fatura.get("valor_fatura")
 
+        # Totais extraídos do PDF (para bandeira e serviços)
+        totais_ex = dados_ex.get("totais") or {}
+        bandeira_extraida = totais_ex.get("adicionais_bandeira")
+        bandeira_tarifaria_pdf = dados_ex.get("bandeira_tarifaria")
+
         # Dados da API para previsão de bandeira
         dados_api = fatura.get("dados_api") or {}
         detalhamento_bandeira = dados_api.get("bandeiraTarifariaDetalhamento")
@@ -575,6 +580,10 @@ async def listar_faturas_kanban(
             "valor_fatura": valor_fatura,
             "cobranca": cobrancas_map.get(fatura["id"]),
             "tem_pdf": fatura.get("pdf_base64") is not None,
+
+            # Campos extraídos do PDF (bandeira)
+            "bandeira_extraida": bandeira_extraida,
+            "bandeira_tarifaria_pdf": bandeira_tarifaria_pdf,
 
             # Campos da API (disponíveis ANTES da extração)
             "data_vencimento": fatura.get("data_vencimento"),

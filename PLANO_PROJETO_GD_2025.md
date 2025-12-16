@@ -326,8 +326,9 @@ Claude pode ler este documento para entender o contexto e continuar de onde para
 | 2025-12-15 | Criacao deste documento de planejamento | Concluido |
 | 2025-12-16 | Correcoes exibicao faturas GD (7 itens) | Concluido |
 | 2025-12-16 | Reorganizacao arquivos de plano | Concluido |
+| 2025-12-16 | Correcoes adicionais mapeamento energia injetada | Concluido |
 
-### Detalhes Sessao 16/12/2025
+### Detalhes Sessao 16/12/2025 (Manha)
 
 **Correcoes implementadas no ProcessamentoCobrancas:**
 1. Unificar logica GD usando `FaturaExtraidaSchema.detectar_modelo_gd()`
@@ -337,6 +338,27 @@ Claude pode ler este documento para entender o contexto e continuar de onde para
 5. Clarificar consumo bruto vs liquido
 6. Exibir taxa minima GD1 (30/50/100 kWh)
 7. Indicadores contextuais (INFO azul)
+
+### Detalhes Sessao 16/12/2025 (Tarde)
+
+**Organizacao:**
+- Movido `PROJETO_PLATAFORMA_GD.md` para `docs/ESPECIFICACAO_REQUISITOS.md`
+
+**Backend (`backend/faturas/router.py`):**
+- Adicionado campos `bandeira_extraida` e `bandeira_tarifaria_pdf` no endpoint `/faturas/kanban`
+
+**Frontend (`frontend/src/pages/gestor/ProcessamentoCobrancas.tsx`):**
+1. Criado helpers para acessar energia injetada com ambos formatos de chave (espaço e underscore):
+   - `getEnergiaInjetadaOUC()`, `getEnergiaInjetadaMUC()`
+   - `calcularInjetadaOUC()`, `calcularInjetadaMUC()`
+   - `calcularValorInjetadaOUC()`, `calcularValorInjetadaMUC()`
+   - `getLancamentosSemIluminacao()`, `getValorIluminacaoPublica()`
+   - `getTaxaMinima()` - retorna 30/50/100 kWh por tipo de ligacao
+2. Corrigido mapeamento de energia injetada (oUC + mUC) - problema era chave com espaco vs underscore
+3. Corrigido exibicao de bandeira extraida do PDF (usando `fatura.bandeira_extraida`)
+4. Corrigido duplicacao iluminacao vs outros servicos (filtro correto)
+5. Corrigido label taxa minima vs energia excedente (GD1) - mostra label correto baseado no consumo liquido
+6. Economia GD agora calcula corretamente usando os novos helpers
 
 ---
 

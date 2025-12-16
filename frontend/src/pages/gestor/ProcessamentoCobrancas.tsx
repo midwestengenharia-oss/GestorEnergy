@@ -98,6 +98,9 @@ interface FaturaKanban {
         economia_mes: number;
         vencimento?: string;
     } | null;
+    // Campos extraídos do PDF (bandeira)
+    bandeira_extraida?: number;
+    bandeira_tarifaria_pdf?: string;
     // Campos da API (disponíveis ANTES da extração)
     data_vencimento?: string;
     consumo_api?: number;
@@ -135,6 +138,23 @@ interface KanbanData {
     };
 }
 
+// Interface para item de energia injetada
+interface EnergiaInjetadaItem {
+    descricao?: string;
+    tipo_gd?: string;
+    quantidade?: number;
+    preco_unit_com_tributos?: number;
+    valor?: number;
+    valor_total?: number;
+    mes_ano_referencia_item?: string;
+}
+
+// Interface para lançamento/serviço
+interface LancamentoServico {
+    descricao?: string;
+    valor?: number;
+}
+
 interface DadosExtraidos {
     codigo_cliente?: string;
     ligacao?: string;
@@ -143,22 +163,29 @@ interface DadosExtraidos {
     total_a_pagar?: number;
     leitura_anterior?: number;
     leitura_atual?: number;
+    leitura_anterior_data?: string;
+    leitura_atual_data?: string;
+    proxima_leitura_data?: string;
     dias?: number;
     itens_fatura?: {
         consumo_kwh?: {
             quantidade?: number;
             preco_unit_com_tributos?: number;
+            valor?: number;
             valor_total?: number;
         };
-        energia_injetada_ouc?: Array<{
+        // Suporta ambos os formatos de chave (espaço e underscore)
+        'energia_injetada oUC'?: EnergiaInjetadaItem[];
+        'energia_injetada mUC'?: EnergiaInjetadaItem[];
+        energia_injetada_ouc?: EnergiaInjetadaItem[];
+        energia_injetada_muc?: EnergiaInjetadaItem[];
+        ajuste_lei_14300?: {
+            descricao?: string;
             quantidade?: number;
             preco_unit_com_tributos?: number;
-            valor_total?: number;
-        }>;
-        energia_injetada_muc?: Array<{
-            quantidade?: number;
-            valor_total?: number;
-        }>;
+            valor?: number;
+        };
+        lancamentos_e_servicos?: LancamentoServico[];
     };
     totais?: {
         adicionais_bandeira?: number;
@@ -240,6 +267,75 @@ const statusConfig: Record<ValidacaoStatus, { color: string; bgColor: string; ic
     DIFERENTE: { color: 'text-yellow-600', bgColor: 'bg-yellow-50 dark:bg-yellow-900/20', icon: AlertTriangle },
     AUSENTE: { color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/20', icon: XCircle },
     INFO: { color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/20', icon: Info }
+};
+
+// ===========================================
+// Helpers para acessar dados de energia injetada
+// Suporta ambos os formatos de chave: espaço e underscore
+// ===========================================
+
+// Pega items de energia injetada oUC
+const getEnergiaInjetadaOUC = (itens: DadosExtraidos['itens_fatura']): EnergiaInjetadaItem[] => {
+    if (!itens) return [];
+    // Tenta primeiro com espaço (formato do backend), depois com underscore
+    return itens['energia_injetada oUC'] || itens.energia_injetada_ouc || [];
+};
+
+// Pega items de energia injetada mUC
+const getEnergiaInjetadaMUC = (itens: DadosExtraidos['itens_fatura']): EnergiaInjetadaItem[] => {
+    if (!itens) return [];
+    return itens['energia_injetada mUC'] || itens.energia_injetada_muc || [];
+};
+
+// Calcula total de kWh injetados (oUC)
+const calcularInjetadaOUC = (itens: DadosExtraidos['itens_fatura']): number => {
+    return getEnergiaInjetadaOUC(itens).reduce((sum, item) => sum + Math.abs(item.quantidade || 0), 0);
+};
+
+// Calcula total de kWh injetados (mUC)
+const calcularInjetadaMUC = (itens: DadosExtraidos['itens_fatura']): number => {
+    return getEnergiaInjetadaMUC(itens).reduce((sum, item) => sum + Math.abs(item.quantidade || 0), 0);
+};
+
+// Calcula valor total de injetada (oUC)
+const calcularValorInjetadaOUC = (itens: DadosExtraidos['itens_fatura']): number => {
+    return getEnergiaInjetadaOUC(itens).reduce(
+        (sum, item) => sum + Math.abs(item.valor || item.valor_total || 0), 0
+    );
+};
+
+// Calcula valor total de injetada (mUC)
+const calcularValorInjetadaMUC = (itens: DadosExtraidos['itens_fatura']): number => {
+    return getEnergiaInjetadaMUC(itens).reduce(
+        (sum, item) => sum + Math.abs(item.valor || item.valor_total || 0), 0
+    );
+};
+
+// Filtra lançamentos (exclui iluminação pública)
+const getLancamentosSemIluminacao = (itens: DadosExtraidos['itens_fatura']): LancamentoServico[] => {
+    if (!itens?.lancamentos_e_servicos) return [];
+    return itens.lancamentos_e_servicos.filter(
+        s => !s.descricao?.toLowerCase().includes('ilum')
+    );
+};
+
+// Pega valor de iluminação pública
+const getValorIluminacaoPublica = (itens: DadosExtraidos['itens_fatura']): number => {
+    if (!itens?.lancamentos_e_servicos) return 0;
+    const ilum = itens.lancamentos_e_servicos.find(
+        s => s.descricao?.toLowerCase().includes('ilum')
+    );
+    return ilum?.valor || 0;
+};
+
+// Taxa mínima por tipo de ligação (GD I)
+const getTaxaMinima = (tipoLigacao: string | undefined): number => {
+    switch (tipoLigacao?.toUpperCase()) {
+        case 'MONOFASICO': return 30;
+        case 'BIFASICO': return 50;
+        case 'TRIFASICO': return 100;
+        default: return 0;
+    }
 };
 
 // ========================
@@ -428,14 +524,8 @@ export function ProcessamentoCobrancas() {
     };
 
     const calcularInjetadaTotal = (dados: DadosExtraidos): number => {
-        let total = 0;
-        if (dados.itens_fatura?.energia_injetada_ouc) {
-            total += dados.itens_fatura.energia_injetada_ouc.reduce((sum, item) => sum + (item.quantidade || 0), 0);
-        }
-        if (dados.itens_fatura?.energia_injetada_muc) {
-            total += dados.itens_fatura.energia_injetada_muc.reduce((sum, item) => sum + (item.quantidade || 0), 0);
-        }
-        return total;
+        if (!dados?.itens_fatura) return 0;
+        return calcularInjetadaOUC(dados.itens_fatura) + calcularInjetadaMUC(dados.itens_fatura);
     };
 
     // Função detectarModeloGD removida - agora usa fatura.tipo_gd do backend (unificado)
@@ -725,20 +815,13 @@ function FaturaAccordionItem({
     const [camposEditados, setCamposEditados] = useState<CamposEditaveis>({});
     const [salvando, setSalvando] = useState(false);
 
-    // Inicializar campos editados com valores extraídos
+    // Inicializar campos editados com valores extraídos (usando helpers)
     useEffect(() => {
         if (dados && isExpanded) {
-            const injetadaOuc = dados.itens_fatura?.energia_injetada_ouc?.reduce(
-                (sum, item) => sum + (item.quantidade || 0), 0
-            ) || 0;
-            const injetadaMuc = dados.itens_fatura?.energia_injetada_muc?.reduce(
-                (sum, item) => sum + (item.quantidade || 0), 0
-            ) || 0;
-
             setCamposEditados({
                 consumo_kwh: dados.itens_fatura?.consumo_kwh?.quantidade || 0,
-                injetada_ouc_kwh: injetadaOuc,
-                injetada_muc_kwh: injetadaMuc
+                injetada_ouc_kwh: calcularInjetadaOUC(dados.itens_fatura),
+                injetada_muc_kwh: calcularInjetadaMUC(dados.itens_fatura)
             });
         }
     }, [dados, isExpanded]);
@@ -1235,20 +1318,18 @@ function FaturaAccordionItem({
                                                         />
                                                     ) : (
                                                         <span className="font-medium text-green-600">
-                                                            {dados.itens_fatura?.energia_injetada_ouc?.reduce((s, i) => s + (i.quantidade || 0), 0) || 0}
+                                                            {calcularInjetadaOUC(dados.itens_fatura)}
                                                         </span>
                                                     )}
                                                     <span className="text-sm text-slate-500">kWh</span>
                                                 </div>
                                                 <span className="text-sm text-green-600">
-                                                    Credito: {formatarMoeda(
-                                                        dados.itens_fatura?.energia_injetada_ouc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0
-                                                    )}
+                                                    Credito: {formatarMoeda(calcularValorInjetadaOUC(dados.itens_fatura))}
                                                 </span>
                                             </div>
 
                                             {/* Injetada mUC (GD II) */}
-                                            {(dados.itens_fatura?.energia_injetada_muc?.length || 0) > 0 && (
+                                            {getEnergiaInjetadaMUC(dados.itens_fatura).length > 0 && (
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-sm text-slate-500 w-32">Injetada mUC:</span>
@@ -1264,15 +1345,13 @@ function FaturaAccordionItem({
                                                             />
                                                         ) : (
                                                             <span className="font-medium text-blue-600">
-                                                                {dados.itens_fatura?.energia_injetada_muc?.reduce((s, i) => s + (i.quantidade || 0), 0) || 0}
+                                                                {calcularInjetadaMUC(dados.itens_fatura)}
                                                             </span>
                                                         )}
                                                         <span className="text-sm text-slate-500">kWh</span>
                                                     </div>
                                                     <span className="text-sm text-blue-600">
-                                                        Credito: {formatarMoeda(
-                                                            dados.itens_fatura?.energia_injetada_muc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0
-                                                        )}
+                                                        Credito: {formatarMoeda(calcularValorInjetadaMUC(dados.itens_fatura))}
                                                     </span>
                                                 </div>
                                             )}
@@ -1364,15 +1443,27 @@ function FaturaAccordionItem({
                                                 </div>
                                             )}
 
-                                            {/* Energia Excedente - APENAS GDI quando consumo > injetada */}
-                                            {fatura.tipo_gd === 'GDI' && (fatura.consumo_kwh || 0) > (fatura.injetada_kwh || 0) && (
-                                                <div className="flex justify-between">
-                                                    <span className="text-slate-600 dark:text-slate-400">Energia excedente consumida da rede</span>
-                                                    <span className="font-medium text-amber-600">
-                                                        {(fatura.consumo_kwh || 0) - (fatura.injetada_kwh || 0)} kWh
-                                                    </span>
-                                                </div>
-                                            )}
+                                            {/* Energia Excedente ou Taxa Mínima - APENAS GDI quando consumo > injetada */}
+                                            {fatura.tipo_gd === 'GDI' && (fatura.consumo_kwh || 0) > (fatura.injetada_kwh || 0) && (() => {
+                                                const consumoLiquido = (fatura.consumo_kwh || 0) - (fatura.injetada_kwh || 0);
+                                                const tipoLigacao = fatura.tipo_ligacao || dados?.ligacao;
+                                                const taxaMinima = getTaxaMinima(tipoLigacao);
+                                                const isTaxaMinima = consumoLiquido <= taxaMinima;
+
+                                                return (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-slate-600 dark:text-slate-400">
+                                                            {isTaxaMinima
+                                                                ? `Taxa mínima (${tipoLigacao || 'GD I'} • ${taxaMinima} kWh)`
+                                                                : 'Energia excedente consumida da rede'
+                                                            }
+                                                        </span>
+                                                        <span className={`font-medium ${isTaxaMinima ? 'text-purple-600' : 'text-amber-600'}`}>
+                                                            {consumoLiquido} kWh
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* Bandeiras */}
                                             {(dados?.totais?.adicionais_bandeira || 0) > 0 && (
@@ -1384,25 +1475,39 @@ function FaturaAccordionItem({
                                                 </div>
                                             )}
 
-                                            {/* Iluminação Pública */}
-                                            {fatura.valor_iluminacao_publica && fatura.valor_iluminacao_publica > 0 && (
-                                                <div className="flex justify-between">
-                                                    <span className="text-slate-600 dark:text-slate-400">Iluminação Pública</span>
-                                                    <span className="font-medium">
-                                                        {formatarMoeda(fatura.valor_iluminacao_publica)}
-                                                    </span>
-                                                </div>
-                                            )}
+                                            {/* Iluminação Pública (extraído ou da API) */}
+                                            {(() => {
+                                                const iluminacaoExtraida = getValorIluminacaoPublica(dados?.itens_fatura);
+                                                const iluminacao = iluminacaoExtraida || fatura.valor_iluminacao_publica || 0;
+                                                if (iluminacao > 0) {
+                                                    return (
+                                                        <div className="flex justify-between">
+                                                            <span className="text-slate-600 dark:text-slate-400">Iluminação Pública</span>
+                                                            <span className="font-medium">
+                                                                {formatarMoeda(iluminacao)}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
 
-                                            {/* Lançamentos e Serviços */}
-                                            {(dados?.totais?.lancamentos_e_servicos || 0) > 0 && (
-                                                <div className="flex justify-between">
-                                                    <span className="text-slate-600 dark:text-slate-400">Outros serviços</span>
-                                                    <span className="font-medium">
-                                                        {formatarMoeda(dados.totais?.lancamentos_e_servicos)}
-                                                    </span>
-                                                </div>
-                                            )}
+                                            {/* Outros Lançamentos e Serviços (excluindo iluminação) */}
+                                            {(() => {
+                                                const outrosServicos = getLancamentosSemIluminacao(dados?.itens_fatura);
+                                                const valorOutros = outrosServicos.reduce((s, item) => s + (item.valor || 0), 0);
+                                                if (valorOutros > 0) {
+                                                    return (
+                                                        <div className="flex justify-between">
+                                                            <span className="text-slate-600 dark:text-slate-400">Outros serviços</span>
+                                                            <span className="font-medium">
+                                                                {formatarMoeda(valorOutros)}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
 
                                             {/* Total */}
                                             <div className="pt-2 border-t border-indigo-200 dark:border-indigo-700 flex justify-between font-bold">
@@ -1434,8 +1539,7 @@ function FaturaAccordionItem({
                                                 -{formatarMoeda(
                                                     editMode
                                                         ? calcularEconomiaSimulada()
-                                                        : (dados?.itens_fatura?.energia_injetada_ouc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0) +
-                                                          (dados?.itens_fatura?.energia_injetada_muc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0)
+                                                        : calcularValorInjetadaOUC(dados?.itens_fatura) + calcularValorInjetadaMUC(dados?.itens_fatura)
                                                 )}
                                             </p>
                                         </div>
@@ -1445,8 +1549,7 @@ function FaturaAccordionItem({
                                                 {formatarMoeda(
                                                     editMode
                                                         ? calcularEconomiaSimulada()
-                                                        : (dados?.itens_fatura?.energia_injetada_ouc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0) +
-                                                          (dados?.itens_fatura?.energia_injetada_muc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0)
+                                                        : calcularValorInjetadaOUC(dados?.itens_fatura) + calcularValorInjetadaMUC(dados?.itens_fatura)
                                                 )}
                                             </p>
                                         </div>
@@ -1499,52 +1602,59 @@ function FaturaAccordionItem({
                                                 <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3">
                                                     <span className="text-xs text-slate-500 block mb-2">Extraido (PDF)</span>
                                                     <p className="font-bold text-xl text-slate-900 dark:text-white">
-                                                        {dados?.totais?.adicionais_bandeira != null
-                                                            ? formatarMoeda(dados.totais.adicionais_bandeira)
+                                                        {(fatura.bandeira_extraida ?? dados?.totais?.adicionais_bandeira) != null
+                                                            ? formatarMoeda(fatura.bandeira_extraida ?? dados?.totais?.adicionais_bandeira ?? 0)
                                                             : 'N/A'
                                                         }
                                                     </p>
                                                     <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-                                                        <span className={`px-1.5 py-0.5 rounded ${
-                                                            dados?.bandeira_tarifaria?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
-                                                            dados?.bandeira_tarifaria?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
-                                                            dados?.bandeira_tarifaria?.toLowerCase().includes('vermelha') ? 'bg-red-100 text-red-700' :
-                                                            'bg-slate-100 text-slate-700'
-                                                        }`}>
-                                                            {dados?.bandeira_tarifaria || 'N/A'}
-                                                        </span>
+                                                        {(() => {
+                                                            const bandeiraTipo = fatura.bandeira_tarifaria_pdf || dados?.bandeira_tarifaria;
+                                                            return (
+                                                                <span className={`px-1.5 py-0.5 rounded ${
+                                                                    bandeiraTipo?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
+                                                                    bandeiraTipo?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
+                                                                    bandeiraTipo?.toLowerCase().includes('vermelha') ? 'bg-red-100 text-red-700' :
+                                                                    'bg-slate-100 text-slate-700'
+                                                                }`}>
+                                                                    {bandeiraTipo || 'N/A'}
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 </div>
                                             </div>
 
                                             {/* Indicador de divergencia */}
-                                            {fatura.bandeira_prevista && dados?.totais?.adicionais_bandeira != null && (
-                                                <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-800">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-sm text-slate-600 dark:text-slate-400">
-                                                            Diferenca:
-                                                        </span>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`font-medium ${
-                                                                Math.abs(fatura.bandeira_prevista.valor_total - dados.totais.adicionais_bandeira) < 1
-                                                                    ? 'text-green-600'
-                                                                    : Math.abs(fatura.bandeira_prevista.valor_total - dados.totais.adicionais_bandeira) < 5
-                                                                    ? 'text-yellow-600'
-                                                                    : 'text-red-600'
-                                                            }`}>
-                                                                {formatarMoeda(Math.abs(fatura.bandeira_prevista.valor_total - dados.totais.adicionais_bandeira))}
+                                            {fatura.bandeira_prevista && (fatura.bandeira_extraida ?? dados?.totais?.adicionais_bandeira) != null && (() => {
+                                                const bandeiraExtraida = fatura.bandeira_extraida ?? dados?.totais?.adicionais_bandeira ?? 0;
+                                                const diferenca = Math.abs(fatura.bandeira_prevista.valor_total - bandeiraExtraida);
+                                                return (
+                                                    <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-800">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-sm text-slate-600 dark:text-slate-400">
+                                                                Diferenca:
                                                             </span>
-                                                            {renderStatusIndicador(
-                                                                compararValores(
-                                                                    fatura.bandeira_prevista.valor_total,
-                                                                    dados.totais.adicionais_bandeira,
-                                                                    0.10
-                                                                )
-                                                            )}
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`font-medium ${
+                                                                    diferenca < 1 ? 'text-green-600' :
+                                                                    diferenca < 5 ? 'text-yellow-600' :
+                                                                    'text-red-600'
+                                                                }`}>
+                                                                    {formatarMoeda(diferenca)}
+                                                                </span>
+                                                                {renderStatusIndicador(
+                                                                    compararValores(
+                                                                        fatura.bandeira_prevista.valor_total,
+                                                                        bandeiraExtraida,
+                                                                        0.10
+                                                                    )
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            )}
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 )}

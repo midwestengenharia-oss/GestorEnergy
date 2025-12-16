@@ -69,6 +69,26 @@ interface FaturaKanban {
         economia_mes: number;
         vencimento?: string;
     } | null;
+    // Campos da API (disponíveis ANTES da extração)
+    data_vencimento?: string;
+    consumo_api?: number;
+    bandeira_tarifaria?: string;
+    quantidade_dias?: number;
+    leitura_atual?: number;
+    leitura_anterior?: number;
+    situacao_pagamento?: string;
+    data_pagamento?: string;
+    valor_iluminacao_publica?: number;
+    pdf_baixado_em?: string;
+    // Cliente original (lead que foi convertido em beneficiário)
+    cliente?: {
+        id: number;
+        nome: string;
+        cpf?: string;
+        email?: string;
+        telefone?: string;
+        convertido_em?: string;
+    } | null;
 }
 
 interface KanbanData {
@@ -645,6 +665,13 @@ function FaturaAccordionItem({
                                 {fatura.beneficiario.nome}
                             </span>
                         )}
+                        {/* Cliente (quando diferente do beneficiário) */}
+                        {fatura.cliente && fatura.cliente.nome !== fatura.beneficiario?.nome && (
+                            <span className="truncate text-xs text-blue-600" title="Cliente que contratou">
+                                <span className="text-slate-400 mx-1">|</span>
+                                Cliente: {fatura.cliente.nome}
+                            </span>
+                        )}
                         {fatura.usina_nome && (
                             <span className="truncate text-xs">
                                 <MapPin size={10} className="inline mr-1" />
@@ -667,6 +694,34 @@ function FaturaAccordionItem({
                             <span title="Injetada">
                                 <Zap size={12} className="inline mr-1 text-green-500" />
                                 {fatura.injetada_kwh} kWh
+                            </span>
+                        )}
+                    </div>
+                )}
+
+                {/* Dados da API (quando NAO extraido ainda) */}
+                {!fatura.consumo_kwh && (fatura.consumo_api || fatura.data_vencimento || fatura.bandeira_tarifaria) && (
+                    <div className="hidden md:flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+                        {fatura.data_vencimento && (
+                            <span title="Vencimento" className="flex items-center">
+                                <Calendar size={12} className="mr-1 text-slate-500" />
+                                {new Date(fatura.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                            </span>
+                        )}
+                        {fatura.consumo_api && (
+                            <span title="Consumo (API)">
+                                <Zap size={12} className="inline mr-1 text-orange-400" />
+                                {fatura.consumo_api} kWh
+                            </span>
+                        )}
+                        {fatura.bandeira_tarifaria && (
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                fatura.bandeira_tarifaria.includes('VERDE') ? 'bg-green-100 text-green-700' :
+                                fatura.bandeira_tarifaria.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
+                                fatura.bandeira_tarifaria.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
+                                'bg-slate-100 text-slate-700'
+                            }`} title="Bandeira Tarifaria">
+                                {fatura.bandeira_tarifaria}
                             </span>
                         )}
                     </div>
@@ -944,19 +999,139 @@ function FaturaAccordionItem({
                             </div>
                         )}
 
-                        {/* Sem dados extraidos */}
+                        {/* Sem dados extraidos - mostra dados da API */}
                         {!dados && activeTab === 'pdf_recebido' && (
-                            <div className="text-center py-8">
-                                <FileText className="mx-auto text-slate-400 mb-2" size={40} />
-                                <p className="text-slate-500">PDF ainda nao foi extraido</p>
-                                <button
-                                    onClick={() => onExtrair(fatura.id)}
-                                    disabled={isLoading}
-                                    className="mt-4 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 flex items-center gap-2 mx-auto"
-                                >
-                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-                                    Extrair Agora
-                                </button>
+                            <div className="py-4">
+                                {/* Alerta + botao */}
+                                <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
+                                    <div className="flex items-center gap-2 text-amber-600">
+                                        <Clock size={16} />
+                                        <span className="text-sm font-medium">PDF aguardando extracao</span>
+                                    </div>
+                                    <button
+                                        onClick={() => onExtrair(fatura.id)}
+                                        disabled={isLoading}
+                                        className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                                        Extrair Agora
+                                    </button>
+                                </div>
+
+                                {/* Dados da API (disponiveis antes da extracao) */}
+                                <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                                    Dados da Fatura (via API)
+                                </h5>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                    <div>
+                                        <span className="text-slate-500">N Fatura:</span>
+                                        <p className="font-medium">{fatura.numero_fatura || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Vencimento:</span>
+                                        <p className="font-medium">
+                                            {fatura.data_vencimento
+                                                ? new Date(fatura.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')
+                                                : 'N/A'
+                                            }
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Consumo:</span>
+                                        <p className="font-medium">{fatura.consumo_api ? `${fatura.consumo_api} kWh` : 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Bandeira:</span>
+                                        <p>
+                                            {fatura.bandeira_tarifaria ? (
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                    fatura.bandeira_tarifaria.includes('VERDE') ? 'bg-green-100 text-green-800' :
+                                                    fatura.bandeira_tarifaria.includes('AMARELA') ? 'bg-yellow-100 text-yellow-800' :
+                                                    fatura.bandeira_tarifaria.includes('VERMELHA') ? 'bg-red-100 text-red-800' :
+                                                    'bg-slate-100 text-slate-800'
+                                                }`}>
+                                                    {fatura.bandeira_tarifaria}
+                                                </span>
+                                            ) : 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Periodo:</span>
+                                        <p className="font-medium">{fatura.quantidade_dias ? `${fatura.quantidade_dias} dias` : 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Leitura:</span>
+                                        <p className="font-medium">
+                                            {fatura.leitura_anterior && fatura.leitura_atual
+                                                ? `${fatura.leitura_anterior} -> ${fatura.leitura_atual}`
+                                                : 'N/A'
+                                            }
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Situacao:</span>
+                                        <p>
+                                            {fatura.situacao_pagamento ? (
+                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                    fatura.situacao_pagamento === 'PAGA' ? 'bg-green-100 text-green-800' :
+                                                    fatura.situacao_pagamento === 'VENCIDA' ? 'bg-red-100 text-red-800' :
+                                                    'bg-yellow-100 text-yellow-800'
+                                                }`}>
+                                                    {fatura.situacao_pagamento}
+                                                </span>
+                                            ) : 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">Iluminacao Publica:</span>
+                                        <p className="font-medium">
+                                            {fatura.valor_iluminacao_publica
+                                                ? formatarMoeda(fatura.valor_iluminacao_publica)
+                                                : 'N/A'
+                                            }
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Cliente Contratante (quando disponível) */}
+                                {fatura.cliente && (
+                                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                        <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                            Cliente Contratante
+                                        </h5>
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            <div>
+                                                <span className="text-slate-500">Nome:</span>
+                                                <p className="font-medium">{fatura.cliente.nome}</p>
+                                            </div>
+                                            {fatura.cliente.cpf && (
+                                                <div>
+                                                    <span className="text-slate-500">CPF:</span>
+                                                    <p className="font-medium">{fatura.cliente.cpf}</p>
+                                                </div>
+                                            )}
+                                            {fatura.cliente.email && (
+                                                <div>
+                                                    <span className="text-slate-500">Email:</span>
+                                                    <p className="font-medium">{fatura.cliente.email}</p>
+                                                </div>
+                                            )}
+                                            {fatura.cliente.telefone && (
+                                                <div>
+                                                    <span className="text-slate-500">Telefone:</span>
+                                                    <p className="font-medium">{fatura.cliente.telefone}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Info do PDF */}
+                                {fatura.pdf_baixado_em && (
+                                    <p className="text-xs text-slate-400 mt-4">
+                                        PDF recebido em: {new Date(fatura.pdf_baixado_em).toLocaleString('pt-BR')}
+                                    </p>
+                                )}
                             </div>
                         )}
 

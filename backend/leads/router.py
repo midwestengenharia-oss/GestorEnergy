@@ -3,9 +3,12 @@ Leads Router - Endpoints da API para Leads/CRM
 Pipeline completo de vendas e onboarding de clientes
 """
 
-from fastapi import APIRouter, Depends, Query
+import logging
+from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional, List
 from ..core.security import get_current_active_user, require_perfil, CurrentUser
+
+logger = logging.getLogger(__name__)
 from .schemas import (
     # Request schemas
     LeadCreateRequest,
@@ -48,7 +51,17 @@ async def capturar_lead(data: LeadCreateRequest):
 
     Não requer autenticação.
     """
-    return await service.criar(data=data.model_dump())
+    try:
+        logger.info(f"Capturando lead: {data.nome}, cidade: {data.cidade}")
+        result = await service.criar(data=data.model_dump())
+        logger.info(f"Lead criado com sucesso: ID {result.get('id')}")
+        return result
+    except ValueError as e:
+        logger.warning(f"Erro de validação ao capturar lead: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Erro ao capturar lead: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro ao criar lead: {str(e)}")
 
 
 @router.post("/simular", response_model=SimulacaoResponse)

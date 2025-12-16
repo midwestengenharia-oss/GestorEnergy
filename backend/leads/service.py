@@ -3,11 +3,14 @@ Leads Service - Logica de negocio para Leads/CRM
 Pipeline completo de vendas e onboarding de clientes
 """
 
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
 from ..core.database import get_supabase
 from ..core.exceptions import NotFoundError, ValidationError
+
+logger = logging.getLogger(__name__)
 from .schemas import (
     StatusLead, OrigemLead, TipoPessoa, TitularidadeStatus,
     MotivoPerdaCategoria, TipoVinculoUC, StatusProposta
@@ -75,6 +78,8 @@ class LeadsService:
 
     async def criar(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Cria novo lead com dados basicos"""
+        logger.info(f"Iniciando criação de lead: {data.get('nome')}")
+        logger.debug(f"Dados recebidos: {data}")
 
         # Verificar se ja existe lead com mesmo CPF ou CNPJ
         cpf = data.get("cpf")
@@ -126,8 +131,14 @@ class LeadsService:
             "utm_campaign": data.get("utm_campaign")
         }
 
-        result = self.supabase.table("leads").insert(lead_data).execute()
-        return result.data[0]
+        logger.info(f"Inserindo lead no banco: {lead_data}")
+        try:
+            result = self.supabase.table("leads").insert(lead_data).execute()
+            logger.info(f"Lead inserido com sucesso: {result.data}")
+            return result.data[0]
+        except Exception as e:
+            logger.error(f"Erro ao inserir lead no banco: {e}")
+            raise
 
     async def atualizar(self, lead_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
         """Atualiza lead"""

@@ -334,9 +334,13 @@ async def listar_faturas_kanban(
             "apelido": uc.get("apelido")
         }
 
-    # 4. Buscar faturas
+    # 4. Buscar faturas (incluindo campos da API disponíveis antes da extração)
     query = supabase.table("faturas").select(
-        "id, uc_id, numero_fatura, mes_referencia, ano_referencia, pdf_base64, extracao_status, extracao_score, dados_extraidos"
+        "id, uc_id, numero_fatura, mes_referencia, ano_referencia, "
+        "valor_fatura, data_vencimento, consumo, bandeira_tarifaria, "
+        "quantidade_dias, leitura_atual, leitura_anterior, "
+        "situacao_pagamento, data_pagamento, valor_iluminacao_publica, "
+        "pdf_base64, pdf_baixado_em, extracao_status, extracao_score, dados_extraidos"
     ).in_("uc_id", uc_ids)
 
     if mes_referencia:
@@ -371,7 +375,25 @@ async def listar_faturas_kanban(
         usinas_response = supabase.table("usinas").select("id, nome").in_("id", list(usina_ids_set)).execute()
         usinas_map = {u["id"]: u["nome"] for u in (usinas_response.data or [])}
 
-    # 7. Classificar faturas por status
+    # 7. Buscar leads (clientes) associados aos beneficiários
+    beneficiario_ids = [b["id"] for b in beneficiarios if b.get("id")]
+    leads_map = {}
+    if beneficiario_ids:
+        leads_response = supabase.table("leads").select(
+            "id, nome, cpf, email, telefone, beneficiario_id, convertido_em"
+        ).in_("beneficiario_id", beneficiario_ids).execute()
+
+        for lead in (leads_response.data or []):
+            leads_map[lead["beneficiario_id"]] = {
+                "id": lead["id"],
+                "nome": lead["nome"],
+                "cpf": lead.get("cpf"),
+                "email": lead.get("email"),
+                "telefone": lead.get("telefone"),
+                "convertido_em": lead.get("convertido_em")
+            }
+
+    # 8. Classificar faturas por status
     sem_pdf = []
     pdf_recebido = []
     extraida = []
@@ -405,7 +427,8 @@ async def listar_faturas_kanban(
                 tipo_gd = item.get("tipo_gd")
                 break
 
-        valor_fatura = dados_ex.get("total_a_pagar")
+        # Valor da fatura: preferir extraído, senão usar da API
+        valor_fatura = dados_ex.get("total_a_pagar") or fatura.get("valor_fatura")
 
         usina_id = beneficiario.get("usina_id")
         item_fatura = {
@@ -429,7 +452,22 @@ async def listar_faturas_kanban(
             "tipo_gd": tipo_gd,
             "valor_fatura": valor_fatura,
             "cobranca": cobrancas_map.get(fatura["id"]),
-            "tem_pdf": fatura.get("pdf_base64") is not None
+            "tem_pdf": fatura.get("pdf_base64") is not None,
+
+            # Campos da API (disponíveis ANTES da extração)
+            "data_vencimento": fatura.get("data_vencimento"),
+            "consumo_api": fatura.get("consumo"),
+            "bandeira_tarifaria": fatura.get("bandeira_tarifaria"),
+            "quantidade_dias": fatura.get("quantidade_dias"),
+            "leitura_atual": fatura.get("leitura_atual"),
+            "leitura_anterior": fatura.get("leitura_anterior"),
+            "situacao_pagamento": fatura.get("situacao_pagamento"),
+            "data_pagamento": fatura.get("data_pagamento"),
+            "valor_iluminacao_publica": fatura.get("valor_iluminacao_publica"),
+            "pdf_baixado_em": fatura.get("pdf_baixado_em"),
+
+            # Cliente original (lead que foi convertido em beneficiário)
+            "cliente": leads_map.get(beneficiario["id"]) if beneficiario else None
         }
 
         # Filtrar por busca na UC

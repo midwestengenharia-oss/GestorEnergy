@@ -90,6 +90,7 @@ class LeadsService:
             if existente.data:
                 lead_existente = existente.data[0]
                 if lead_existente["status"] not in [StatusLead.CONVERTIDO.value, StatusLead.PERDIDO.value]:
+                    logger.info(f"Lead existente encontrado: ID {lead_existente['id']}")
                     return lead_existente
 
         if cnpj:
@@ -97,33 +98,21 @@ class LeadsService:
             if existente.data:
                 lead_existente = existente.data[0]
                 if lead_existente["status"] not in [StatusLead.CONVERTIDO.value, StatusLead.PERDIDO.value]:
+                    logger.info(f"Lead existente encontrado: ID {lead_existente['id']}")
                     return lead_existente
-
-        # Processar enum de concessionaria
-        concessionaria = data.get("concessionaria")
-        if concessionaria and hasattr(concessionaria, 'value'):
-            concessionaria = concessionaria.value
-
-        # Processar enum de tipo_pessoa
-        tipo_pessoa = data.get("tipo_pessoa", TipoPessoa.FISICA)
-        if hasattr(tipo_pessoa, 'value'):
-            tipo_pessoa = tipo_pessoa.value
 
         # Processar enum de origem
         origem = data.get("origem", OrigemLead.LANDING_PAGE)
         if hasattr(origem, 'value'):
             origem = origem.value
 
+        # Campos obrigatórios (schema original)
         lead_data = {
             "nome": data["nome"],
-            "tipo_pessoa": tipo_pessoa,
-            "cpf": cpf,
-            "cnpj": cnpj,
             "email": data.get("email"),
             "telefone": data.get("telefone"),
             "cidade": data["cidade"],
             "uf": data.get("uf"),
-            "concessionaria": concessionaria,
             "status": StatusLead.NOVO.value,
             "origem": origem,
             "utm_source": data.get("utm_source"),
@@ -131,13 +120,38 @@ class LeadsService:
             "utm_campaign": data.get("utm_campaign")
         }
 
+        # CPF é opcional no schema original
+        if cpf:
+            lead_data["cpf"] = cpf
+
+        # Campos opcionais do CRM expandido (migration 016)
+        # Só incluir se fornecidos para evitar erros em DBs sem as colunas
+        if cnpj:
+            lead_data["cnpj"] = cnpj
+
+        # tipo_pessoa e concessionaria são do CRM expandido
+        if data.get("tipo_pessoa"):
+            tipo_pessoa = data["tipo_pessoa"]
+            if hasattr(tipo_pessoa, 'value'):
+                tipo_pessoa = tipo_pessoa.value
+            lead_data["tipo_pessoa"] = tipo_pessoa
+
+        if data.get("concessionaria"):
+            concessionaria = data["concessionaria"]
+            if hasattr(concessionaria, 'value'):
+                concessionaria = concessionaria.value
+            lead_data["concessionaria"] = concessionaria
+
+        # Remover valores None do dicionário
+        lead_data = {k: v for k, v in lead_data.items() if v is not None}
+
         logger.info(f"Inserindo lead no banco: {lead_data}")
         try:
             result = self.supabase.table("leads").insert(lead_data).execute()
             logger.info(f"Lead inserido com sucesso: {result.data}")
             return result.data[0]
         except Exception as e:
-            logger.error(f"Erro ao inserir lead no banco: {e}")
+            logger.error(f"Erro ao inserir lead no banco: {e}", exc_info=True)
             raise
 
     async def atualizar(self, lead_id: int, data: Dict[str, Any]) -> Dict[str, Any]:

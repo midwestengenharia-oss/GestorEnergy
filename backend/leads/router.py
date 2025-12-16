@@ -53,7 +53,13 @@ async def capturar_lead(data: LeadCreateRequest):
     """
     try:
         logger.info(f"Capturando lead: {data.nome}, cidade: {data.cidade}")
-        result = await service.criar(data=data.model_dump())
+        # Usar exclude_unset=True para não enviar campos com valores default
+        # Isso evita erros se a migration 016 não foi aplicada (colunas tipo_pessoa, concessionaria)
+        lead_data = data.model_dump(exclude_unset=True)
+        # Garantir que campos obrigatórios estejam presentes
+        lead_data["nome"] = data.nome
+        lead_data["cidade"] = data.cidade
+        result = await service.criar(data=lead_data)
         logger.info(f"Lead criado com sucesso: ID {result.get('id')}")
         return result
     except ValueError as e:

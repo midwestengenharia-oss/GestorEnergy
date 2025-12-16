@@ -7,7 +7,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
-from ..core.database import get_supabase
+from ..core.database import get_supabase_admin
 from ..core.exceptions import NotFoundError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,8 @@ class LeadsService:
     """Serviço para gerenciamento de leads e simulações"""
 
     def __init__(self):
-        self.supabase = get_supabase()
+        # Usar admin client para bypass de RLS (endpoint público /captura)
+        self.supabase = get_supabase_admin()
         self.desconto_padrao = Decimal("0.30")  # 30% de desconto
 
     async def listar(

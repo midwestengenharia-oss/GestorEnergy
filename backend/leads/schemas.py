@@ -307,7 +307,7 @@ class LeadSimulacaoRequest(BaseModel):
 
 class LeadContatoRequest(BaseModel):
     """Registrar contato com lead"""
-    lead_id: int
+    # lead_id vem do path parameter, não do body
     tipo_contato: str = Field(..., description="whatsapp, telefone, email")
     descricao: str = Field(..., min_length=10)
     proximo_contato: Optional[datetime] = None
@@ -315,7 +315,7 @@ class LeadContatoRequest(BaseModel):
 
 class LeadVincularUCRequest(BaseModel):
     """Vincular UC ao lead (apos autenticacao Energisa)"""
-    lead_id: int
+    # lead_id vem do path parameter, não do body
     uc_codigo: str = Field(..., description="Codigo UC formato 6/1234567-8")
     tipo: TipoVinculoUC = Field(default=TipoVinculoUC.BENEFICIARIA)
     dados_extras: Optional[Dict[str, Any]] = None
@@ -323,7 +323,7 @@ class LeadVincularUCRequest(BaseModel):
 
 class LeadPropostaRequest(BaseModel):
     """Gerar proposta para o lead"""
-    lead_id: int
+    # lead_id vem do path parameter, não do body
     consumo_kwh: Optional[int] = None
     valor_fatura: Optional[Decimal] = None
     quantidade_ucs: int = Field(default=1, ge=1)
@@ -339,14 +339,14 @@ class LeadAceitarPropostaRequest(BaseModel):
 
 class LeadMarcarPerdidoRequest(BaseModel):
     """Marcar lead como perdido com motivo categorizado"""
-    lead_id: int
+    # lead_id vem do path parameter, não do body
     motivo_categoria: MotivoPerdaCategoria
     observacoes: Optional[str] = None
 
 
 class LeadConverterRequest(BaseModel):
     """Converter lead em beneficiario (etapa final)"""
-    lead_id: int
+    # lead_id vem do path parameter, não do body
     usina_id: int
     uc_id: int = Field(..., description="UC que sera beneficiaria")
     desconto_percentual: Decimal = Field(..., ge=0, le=1)
@@ -357,7 +357,7 @@ class LeadConverterRequest(BaseModel):
 
 class LeadDocumentoUploadRequest(BaseModel):
     """Upload de documento do lead"""
-    lead_id: int
+    # lead_id vem do path parameter, não do body
     tipo: TipoDocumentoLead
     nome_arquivo: str
     descricao: Optional[str] = None
@@ -365,7 +365,7 @@ class LeadDocumentoUploadRequest(BaseModel):
 
 class LeadTitularidadeRequest(BaseModel):
     """Atualizar status de titularidade"""
-    lead_id: int
+    # lead_id vem do path parameter, não do body
     status: TitularidadeStatus
     protocolo: Optional[str] = None
     observacoes: Optional[str] = None

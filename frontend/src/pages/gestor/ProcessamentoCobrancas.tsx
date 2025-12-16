@@ -32,7 +32,8 @@ import {
     Save,
     XCircle,
     TrendingDown,
-    Pencil
+    Pencil,
+    Info
 } from 'lucide-react';
 import { faturasApi } from '../../api/faturas';
 import { cobrancasApi, type Cobranca } from '../../api/cobrancas';
@@ -77,7 +78,10 @@ interface FaturaKanban {
     // Campos de energia (vindos do backend)
     consumo_kwh?: number;
     injetada_kwh?: number;
+    injetada_ouc?: number;
+    injetada_muc?: number;
     tipo_gd?: string;
+    tipo_ligacao?: string;
     // Usina
     usina_id?: number;
     usina_nome?: string;
@@ -165,7 +169,7 @@ interface DadosExtraidos {
 }
 
 // Tipos para validação de campos
-type ValidacaoStatus = 'OK' | 'DIFERENTE' | 'AUSENTE';
+type ValidacaoStatus = 'OK' | 'DIFERENTE' | 'AUSENTE' | 'INFO';
 
 interface CampoComparacao {
     label: string;
@@ -234,7 +238,8 @@ const compararDatas = (
 const statusConfig: Record<ValidacaoStatus, { color: string; bgColor: string; icon: typeof CheckCircle2 }> = {
     OK: { color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-900/20', icon: CheckCircle2 },
     DIFERENTE: { color: 'text-yellow-600', bgColor: 'bg-yellow-50 dark:bg-yellow-900/20', icon: AlertTriangle },
-    AUSENTE: { color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/20', icon: XCircle }
+    AUSENTE: { color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/20', icon: XCircle },
+    INFO: { color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/20', icon: Info }
 };
 
 // ========================
@@ -433,12 +438,7 @@ export function ProcessamentoCobrancas() {
         return total;
     };
 
-    const detectarModeloGD = (dados: DadosExtraidos): string => {
-        if (dados.itens_fatura?.energia_injetada_muc && dados.itens_fatura.energia_injetada_muc.length > 0) {
-            return 'GD II';
-        }
-        return 'GD I';
-    };
+    // Função detectarModeloGD removida - agora usa fatura.tipo_gd do backend (unificado)
 
     // ========================
     // Render
@@ -635,7 +635,6 @@ export function ProcessamentoCobrancas() {
                                 formatarMoeda={formatarMoeda}
                                 formatarData={formatarData}
                                 calcularInjetadaTotal={calcularInjetadaTotal}
-                                detectarModeloGD={detectarModeloGD}
                             />
                         ))
                     )}
@@ -701,7 +700,6 @@ interface FaturaAccordionItemProps {
     formatarMoeda: (valor: number | null | undefined) => string;
     formatarData: (data: string | null) => string;
     calcularInjetadaTotal: (dados: DadosExtraidos) => number;
-    detectarModeloGD: (dados: DadosExtraidos) => string;
 }
 
 function FaturaAccordionItem({
@@ -717,8 +715,7 @@ function FaturaAccordionItem({
     onRefazer,
     formatarMoeda,
     formatarData,
-    calcularInjetadaTotal,
-    detectarModeloGD
+    calcularInjetadaTotal
 }: FaturaAccordionItemProps) {
     const dados = fatura.dados_extraidos as DadosExtraidos;
     const isLoading = loadingAction === fatura.id || loadingAction === fatura.cobranca?.id;
@@ -750,10 +747,18 @@ function FaturaAccordionItem({
     const renderStatusIndicador = (status: ValidacaoStatus) => {
         const config = statusConfig[status];
         const Icon = config.icon;
+        const labels: Record<ValidacaoStatus, string> = {
+            OK: 'OK',
+            DIFERENTE: 'Divergente',
+            AUSENTE: 'N/A',
+            INFO: 'Info'
+        };
         return (
-            <span className={`inline-flex items-center gap-1 text-xs ${config.color}`}>
+            <span className={`inline-flex items-center gap-1 text-xs ${config.color}`} title={
+                status === 'INFO' ? 'Métricas diferentes (API = líquido, PDF = bruto)' : undefined
+            }>
                 <Icon size={14} />
-                {status === 'OK' ? 'OK' : status === 'DIFERENTE' ? 'Divergente' : 'N/A'}
+                {labels[status]}
             </span>
         );
     };
@@ -992,14 +997,18 @@ function FaturaAccordionItem({
                                                 </span>
                                             </div>
                                         </div>
-                                        {/* Modelo GD */}
-                                        <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-sm font-medium">
-                                            {dados ? detectarModeloGD(dados) : fatura.tipo_gd || 'GD I'}
+                                        {/* Modelo GD - usando tipo_gd do backend (unificado) */}
+                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                            fatura.tipo_gd === 'GDII'
+                                                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                                                : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                                        }`}>
+                                            {fatura.tipo_gd === 'GDII' ? 'GD II' : fatura.tipo_gd === 'GDI' ? 'GD I' : 'GD ?'}
                                         </span>
                                         {/* Tipo Ligação */}
-                                        {dados?.ligacao && (
+                                        {(fatura.tipo_ligacao || dados?.ligacao) && (
                                             <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full text-sm">
-                                                {dados.ligacao}
+                                                {fatura.tipo_ligacao || dados?.ligacao}
                                             </span>
                                         )}
                                     </div>
@@ -1036,9 +1045,17 @@ function FaturaAccordionItem({
                                                     <span className="font-medium">{formatarMoeda(fatura.valor_fatura)}</span>
                                                 </div>
                                                 <div className="flex justify-between text-sm">
-                                                    <span className="text-slate-500">Consumo:</span>
+                                                    <span className="text-slate-500">
+                                                        Consumo {fatura.tipo_gd === 'GDI' ? '(líquido)' : ''}:
+                                                    </span>
                                                     <span className="font-medium">{fatura.consumo_api ? `${fatura.consumo_api} kWh` : 'N/A'}</span>
                                                 </div>
+                                                {/* Info para GD1 explicando a diferença */}
+                                                {fatura.tipo_gd === 'GDI' && fatura.consumo_api !== undefined && (
+                                                    <div className="text-xs text-slate-400 -mt-2">
+                                                        Após compensação GD
+                                                    </div>
+                                                )}
                                                 <div className="flex justify-between text-sm">
                                                     <span className="text-slate-500">Vencimento:</span>
                                                     <span className="font-medium">
@@ -1089,7 +1106,9 @@ function FaturaAccordionItem({
                                                     </div>
                                                 </div>
                                                 <div className="flex justify-between items-center text-sm">
-                                                    <span className="text-slate-500">Consumo:</span>
+                                                    <span className="text-slate-500">
+                                                        Consumo {fatura.tipo_gd === 'GDI' ? '(bruto)' : ''}:
+                                                    </span>
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-medium">
                                                             {dados?.itens_fatura?.consumo_kwh?.quantidade
@@ -1098,10 +1117,19 @@ function FaturaAccordionItem({
                                                             }
                                                         </span>
                                                         {renderStatusIndicador(
-                                                            compararValores(fatura.consumo_api, dados?.itens_fatura?.consumo_kwh?.quantidade)
+                                                            // GD1: Usar INFO porque são métricas diferentes (líquido vs bruto)
+                                                            fatura.tipo_gd === 'GDI' && fatura.consumo_api !== dados?.itens_fatura?.consumo_kwh?.quantidade
+                                                                ? 'INFO'
+                                                                : compararValores(fatura.consumo_api, dados?.itens_fatura?.consumo_kwh?.quantidade)
                                                         )}
                                                     </div>
                                                 </div>
+                                                {/* Info para GD1 explicando a diferença */}
+                                                {fatura.tipo_gd === 'GDI' && dados?.itens_fatura?.consumo_kwh?.quantidade && (
+                                                    <div className="text-xs text-slate-400 -mt-2">
+                                                        Total consumido no período
+                                                    </div>
+                                                )}
                                                 <div className="flex justify-between items-center text-sm">
                                                     <span className="text-slate-500">Vencimento:</span>
                                                     <div className="flex items-center gap-2">
@@ -1259,6 +1287,128 @@ function FaturaAccordionItem({
                                                         ? (camposEditados.injetada_ouc_kwh || 0) + (camposEditados.injetada_muc_kwh || 0)
                                                         : calcularInjetadaTotal(dados)
                                                     } kWh
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* TAXA MÍNIMA - Apenas GD1 */}
+                                {fatura.tipo_gd === 'GDI' && (
+                                    <div className="border border-purple-200 dark:border-purple-800 rounded-lg overflow-hidden">
+                                        <div className="bg-purple-50 dark:bg-purple-900/20 px-4 py-2 border-b border-purple-200 dark:border-purple-800">
+                                            <h5 className="text-sm font-medium text-purple-700 dark:text-purple-400 flex items-center gap-2">
+                                                <Zap size={16} />
+                                                Taxa Mínima (GD I)
+                                            </h5>
+                                        </div>
+                                        <div className="p-4">
+                                            <div className="grid grid-cols-3 gap-4 text-sm">
+                                                <div>
+                                                    <span className="text-slate-500 block mb-1">Tipo Ligação</span>
+                                                    <p className="font-medium text-slate-900 dark:text-white">
+                                                        {fatura.tipo_ligacao || dados?.ligacao || 'Não identificado'}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block mb-1">Mínimo Obrigatório</span>
+                                                    <p className="font-medium text-purple-600">
+                                                        {(fatura.tipo_ligacao || dados?.ligacao) === 'MONOFASICO' ? '30' :
+                                                         (fatura.tipo_ligacao || dados?.ligacao) === 'BIFASICO' ? '50' :
+                                                         (fatura.tipo_ligacao || dados?.ligacao) === 'TRIFASICO' ? '100' : '?'} kWh
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block mb-1">Consumo Líquido</span>
+                                                    <p className="font-medium text-purple-700">
+                                                        {Math.max(0, (fatura.consumo_kwh || 0) - (fatura.injetada_kwh || 0))} kWh
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {/* Cálculo explicativo GD1 */}
+                                            <div className="mt-3 p-2 bg-purple-100 dark:bg-purple-900/30 rounded text-xs text-purple-800 dark:text-purple-300">
+                                                <strong>Cálculo GD1:</strong> {fatura.consumo_kwh || 0} kWh (consumo bruto)
+                                                - {fatura.injetada_kwh || 0} kWh (injetado)
+                                                = {Math.max(0, (fatura.consumo_kwh || 0) - (fatura.injetada_kwh || 0))} kWh (consumo líquido)
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* PRÉVIA DA COBRANÇA - Como no Relatório */}
+                                {dados && (
+                                    <div className="border-2 border-indigo-200 dark:border-indigo-800 rounded-lg overflow-hidden">
+                                        <div className="bg-indigo-50 dark:bg-indigo-900/20 px-4 py-2 border-b border-indigo-200 dark:border-indigo-800">
+                                            <h5 className="text-sm font-medium text-indigo-700 dark:text-indigo-400 flex items-center gap-2">
+                                                <Receipt size={16} />
+                                                Prévia da Cobrança
+                                            </h5>
+                                        </div>
+                                        <div className="p-4 space-y-2 text-sm">
+                                            {/* Energia Injetada (assinatura) */}
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-600 dark:text-slate-400">Energia injetada no período (assinatura)</span>
+                                                <span className="text-green-600 font-medium">
+                                                    {fatura.injetada_kwh || calcularInjetadaTotal(dados)} kWh
+                                                </span>
+                                            </div>
+
+                                            {/* Disponibilidade GD II - APENAS GDII */}
+                                            {fatura.tipo_gd === 'GDII' && (dados as any)?.itens_fatura?.ajuste_lei_14300?.valor && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-600 dark:text-slate-400">Disponibilidade (GD II – Lei 14.300/22)</span>
+                                                    <span className="font-medium">
+                                                        {(dados as any).itens_fatura.ajuste_lei_14300.quantidade} kWh |
+                                                        {formatarMoeda((dados as any).itens_fatura.ajuste_lei_14300.valor)}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Energia Excedente - APENAS GDI quando consumo > injetada */}
+                                            {fatura.tipo_gd === 'GDI' && (fatura.consumo_kwh || 0) > (fatura.injetada_kwh || 0) && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-600 dark:text-slate-400">Energia excedente consumida da rede</span>
+                                                    <span className="font-medium text-amber-600">
+                                                        {(fatura.consumo_kwh || 0) - (fatura.injetada_kwh || 0)} kWh
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Bandeiras */}
+                                            {(dados?.totais?.adicionais_bandeira || 0) > 0 && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-600 dark:text-slate-400">Bandeiras e ajustes</span>
+                                                    <span className="font-medium text-orange-600">
+                                                        {formatarMoeda(dados.totais?.adicionais_bandeira)}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Iluminação Pública */}
+                                            {fatura.valor_iluminacao_publica && fatura.valor_iluminacao_publica > 0 && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-600 dark:text-slate-400">Iluminação Pública</span>
+                                                    <span className="font-medium">
+                                                        {formatarMoeda(fatura.valor_iluminacao_publica)}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Lançamentos e Serviços */}
+                                            {(dados?.totais?.lancamentos_e_servicos || 0) > 0 && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-600 dark:text-slate-400">Outros serviços</span>
+                                                    <span className="font-medium">
+                                                        {formatarMoeda(dados.totais?.lancamentos_e_servicos)}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Total */}
+                                            <div className="pt-2 border-t border-indigo-200 dark:border-indigo-700 flex justify-between font-bold">
+                                                <span>TOTAL FATURA</span>
+                                                <span className="text-indigo-600">
+                                                    {formatarMoeda(fatura.valor_fatura || dados?.total_a_pagar)}
                                                 </span>
                                             </div>
                                         </div>
@@ -1501,14 +1651,16 @@ function FaturaAccordionItem({
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3">
                                         <p className="text-xs text-slate-500 mb-1">Modelo GD</p>
-                                        <p className="font-semibold text-slate-900 dark:text-white">
-                                            {detectarModeloGD(dados)}
+                                        <p className={`font-semibold ${
+                                            fatura.tipo_gd === 'GDII' ? 'text-purple-600' : 'text-blue-600'
+                                        }`}>
+                                            {fatura.tipo_gd === 'GDII' ? 'GD II' : fatura.tipo_gd === 'GDI' ? 'GD I' : 'GD ?'}
                                         </p>
                                     </div>
                                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3">
                                         <p className="text-xs text-slate-500 mb-1">Tipo Ligacao</p>
                                         <p className="font-semibold text-slate-900 dark:text-white">
-                                            {dados.ligacao || '-'}
+                                            {fatura.tipo_ligacao || dados.ligacao || '-'}
                                         </p>
                                     </div>
                                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3">

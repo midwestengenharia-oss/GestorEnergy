@@ -1,6 +1,6 @@
 # Plataforma GD Midwest - Plano de Projeto
 
-**Ultima atualizacao:** 2025-12-15
+**Ultima atualizacao:** 2025-12-16
 **Documento para continuidade de trabalho com Claude**
 
 ---
@@ -141,6 +141,17 @@
 | Integracao bancaria | `backend/integracoes/` (criar) | Pendente |
 | API publica para parceiros | `backend/api_publica/` (criar) | Pendente |
 
+### Fase 6: Marketplace (Futuro)
+**Prioridade:** Baixa
+**Objetivo:** Marketplace de parceiros e projetos
+
+| Tarefa | Arquivos Envolvidos | Status |
+|--------|---------------------|--------|
+| Cadastro de integradores | `backend/marketplace/parceiros/` (criar) | Pendente |
+| Catalogo de equipamentos | `backend/marketplace/produtos/` (criar) | Pendente |
+| Gestao de projetos | `backend/marketplace/projetos/` (criar) | Pendente |
+| Board de acompanhamento | `backend/marketplace/kanban/` (criar) | Pendente |
+
 ---
 
 ## 4. DECISOES TECNICAS
@@ -191,6 +202,51 @@ Tela: `/app/admin/impostos`
 - Paginas por perfil em `src/pages/{perfil}/`
 - API clients em `src/api/`
 - Contexts para estado global
+
+### Estrutura de Arquivos Backend
+
+```
+backend/
+├── main.py              # Aplicacao FastAPI principal
+├── config.py            # Variaveis de ambiente
+├── dependencies.py      # Dependencias globais
+├── core/                # Infraestrutura (database, security, exceptions)
+├── auth/                # Autenticacao (schemas, service, router)
+├── energisa/            # Gateway scraping Energisa
+├── usuarios/            # CRUD usuarios
+├── ucs/                 # Unidades Consumidoras
+├── usinas/              # Gestao de usinas GD
+├── beneficiarios/       # CRUD beneficiarios
+├── faturas/             # Extracao e sync de faturas
+├── cobrancas/           # Geracao e calculo de cobrancas
+├── contratos/           # Contratos digitais
+├── saques/              # Solicitacoes de saque
+├── leads/               # CRM para landing page
+├── notificacoes/        # Sistema multi-canal
+├── admin/               # Dashboard e configuracoes
+├── configuracoes/       # Gestao de impostos
+└── tests/               # Testes automatizados
+```
+
+### Endpoints Principais (Resumo)
+
+| Modulo | Rotas | Endpoints |
+|--------|-------|-----------|
+| Auth | `/api/auth` | signup, signin, refresh, logout, me |
+| Energisa | `/api/energisa` | simulacao, login, ucs, faturas, gd |
+| Usuarios | `/api/usuarios` | CRUD, perfis, ativacao |
+| UCs | `/api/ucs` | vincular, gd, beneficiarias |
+| Usinas | `/api/usinas` | CRUD, gestores, beneficiarios |
+| Beneficiarios | `/api/beneficiarios` | CRUD, convites, status |
+| Faturas | `/api/faturas` | listagem, kanban, estatisticas |
+| Cobrancas | `/api/cobrancas` | geracao, pagamento, lote |
+| Contratos | `/api/contratos` | CRUD, assinatura, rescisao |
+| Saques | `/api/saques` | solicitacao, aprovacao |
+| Leads | `/api/leads` | captura, simulacao, funil |
+| Notificacoes | `/api/notificacoes` | CRUD, preferencias |
+| Admin | `/api/admin` | dashboard, configuracoes, logs |
+
+**Documentacao completa:** `http://localhost:8000/docs` (Swagger)
 
 ---
 
@@ -268,6 +324,19 @@ Claude pode ler este documento para entender o contexto e continuar de onde para
 | 2025-12-14 | Tela de gestao de impostos | Concluido |
 | 2025-12-14 | Correcoes de bugs (Kanban, Leads, imports) | Concluido |
 | 2025-12-15 | Criacao deste documento de planejamento | Concluido |
+| 2025-12-16 | Correcoes exibicao faturas GD (7 itens) | Concluido |
+| 2025-12-16 | Reorganizacao arquivos de plano | Concluido |
+
+### Detalhes Sessao 16/12/2025
+
+**Correcoes implementadas no ProcessamentoCobrancas:**
+1. Unificar logica GD usando `FaturaExtraidaSchema.detectar_modelo_gd()`
+2. Garantir mapeamento energia injetada (oUC/mUC)
+3. Adicionar campos faltantes (datas, leituras)
+4. Preview cobranca (como relatorio)
+5. Clarificar consumo bruto vs liquido
+6. Exibir taxa minima GD1 (30/50/100 kWh)
+7. Indicadores contextuais (INFO azul)
 
 ---
 

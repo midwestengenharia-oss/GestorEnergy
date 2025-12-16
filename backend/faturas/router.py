@@ -22,7 +22,11 @@ from backend.faturas.schemas import (
     DadosExtraidosUpdate,
     DadosExtraidosEditadosResponse,
 )
+from backend.faturas.extraction_schemas import FaturaExtraidaSchema
 from backend.faturas.service import faturas_service
+import logging
+
+logger = logging.getLogger(__name__)
 from backend.core.security import (
     CurrentUser,
     get_current_active_user,
@@ -509,11 +513,23 @@ async def listar_faturas_kanban(
         injetada_muc = sum((item.get("quantidade") or 0) for item in muc_items)
         injetada_total = injetada_ouc + injetada_muc
 
+        # Usar método do schema para detectar modelo GD (lógica correta e unificada)
         tipo_gd = None
-        for item in (ouc_items + muc_items):
-            if item.get("tipo_gd") in ["GDI", "GDII"]:
-                tipo_gd = item.get("tipo_gd")
-                break
+        tipo_ligacao = None
+        if dados_ex:
+            try:
+                schema = FaturaExtraidaSchema.model_validate(dados_ex)
+                tipo_gd = schema.detectar_modelo_gd()
+                tipo_ligacao = schema.ligacao
+                if tipo_gd == "DESCONHECIDO":
+                    tipo_gd = None
+            except Exception as e:
+                logger.warning(f"Erro ao parsear dados_extraidos para tipo_gd: {e}")
+                # Fallback para lógica antiga
+                for item in (ouc_items + muc_items):
+                    if item.get("tipo_gd") in ["GDI", "GDII"]:
+                        tipo_gd = item.get("tipo_gd")
+                        break
 
         # Valor da fatura: preferir extraído, senão usar da API
         valor_fatura = dados_ex.get("total_a_pagar") or fatura.get("valor_fatura")
@@ -552,7 +568,10 @@ async def listar_faturas_kanban(
             "extracao_score": fatura.get("extracao_score"),
             "consumo_kwh": consumo_kwh,
             "injetada_kwh": injetada_total if injetada_total > 0 else None,
+            "injetada_ouc": injetada_ouc if injetada_ouc > 0 else None,
+            "injetada_muc": injetada_muc if injetada_muc > 0 else None,
             "tipo_gd": tipo_gd,
+            "tipo_ligacao": tipo_ligacao,
             "valor_fatura": valor_fatura,
             "cobranca": cobrancas_map.get(fatura["id"]),
             "tem_pdf": fatura.get("pdf_base64") is not None,

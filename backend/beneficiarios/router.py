@@ -282,3 +282,143 @@ async def atualizar_cpf_beneficiario(
         beneficiario_id=beneficiario_id,
         cpf=cpf
     )
+
+
+@router.get(
+    "/portfolio/clientes",
+    summary="Portfolio de Clientes",
+    description="Lista clientes com UCs vinculadas e métricas consolidadas",
+    dependencies=[Depends(require_perfil("superadmin", "gestor", "proprietario"))]
+)
+async def portfolio_clientes(
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    busca: Optional[str] = Query(None, description="Buscar por nome, CPF ou email"),
+    usina_id: Optional[int] = Query(None, description="Filtrar por usina"),
+):
+    """
+    Retorna visão cliente-cêntrica para gestão do portfolio.
+
+    Cada cliente (beneficiário) inclui:
+    - Dados de contato
+    - UCs vinculadas
+    - Métricas consolidadas (economia, faturas, cobranças)
+    - Flag indicando se é cliente legado (sem lead) ou convertido
+    """
+    from backend.core.database import db_admin
+
+    # 1. Buscar todos os beneficiários
+    query = db_admin.beneficiarios().select(
+        "id, nome, cpf, email, telefone, status, created_at, economia_acumulada",
+        "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, nome_titular, endereco, cidade, uf, apelido)",
+        "usinas(id, nome)"
+    )
+
+    if usina_id:
+        query = query.eq("usina_id", usina_id)
+
+    if busca:
+        busca_lower = busca.lower()
+        query = query.or_(f"nome.ilike.%{busca}%,cpf.ilike.%{busca}%,email.ilike.%{busca}%")
+
+    beneficiarios_response = query.execute()
+    beneficiarios = beneficiarios_response.data or []
+
+    if not beneficiarios:
+        return {"clientes": []}
+
+    # 2. Buscar leads associados aos beneficiários (para identificar origem)
+    beneficiario_ids = [b["id"] for b in beneficiarios]
+    leads_response = db_admin.table("leads").select(
+        "id, nome, beneficiario_id, convertido_em"
+    ).in_("beneficiario_id", beneficiario_ids).execute()
+
+    leads_map = {}
+    for lead in (leads_response.data or []):
+        leads_map[lead["beneficiario_id"]] = {
+            "id": lead["id"],
+            "nome": lead["nome"],
+            "convertido_em": lead.get("convertido_em")
+        }
+
+    # 3. Buscar cobranças para métricas (agrupadas por beneficiário)
+    cobrancas_response = db_admin.cobrancas().select(
+        "id, beneficiario_id, status, economia_mes, valor_total, created_at"
+    ).in_("beneficiario_id", beneficiario_ids).execute()
+
+    # Agrupar cobranças por beneficiário
+    cobrancas_por_benef = {}
+    for cob in (cobrancas_response.data or []):
+        bid = cob["beneficiario_id"]
+        if bid not in cobrancas_por_benef:
+            cobrancas_por_benef[bid] = []
+        cobrancas_por_benef[bid].append(cob)
+
+    # 4. Montar resposta
+    clientes = []
+    for b in beneficiarios:
+        uc_data = b.get("unidades_consumidoras") or {}
+        usina_data = b.get("usinas") or {}
+        lead_info = leads_map.get(b["id"])
+        cobrancas = cobrancas_por_benef.get(b["id"], [])
+
+        # Calcular métricas
+        economia_total = sum(float(c.get("economia_mes") or 0) for c in cobrancas)
+        faturas_processadas = len([c for c in cobrancas if c.get("status") in ["ENVIADA", "PAGA"]])
+        faturas_pendentes = len([c for c in cobrancas if c.get("status") == "PENDENTE"])
+        ultima_cobranca = max([c.get("created_at") for c in cobrancas], default=None) if cobrancas else None
+
+        # Formatar UC
+        uc_formatada = None
+        if uc_data and uc_data.get("cod_empresa"):
+            uc_formatada = f"{uc_data['cod_empresa']}/{uc_data['cdc']}-{uc_data['digito_verificador']}"
+
+        cliente = {
+            "id": b["id"],
+            "nome": b.get("nome") or uc_data.get("nome_titular", "Sem nome"),
+            "cpf": b.get("cpf"),
+            "email": b.get("email"),
+            "telefone": b.get("telefone"),
+            "status": b.get("status"),
+            "created_at": b.get("created_at"),
+
+            # Origem do cliente
+            "origem": "LEAD" if lead_info else "LEGADO",
+            "lead_id": lead_info.get("id") if lead_info else None,
+            "convertido_em": lead_info.get("convertido_em") if lead_info else None,
+
+            # UC vinculada
+            "uc": {
+                "id": uc_data.get("id"),
+                "numero_uc": uc_formatada,
+                "apelido": uc_data.get("apelido"),
+                "nome_titular": uc_data.get("nome_titular"),
+                "endereco": uc_data.get("endereco"),
+                "cidade": uc_data.get("cidade"),
+                "uf": uc_data.get("uf")
+            } if uc_data else None,
+
+            # Usina
+            "usina": {
+                "id": usina_data.get("id"),
+                "nome": usina_data.get("nome")
+            } if usina_data else None,
+
+            # Métricas consolidadas
+            "metricas": {
+                "economia_acumulada": b.get("economia_acumulada") or economia_total,
+                "faturas_processadas": faturas_processadas,
+                "faturas_pendentes": faturas_pendentes,
+                "total_cobrancas": len(cobrancas),
+                "ultima_cobranca": ultima_cobranca
+            }
+        }
+
+        clientes.append(cliente)
+
+    # Ordenar por nome
+    clientes.sort(key=lambda x: (x.get("nome") or "").lower())
+
+    return {
+        "clientes": clientes,
+        "total": len(clientes)
+    }

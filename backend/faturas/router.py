@@ -597,8 +597,18 @@ async def listar_faturas_kanban(
             "valor_iluminacao_publica": fatura.get("valor_iluminacao_publica"),
             "pdf_baixado_em": fatura.get("pdf_baixado_em"),
 
-            # Cliente original (lead que foi convertido em beneficiário)
-            "cliente": leads_map.get(beneficiario["id"]) if beneficiario else None,
+            # Cliente: preferir lead convertido, senão usar dados do próprio beneficiário (legado)
+            "cliente": leads_map.get(beneficiario["id"]) or (
+                {
+                    "id": None,  # Indica que não é um lead
+                    "nome": beneficiario.get("nome"),
+                    "cpf": beneficiario.get("cpf"),
+                    "email": beneficiario.get("email"),
+                    "telefone": beneficiario.get("telefone"),
+                    "convertido_em": None,
+                    "is_legacy": True  # Flag para frontend identificar cliente legado
+                } if beneficiario else None
+            ),
 
             # Dados completos para visualização/edição no frontend
             "dados_extraidos": fatura.get("dados_extraidos"),

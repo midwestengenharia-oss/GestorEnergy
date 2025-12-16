@@ -97,6 +97,49 @@ export const beneficiariosApi = {
     // Atualizar CPF do beneficiário (e vincular usuário se existir)
     atualizarCpf: (id: number, cpf: string) =>
         api.patch<Beneficiario>(`/beneficiarios/${id}/cpf`, null, { params: { cpf } }),
+
+    // Portfolio de clientes (visão consolidada)
+    portfolio: (filters?: { busca?: string; usina_id?: number }) =>
+        api.get<PortfolioClientesResponse>('/beneficiarios/portfolio/clientes', { params: filters }),
 };
+
+// Interface para o response do portfolio
+export interface ClientePortfolio {
+    id: number;
+    nome: string;
+    cpf?: string;
+    email?: string;
+    telefone?: string;
+    status: string;
+    created_at: string;
+    origem: 'LEAD' | 'LEGADO';
+    lead_id?: number;
+    convertido_em?: string;
+    uc?: {
+        id: number;
+        numero_uc: string;
+        apelido?: string;
+        nome_titular?: string;
+        endereco?: string;
+        cidade?: string;
+        uf?: string;
+    };
+    usina?: {
+        id: number;
+        nome: string;
+    };
+    metricas: {
+        economia_acumulada: number;
+        faturas_processadas: number;
+        faturas_pendentes: number;
+        total_cobrancas: number;
+        ultima_cobranca?: string;
+    };
+}
+
+export interface PortfolioClientesResponse {
+    clientes: ClientePortfolio[];
+    total: number;
+}
 
 export default beneficiariosApi;

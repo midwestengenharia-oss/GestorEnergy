@@ -17,7 +17,7 @@ import { SignInPage, SignUpPage } from '../pages/auth';
 // Dashboards
 import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LeadDetail, LogsAuditoria, Impostos } from '../pages/admin';
 import { DashboardProprietario, NovaUsina } from '../pages/proprietario';
-import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor, GestaoLeads as GestaoLeadsGestor, LeadDetail as LeadDetailGestor, KanbanLeads as KanbanLeadsGestor, ProcessamentoCobrancas } from '../pages/gestor';
+import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor, GestaoLeads as GestaoLeadsGestor, LeadDetail as LeadDetailGestor, KanbanLeads as KanbanLeadsGestor, ProcessamentoCobrancas, GestaoClientes } from '../pages/gestor';
 import { CobrancasAutomaticas } from '../pages/gestor/CobrancasAutomaticas';
 import { KanbanFaturas } from '../pages/gestor/KanbanFaturas';
 import { DashboardBeneficiario } from '../pages/beneficiario';
@@ -278,6 +278,11 @@ export function AppRoutes() {
                 <Route path="gestor/kanban-leads" element={
                     <ProtectedRoute allowedPerfis={['gestor', 'superadmin']}>
                         <KanbanLeadsGestor />
+                    </ProtectedRoute>
+                } />
+                <Route path="gestor/clientes" element={
+                    <ProtectedRoute allowedPerfis={['gestor', 'superadmin', 'proprietario']}>
+                        <GestaoClientes />
                     </ProtectedRoute>
                 } />
 

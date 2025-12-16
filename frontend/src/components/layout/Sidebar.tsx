@@ -107,6 +107,7 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
             items: [
                 { label: 'Usinas', path: '/app/gestor/usinas', icon: Building2 },
                 { label: 'UCs Gerenciadas', path: '/app/usuario/ucs', icon: Zap },
+                { label: 'Clientes', path: '/app/gestor/clientes', icon: Users },
                 { label: 'Beneficiários', path: '/app/gestor/beneficiarios', icon: Users },
                 { label: 'Rateio', path: '/app/gestor/rateio', icon: PieChart },
             ],

@@ -9,3 +9,4 @@ export { GestaoLeads } from './GestaoLeads';
 export { LeadDetail } from './LeadDetail';
 export { KanbanLeads } from './KanbanLeads';
 export { ProcessamentoCobrancas } from './ProcessamentoCobrancas';
+export { GestaoClientes } from './GestaoClientes';

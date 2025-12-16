@@ -106,13 +106,18 @@ class LeadsService:
         if hasattr(origem, 'value'):
             origem = origem.value
 
+        # Processar UF (máximo 2 caracteres)
+        uf = data.get("uf")
+        if uf:
+            uf = uf.upper().strip()[:2]  # Truncar para 2 caracteres
+
         # Campos obrigatórios (schema original)
         lead_data = {
             "nome": data["nome"],
             "email": data.get("email"),
             "telefone": data.get("telefone"),
             "cidade": data["cidade"],
-            "uf": data.get("uf"),
+            "uf": uf,
             "status": StatusLead.NOVO.value,
             "origem": origem,
             "utm_source": data.get("utm_source"),

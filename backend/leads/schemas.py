@@ -206,6 +206,17 @@ class LeadCreateRequest(BaseModel):
             raise ValueError("CNPJ invalido")
         return v
 
+    @field_validator("uf")
+    @classmethod
+    def validar_uf_field(cls, v):
+        if v is None:
+            return v
+        # Limpar e converter para uppercase
+        v = v.strip().upper()
+        if len(v) > 2:
+            v = v[:2]  # Truncar para 2 caracteres
+        return v
+
 
 class LeadUpdateRequest(BaseModel):
     """Atualizar dados do lead - Campos completos"""

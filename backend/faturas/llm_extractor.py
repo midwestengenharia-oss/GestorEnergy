@@ -260,6 +260,30 @@ Ler "CONSUMO DOS ÚLTIMOS 13 MESES". Converter "SET/25" → 2025-09, "AGO/25" �
 media_consumo_13m.meses = lista (ordem cronológica quando claro, senão a da fatura).
 media_consumo_13m.media_kwh = média simples dos kWh capturados (se nenhum mês for numérico, null).
 
+IMPOSTOS E TRIBUTOS (IMPORTANTE - extrair se existir)
+
+Busque a seção "Base de Cálculo dos Tributos", "Composição dos Tributos" ou "Impostos e Contribuições".
+Esta seção geralmente mostra:
+- PIS/PASEP: alíquota (%) e valor (R$)
+- COFINS: alíquota (%) e valor (R$)
+- ICMS: alíquota (%) e valor (R$)
+- Base de cálculo total
+
+Se encontrar, preencha impostos_detalhados com:
+- pis_aliquota: decimal (ex: 1.2102% → 0.012102)
+- pis_valor: valor em R$
+- cofins_aliquota: decimal (ex: 5.5743% → 0.055743)
+- cofins_valor: valor em R$
+- icms_aliquota: decimal (ex: 17% → 0.17)
+- icms_valor: valor em R$
+- base_calculo: valor total da base de cálculo
+
+REGRAS para impostos:
+1. Se a seção NÃO existir na fatura → impostos_detalhados = null
+2. Converta SEMPRE percentuais para decimal: 17% → 0.17, 1.2102% → 0.012102
+3. Extraia valores numéricos sem formatação (sem R$)
+4. Se apenas alguns campos estiverem disponíveis, extraia o que encontrar e deixe os outros como null
+
 Não invente. Não explique. Apenas JSON com as chaves especificadas.
 
 Formato de resposta JSON
@@ -342,6 +366,16 @@ Formato de resposta JSON
         "kwh": "number|null"
       }}
     ]
+  }},
+
+  "impostos_detalhados": {{
+    "pis_aliquota": "number|null",
+    "pis_valor": "number|null",
+    "cofins_aliquota": "number|null",
+    "cofins_valor": "number|null",
+    "icms_aliquota": "number|null",
+    "icms_valor": "number|null",
+    "base_calculo": "number|null"
   }}
 }}
 

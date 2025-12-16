@@ -352,13 +352,26 @@ async def listar_faturas_kanban(
     cobrancas_map = {}
     if fatura_ids:
         cobrancas_response = supabase.table("cobrancas").select(
-            "id, fatura_id, status"
+            "id, fatura_id, status, valor_total, economia_mes, vencimento"
         ).in_("fatura_id", fatura_ids).execute()
 
         for c in (cobrancas_response.data or []):
-            cobrancas_map[c["fatura_id"]] = {"id": c["id"], "status": c["status"]}
+            cobrancas_map[c["fatura_id"]] = {
+                "id": c["id"],
+                "status": c["status"],
+                "valor_final": c.get("valor_total"),
+                "economia_mes": c.get("economia_mes"),
+                "vencimento": c.get("vencimento")
+            }
 
-    # 6. Classificar faturas por status
+    # 6. Buscar nomes das usinas
+    usina_ids_set = set(b.get("usina_id") for b in beneficiarios if b.get("usina_id"))
+    usinas_map = {}
+    if usina_ids_set:
+        usinas_response = supabase.table("usinas").select("id, nome").in_("id", list(usina_ids_set)).execute()
+        usinas_map = {u["id"]: u["nome"] for u in (usinas_response.data or [])}
+
+    # 7. Classificar faturas por status
     sem_pdf = []
     pdf_recebido = []
     extraida = []
@@ -394,6 +407,7 @@ async def listar_faturas_kanban(
 
         valor_fatura = dados_ex.get("total_a_pagar")
 
+        usina_id = beneficiario.get("usina_id")
         item_fatura = {
             "id": fatura["id"],
             "uc_id": fatura["uc_id"],
@@ -406,7 +420,8 @@ async def listar_faturas_kanban(
                 "id": beneficiario["id"],
                 "nome": beneficiario.get("nome", "")
             },
-            "usina_id": beneficiario.get("usina_id"),
+            "usina_id": usina_id,
+            "usina_nome": usinas_map.get(usina_id) if usina_id else None,
             "extracao_status": fatura.get("extracao_status"),
             "extracao_score": fatura.get("extracao_score"),
             "consumo_kwh": consumo_kwh,

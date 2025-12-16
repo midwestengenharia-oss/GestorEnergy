@@ -142,26 +142,36 @@ class ImpostosService:
         Se forem, cria um novo registro automaticamente.
 
         Args:
-            pis_extraido: Percentual PIS extraído da fatura
-            cofins_extraido: Percentual COFINS extraído da fatura
-            icms_extraido: Percentual ICMS extraído da fatura
-            tolerancia: Tolerância para comparação (default 0.1%)
+            pis_extraido: Percentual PIS extraído da fatura (em decimal, ex: 0.012102 para 1.2102%)
+            cofins_extraido: Percentual COFINS extraído da fatura (em decimal, ex: 0.055743 para 5.5743%)
+            icms_extraido: Percentual ICMS extraído da fatura (em decimal, ex: 0.17 para 17%)
+            tolerancia: Tolerância para comparação (default 0.001 = 0.1%)
             usuario_id: ID do usuário para auditoria
 
         Returns:
-            Imposto vigente (novo ou existente)
+            Dict com:
+            - "criado": bool indicando se foi criado novo registro
+            - "id": ID do imposto (novo ou vigente)
+            - "imposto": dados do imposto
+            - "diferencas": dict com as diferenças encontradas (se criado)
         """
         vigente = self.buscar_vigente()
 
         if not vigente:
             # Não existe imposto cadastrado, criar primeiro
-            return self.criar({
+            novo = self.criar({
                 "pis": Decimal(str(pis_extraido)),
                 "cofins": Decimal(str(cofins_extraido)),
                 "icms": Decimal(str(icms_extraido)),
                 "vigencia_inicio": date.today(),
                 "observacao": "Criado automaticamente a partir de extração de fatura"
             }, usuario_id)
+            return {
+                "criado": True,
+                "id": novo["id"] if novo else None,
+                "imposto": novo,
+                "diferencas": {"motivo": "Primeiro registro criado"}
+            }
 
         # Verificar se há diferença significativa
         pis_diff = abs(float(vigente["pis"]) - pis_extraido)
@@ -170,15 +180,30 @@ class ImpostosService:
 
         if pis_diff > tolerancia or cofins_diff > tolerancia or icms_diff > tolerancia:
             # Criar novo registro
-            return self.criar({
+            novo = self.criar({
                 "pis": Decimal(str(pis_extraido)),
                 "cofins": Decimal(str(cofins_extraido)),
                 "icms": Decimal(str(icms_extraido)),
                 "vigencia_inicio": date.today(),
                 "observacao": f"Atualizado automaticamente. Diferenças: PIS={pis_diff:.6f}, COFINS={cofins_diff:.6f}, ICMS={icms_diff:.6f}"
             }, usuario_id)
+            return {
+                "criado": True,
+                "id": novo["id"] if novo else None,
+                "imposto": novo,
+                "diferencas": {
+                    "pis": {"anterior": float(vigente["pis"]), "novo": pis_extraido, "diff": pis_diff},
+                    "cofins": {"anterior": float(vigente["cofins"]), "novo": cofins_extraido, "diff": cofins_diff},
+                    "icms": {"anterior": float(vigente["icms"]), "novo": icms_extraido, "diff": icms_diff}
+                }
+            }
 
-        return vigente
+        return {
+            "criado": False,
+            "id": vigente["id"],
+            "imposto": vigente,
+            "diferencas": None
+        }
 
 
 # Instância singleton

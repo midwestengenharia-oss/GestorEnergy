@@ -147,6 +147,42 @@ class EstruturaConsumoExtracted(BaseModel):
     # Pode expandir com kwh_intermediario, kwh_fora_ponta, etc se necessário
 
 
+class ImpostosExtraidosSchema(BaseModel):
+    """
+    Impostos extraídos da seção "Base de Cálculo dos Tributos" da fatura.
+
+    Usado para detectar automaticamente mudanças nas alíquotas de PIS/COFINS/ICMS.
+    """
+    pis_aliquota: Optional[float] = Field(
+        None,
+        description="Alíquota PIS em decimal (ex: 0.012102 para 1.2102%)"
+    )
+    pis_valor: Optional[Decimal] = Field(
+        None,
+        description="Valor do PIS em R$"
+    )
+    cofins_aliquota: Optional[float] = Field(
+        None,
+        description="Alíquota COFINS em decimal (ex: 0.055743 para 5.5743%)"
+    )
+    cofins_valor: Optional[Decimal] = Field(
+        None,
+        description="Valor do COFINS em R$"
+    )
+    icms_aliquota: Optional[float] = Field(
+        None,
+        description="Alíquota ICMS em decimal (ex: 0.17 para 17%)"
+    )
+    icms_valor: Optional[Decimal] = Field(
+        None,
+        description="Valor do ICMS em R$"
+    )
+    base_calculo: Optional[Decimal] = Field(
+        None,
+        description="Base de cálculo total dos tributos em R$"
+    )
+
+
 class FaturaExtraidaSchema(BaseModel):
     """
     Schema completo dos dados extraídos de uma fatura de energia.
@@ -210,6 +246,12 @@ class FaturaExtraidaSchema(BaseModel):
 
     # Classe para Bandeira tarifária (se vier separado)
     bandeira_tarifaria: Optional[str] = None
+
+    # Impostos extraídos (para detecção automática de mudanças)
+    impostos_detalhados: Optional[ImpostosExtraidosSchema] = Field(
+        None,
+        description="Impostos extraídos da seção 'Base de Cálculo dos Tributos'"
+    )
 
     class Config:
         json_schema_extra = {

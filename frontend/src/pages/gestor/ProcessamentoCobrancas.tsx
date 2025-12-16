@@ -38,29 +38,36 @@ import { cobrancasApi, type Cobranca } from '../../api/cobrancas';
 
 interface FaturaKanban {
     id: number;
+    uc_id: number;
+    uc_formatada: string;
+    uc_apelido?: string;
     numero_fatura: number;
     mes_referencia: number;
     ano_referencia: number;
     valor_fatura: number;
-    data_vencimento: string;
     extracao_status: string;
     extracao_score: number | null;
-    pdf_base64: string | null;
     dados_extraidos: any;
-    uc: {
-        id: number;
-        codigo: string;
-        endereco: string;
-    };
+    tem_pdf: boolean;
+    // Campos de energia (vindos do backend)
+    consumo_kwh?: number;
+    injetada_kwh?: number;
+    tipo_gd?: string;
+    // Usina
+    usina_id?: number;
+    usina_nome?: string;
+    // Beneficiario
     beneficiario: {
         id: number;
         nome: string;
     } | null;
+    // Cobranca (agora com mais campos)
     cobranca: {
         id: number;
         status: string;
         valor_final: number;
         economia_mes: number;
+        vencimento?: string;
     } | null;
 }
 
@@ -601,58 +608,96 @@ function FaturaAccordionItem({
             {/* Header do Accordion */}
             <div
                 onClick={onToggle}
-                className="flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/30 transition"
+                className="flex items-center gap-3 p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/30 transition"
             >
                 <div className="text-slate-400">
                     {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
                 </div>
 
-                {/* Info UC */}
+                {/* Info UC + Beneficiario */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-slate-900 dark:text-white">
-                            UC {fatura.uc?.codigo || '-'}
+                            UC {fatura.uc_formatada || '-'}
                         </span>
                         <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                             {fatura.mes_referencia?.toString().padStart(2, '0')}/{fatura.ano_referencia}
                         </span>
                         {fatura.extracao_score && (
                             <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                fatura.extracao_score >= 90 ? 'bg-green-100 text-green-700' :
-                                fatura.extracao_score >= 70 ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-red-100 text-red-700'
+                                fatura.extracao_score >= 90 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                fatura.extracao_score >= 70 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                             }`}>
-                                Score: {fatura.extracao_score}%
+                                {fatura.extracao_score}%
+                            </span>
+                        )}
+                        {fatura.tipo_gd && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                {fatura.tipo_gd}
                             </span>
                         )}
                     </div>
-                    {fatura.beneficiario && (
-                        <p className="text-sm text-slate-500 dark:text-slate-400 truncate">
-                            <User size={12} className="inline mr-1" />
-                            {fatura.beneficiario.nome}
-                        </p>
-                    )}
+                    <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                        {fatura.beneficiario && (
+                            <span className="truncate">
+                                <User size={12} className="inline mr-1" />
+                                {fatura.beneficiario.nome}
+                            </span>
+                        )}
+                        {fatura.usina_nome && (
+                            <span className="truncate text-xs">
+                                <MapPin size={10} className="inline mr-1" />
+                                {fatura.usina_nome}
+                            </span>
+                        )}
+                    </div>
                 </div>
 
+                {/* Dados de Energia (quando extraido) */}
+                {(fatura.consumo_kwh || fatura.injetada_kwh) && (
+                    <div className="hidden md:flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+                        {fatura.consumo_kwh && (
+                            <span title="Consumo">
+                                <Zap size={12} className="inline mr-1 text-orange-500" />
+                                {fatura.consumo_kwh} kWh
+                            </span>
+                        )}
+                        {fatura.injetada_kwh && (
+                            <span title="Injetada">
+                                <Zap size={12} className="inline mr-1 text-green-500" />
+                                {fatura.injetada_kwh} kWh
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 {/* Valor Fatura */}
-                <div className="text-right">
+                <div className="text-right min-w-[90px]">
                     <p className="font-semibold text-slate-900 dark:text-white">
                         {formatarMoeda(fatura.valor_fatura)}
                     </p>
-                    <p className="text-xs text-slate-500">Venc: {formatarData(fatura.data_vencimento)}</p>
+                    <p className="text-xs text-slate-500">Fatura</p>
                 </div>
 
-                {/* Status Cobranca */}
+                {/* Valor Cobranca + Status */}
                 {fatura.cobranca && (
-                    <div className="text-right">
-                        <span className={`text-xs px-2 py-1 rounded-full text-white ${
-                            COBRANCA_STATUS_CONFIG[fatura.cobranca.status]?.color || 'bg-slate-500'
-                        }`}>
-                            {COBRANCA_STATUS_CONFIG[fatura.cobranca.status]?.label || fatura.cobranca.status}
-                        </span>
+                    <div className="text-right min-w-[100px]">
+                        <div className="flex items-center justify-end gap-1.5 mb-0.5">
+                            <span className={`text-xs px-2 py-0.5 rounded-full text-white ${
+                                COBRANCA_STATUS_CONFIG[fatura.cobranca.status]?.color || 'bg-slate-500'
+                            }`}>
+                                {COBRANCA_STATUS_CONFIG[fatura.cobranca.status]?.label || fatura.cobranca.status}
+                            </span>
+                        </div>
+                        {fatura.cobranca.valor_final > 0 && (
+                            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                {formatarMoeda(fatura.cobranca.valor_final)}
+                            </p>
+                        )}
                         {fatura.cobranca.economia_mes > 0 && (
-                            <p className="text-xs text-green-600 mt-1">
-                                Economia: {formatarMoeda(fatura.cobranca.economia_mes)}
+                            <p className="text-xs text-green-600 dark:text-green-400">
+                                +{formatarMoeda(fatura.cobranca.economia_mes)}
                             </p>
                         )}
                     </div>

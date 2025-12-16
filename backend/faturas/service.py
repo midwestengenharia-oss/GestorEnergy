@@ -688,6 +688,42 @@ class FaturasService:
                 "extraido_em": datetime.now(timezone.utc).isoformat()
             }).eq("id", fatura_id).execute()
 
+            # 7. Verificar impostos extraídos (detecção automática de mudanças)
+            impostos = dados_dict.get("impostos_detalhados")
+            if impostos and impostos.get("pis_aliquota"):
+                try:
+                    from backend.configuracoes.service import impostos_service
+
+                    resultado_verificacao = impostos_service.verificar_e_criar_se_diferente(
+                        pis_extraido=impostos.get("pis_aliquota"),
+                        cofins_extraido=impostos.get("cofins_aliquota"),
+                        icms_extraido=impostos.get("icms_aliquota"),
+                        tolerancia=0.000001,  # 0.0001% - alta precisão para detectar qualquer variação
+                        usuario_id=None  # Sistema
+                    )
+
+                    if resultado_verificacao.get("criado"):
+                        logger.warning(
+                            f"IMPOSTOS ALTERADOS! Detectado na fatura {fatura_id}. "
+                            f"Novo registro criado: ID {resultado_verificacao.get('id')}"
+                        )
+                        # Adicionar aviso aos dados extraídos
+                        avisos = resultado_validacao.avisos or []
+                        avisos.append({
+                            "severidade": "AVISO",
+                            "categoria": "IMPOSTOS",
+                            "campo": "impostos_detalhados",
+                            "mensagem": "Alíquotas de impostos detectadas diferem das vigentes. Novo registro criado automaticamente."
+                        })
+                        # Atualizar avisos no banco
+                        self.db.table("faturas").update({
+                            "extracao_avisos": avisos
+                        }).eq("id", fatura_id).execute()
+                    else:
+                        logger.info(f"Impostos da fatura {fatura_id} conferem com os vigentes")
+                except Exception as e:
+                    logger.warning(f"Erro ao verificar impostos da fatura {fatura_id}: {e}")
+
             logger.info(f"Extração da fatura {fatura_id} concluída com sucesso (Score: {resultado_validacao.score}/100)")
             return dados_dict
 

@@ -27,7 +27,12 @@ import {
     BarChart3,
     Receipt,
     Sparkles,
-    RotateCcw
+    RotateCcw,
+    AlertTriangle,
+    Save,
+    XCircle,
+    TrendingDown,
+    Pencil
 } from 'lucide-react';
 import { faturasApi } from '../../api/faturas';
 import { cobrancasApi, type Cobranca } from '../../api/cobrancas';
@@ -136,6 +141,79 @@ interface DadosExtraidos {
     };
     bandeira_tarifaria?: string;
 }
+
+// Tipos para validação de campos
+type ValidacaoStatus = 'OK' | 'DIFERENTE' | 'AUSENTE';
+
+interface CampoComparacao {
+    label: string;
+    valorApi: string | number | null;
+    valorExtracao: string | number | null;
+    status: ValidacaoStatus;
+    editavel?: boolean;
+}
+
+// Interface para campos editáveis
+interface CamposEditaveis {
+    consumo_kwh?: number;
+    injetada_ouc_kwh?: number;
+    injetada_muc_kwh?: number;
+}
+
+// Helper para comparar valores com tolerância
+const compararValores = (
+    valorApi: number | null | undefined,
+    valorExtracao: number | null | undefined,
+    tolerancia: number = 0.05
+): ValidacaoStatus => {
+    if (valorApi === null || valorApi === undefined) return 'AUSENTE';
+    if (valorExtracao === null || valorExtracao === undefined) return 'AUSENTE';
+
+    const diff = Math.abs(valorApi - valorExtracao);
+    const percentDiff = valorApi !== 0 ? diff / Math.abs(valorApi) : diff;
+
+    return percentDiff <= tolerancia ? 'OK' : 'DIFERENTE';
+};
+
+// Helper para comparar strings
+const compararStrings = (
+    valorApi: string | null | undefined,
+    valorExtracao: string | null | undefined
+): ValidacaoStatus => {
+    if (!valorApi && !valorExtracao) return 'OK';
+    if (!valorApi || !valorExtracao) return 'AUSENTE';
+    return valorApi.trim().toUpperCase() === valorExtracao.trim().toUpperCase() ? 'OK' : 'DIFERENTE';
+};
+
+// Helper para comparar datas
+const compararDatas = (
+    dataApi: string | null | undefined,
+    dataExtracao: string | null | undefined
+): ValidacaoStatus => {
+    if (!dataApi && !dataExtracao) return 'OK';
+    if (!dataApi || !dataExtracao) return 'AUSENTE';
+
+    // Normalizar datas para comparação (formato ISO)
+    const parseData = (d: string): string => {
+        // Se já está em formato ISO
+        if (d.includes('-')) return d.split('T')[0];
+        // Se está em formato DD/MM/YYYY
+        const partes = d.split('/');
+        if (partes.length === 3) {
+            return `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
+        }
+        return d;
+    };
+
+    return parseData(dataApi) === parseData(dataExtracao) ? 'OK' : 'DIFERENTE';
+};
+
+// Cores e ícones para status
+const statusConfig: Record<ValidacaoStatus, { color: string; bgColor: string; icon: typeof CheckCircle2 }> = {
+    OK: { color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-900/20', icon: CheckCircle2 },
+    DIFERENTE: { color: 'text-yellow-600', bgColor: 'bg-yellow-50 dark:bg-yellow-900/20', icon: AlertTriangle },
+    AUSENTE: { color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/20', icon: XCircle }
+};
 
 // ========================
 // Configuracoes
@@ -623,6 +701,48 @@ function FaturaAccordionItem({
     const dados = fatura.dados_extraidos as DadosExtraidos;
     const isLoading = loadingAction === fatura.id || loadingAction === fatura.cobranca?.id;
 
+    // Estado para campos editáveis
+    const [editMode, setEditMode] = useState(false);
+    const [camposEditados, setCamposEditados] = useState<CamposEditaveis>({});
+    const [salvando, setSalvando] = useState(false);
+
+    // Inicializar campos editados com valores extraídos
+    useEffect(() => {
+        if (dados && isExpanded) {
+            const injetadaOuc = dados.itens_fatura?.energia_injetada_ouc?.reduce(
+                (sum, item) => sum + (item.quantidade || 0), 0
+            ) || 0;
+            const injetadaMuc = dados.itens_fatura?.energia_injetada_muc?.reduce(
+                (sum, item) => sum + (item.quantidade || 0), 0
+            ) || 0;
+
+            setCamposEditados({
+                consumo_kwh: dados.itens_fatura?.consumo_kwh?.quantidade || 0,
+                injetada_ouc_kwh: injetadaOuc,
+                injetada_muc_kwh: injetadaMuc
+            });
+        }
+    }, [dados, isExpanded]);
+
+    // Função para renderizar indicador de status
+    const renderStatusIndicador = (status: ValidacaoStatus) => {
+        const config = statusConfig[status];
+        const Icon = config.icon;
+        return (
+            <span className={`inline-flex items-center gap-1 text-xs ${config.color}`}>
+                <Icon size={14} />
+                {status === 'OK' ? 'OK' : status === 'DIFERENTE' ? 'Divergente' : 'N/A'}
+            </span>
+        );
+    };
+
+    // Calcular economia simulada com valores editados
+    const calcularEconomiaSimulada = () => {
+        const tarifaMedia = dados?.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0.85;
+        const injetadaTotal = (camposEditados.injetada_ouc_kwh || 0) + (camposEditados.injetada_muc_kwh || 0);
+        return injetadaTotal * tarifaMedia;
+    };
+
     return (
         <div className={`${isExpanded ? 'bg-slate-50 dark:bg-slate-900/50' : ''}`}>
             {/* Header do Accordion */}
@@ -819,8 +939,432 @@ function FaturaAccordionItem({
             {isExpanded && (
                 <div className="px-4 pb-4 ml-10">
                     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
-                        {/* Dados Extraidos */}
-                        {dados && (
+
+                        {/* ========================================
+                            NOVA SEÇÃO: Visualização para tab 'extraida'
+                            Comparação API vs Extração com edição
+                        ======================================== */}
+                        {activeTab === 'extraida' && (
+                            <div className="space-y-5">
+                                {/* Header com Score e Modelo GD */}
+                                <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-700">
+                                    <div className="flex items-center gap-4">
+                                        {/* Score de Confiança */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm text-slate-500">Score:</span>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-24 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${
+                                                            (fatura.extracao_score || 0) >= 90 ? 'bg-green-500' :
+                                                            (fatura.extracao_score || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
+                                                        }`}
+                                                        style={{ width: `${fatura.extracao_score || 0}%` }}
+                                                    />
+                                                </div>
+                                                <span className={`text-sm font-bold ${
+                                                    (fatura.extracao_score || 0) >= 90 ? 'text-green-600' :
+                                                    (fatura.extracao_score || 0) >= 70 ? 'text-yellow-600' : 'text-red-600'
+                                                }`}>
+                                                    {fatura.extracao_score || 0}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {/* Modelo GD */}
+                                        <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-sm font-medium">
+                                            {dados ? detectarModeloGD(dados) : fatura.tipo_gd || 'GD I'}
+                                        </span>
+                                        {/* Tipo Ligação */}
+                                        {dados?.ligacao && (
+                                            <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full text-sm">
+                                                {dados.ligacao}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {/* Vencimento */}
+                                    <div className="text-right">
+                                        <span className="text-xs text-slate-500">Vencimento:</span>
+                                        <p className="font-medium text-slate-900 dark:text-white">
+                                            {fatura.data_vencimento
+                                                ? new Date(fatura.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')
+                                                : dados?.vencimento || 'N/A'
+                                            }
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* COMPARAÇÃO API vs EXTRAÇÃO */}
+                                <div>
+                                    <h4 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+                                        <BarChart3 size={18} />
+                                        Comparacao API vs Extracao
+                                    </h4>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        {/* Coluna API */}
+                                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                            <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                                                <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                                    Dados API (Energisa)
+                                                </h5>
+                                            </div>
+                                            <div className="p-4 space-y-3">
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-slate-500">Valor Fatura:</span>
+                                                    <span className="font-medium">{formatarMoeda(fatura.valor_fatura)}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-slate-500">Consumo:</span>
+                                                    <span className="font-medium">{fatura.consumo_api ? `${fatura.consumo_api} kWh` : 'N/A'}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-slate-500">Vencimento:</span>
+                                                    <span className="font-medium">
+                                                        {fatura.data_vencimento
+                                                            ? new Date(fatura.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')
+                                                            : 'N/A'
+                                                        }
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-slate-500">Bandeira:</span>
+                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                        fatura.bandeira_tarifaria?.includes('VERDE') ? 'bg-green-100 text-green-700' :
+                                                        fatura.bandeira_tarifaria?.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
+                                                        fatura.bandeira_tarifaria?.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
+                                                        'bg-slate-100 text-slate-700'
+                                                    }`}>
+                                                        {fatura.bandeira_tarifaria || 'N/A'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-slate-500">Leitura:</span>
+                                                    <span className="font-medium">
+                                                        {fatura.leitura_anterior && fatura.leitura_atual
+                                                            ? `${fatura.leitura_anterior} → ${fatura.leitura_atual}`
+                                                            : 'N/A'
+                                                        }
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Coluna Extração */}
+                                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                            <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                                                <h5 className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                                                    Dados Extraidos (PDF)
+                                                </h5>
+                                            </div>
+                                            <div className="p-4 space-y-3">
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500">Total Fatura:</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium">{formatarMoeda(dados?.totais?.total_geral_fatura)}</span>
+                                                        {renderStatusIndicador(
+                                                            compararValores(fatura.valor_fatura, dados?.totais?.total_geral_fatura, 0.02)
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500">Consumo:</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium">
+                                                            {dados?.itens_fatura?.consumo_kwh?.quantidade
+                                                                ? `${dados.itens_fatura.consumo_kwh.quantidade} kWh`
+                                                                : 'N/A'
+                                                            }
+                                                        </span>
+                                                        {renderStatusIndicador(
+                                                            compararValores(fatura.consumo_api, dados?.itens_fatura?.consumo_kwh?.quantidade)
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500">Vencimento:</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium">{dados?.vencimento || 'N/A'}</span>
+                                                        {renderStatusIndicador(
+                                                            compararDatas(fatura.data_vencimento, dados?.vencimento)
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500">Bandeira:</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                            dados?.bandeira_tarifaria?.includes('VERDE') ? 'bg-green-100 text-green-700' :
+                                                            dados?.bandeira_tarifaria?.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
+                                                            dados?.bandeira_tarifaria?.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
+                                                            'bg-slate-100 text-slate-700'
+                                                        }`}>
+                                                            {dados?.bandeira_tarifaria || 'N/A'}
+                                                        </span>
+                                                        {renderStatusIndicador(
+                                                            compararStrings(fatura.bandeira_tarifaria, dados?.bandeira_tarifaria)
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-slate-500">Leitura:</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium">
+                                                            {dados?.leitura_anterior && dados?.leitura_atual
+                                                                ? `${dados.leitura_anterior} → ${dados.leitura_atual}`
+                                                                : 'N/A'
+                                                            }
+                                                        </span>
+                                                        {renderStatusIndicador(
+                                                            compararValores(fatura.leitura_atual, dados?.leitura_atual)
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* ENERGIA GD - Editável */}
+                                {dados && (
+                                    <div className="border border-blue-200 dark:border-blue-800 rounded-lg overflow-hidden">
+                                        <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 border-b border-blue-200 dark:border-blue-800 flex justify-between items-center">
+                                            <h5 className="text-sm font-medium text-blue-700 dark:text-blue-400 flex items-center gap-2">
+                                                <Zap size={16} />
+                                                Energia GD {editMode && <span className="text-xs">(Editando)</span>}
+                                            </h5>
+                                            <button
+                                                onClick={() => setEditMode(!editMode)}
+                                                className={`text-xs px-2 py-1 rounded flex items-center gap-1 transition ${
+                                                    editMode
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-200'
+                                                }`}
+                                            >
+                                                <Pencil size={12} />
+                                                {editMode ? 'Editando' : 'Editar'}
+                                            </button>
+                                        </div>
+                                        <div className="p-4 space-y-4">
+                                            {/* Consumo */}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-slate-500 w-32">Consumo:</span>
+                                                    {editMode ? (
+                                                        <input
+                                                            type="number"
+                                                            value={camposEditados.consumo_kwh || 0}
+                                                            onChange={(e) => setCamposEditados({
+                                                                ...camposEditados,
+                                                                consumo_kwh: parseFloat(e.target.value) || 0
+                                                            })}
+                                                            className="w-24 px-2 py-1 border border-blue-300 dark:border-blue-600 rounded bg-white dark:bg-slate-900 text-sm"
+                                                        />
+                                                    ) : (
+                                                        <span className="font-medium">{dados.itens_fatura?.consumo_kwh?.quantidade || 0}</span>
+                                                    )}
+                                                    <span className="text-sm text-slate-500">kWh</span>
+                                                </div>
+                                                <span className="text-sm text-slate-600">
+                                                    x R$ {(dados.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0).toFixed(4)} = {formatarMoeda(dados.itens_fatura?.consumo_kwh?.valor_total)}
+                                                </span>
+                                            </div>
+
+                                            {/* Injetada oUC (GD I) */}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm text-slate-500 w-32">Injetada oUC:</span>
+                                                    {editMode ? (
+                                                        <input
+                                                            type="number"
+                                                            value={camposEditados.injetada_ouc_kwh || 0}
+                                                            onChange={(e) => setCamposEditados({
+                                                                ...camposEditados,
+                                                                injetada_ouc_kwh: parseFloat(e.target.value) || 0
+                                                            })}
+                                                            className="w-24 px-2 py-1 border border-green-300 dark:border-green-600 rounded bg-white dark:bg-slate-900 text-sm"
+                                                        />
+                                                    ) : (
+                                                        <span className="font-medium text-green-600">
+                                                            {dados.itens_fatura?.energia_injetada_ouc?.reduce((s, i) => s + (i.quantidade || 0), 0) || 0}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-sm text-slate-500">kWh</span>
+                                                </div>
+                                                <span className="text-sm text-green-600">
+                                                    Credito: {formatarMoeda(
+                                                        dados.itens_fatura?.energia_injetada_ouc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0
+                                                    )}
+                                                </span>
+                                            </div>
+
+                                            {/* Injetada mUC (GD II) */}
+                                            {(dados.itens_fatura?.energia_injetada_muc?.length || 0) > 0 && (
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm text-slate-500 w-32">Injetada mUC:</span>
+                                                        {editMode ? (
+                                                            <input
+                                                                type="number"
+                                                                value={camposEditados.injetada_muc_kwh || 0}
+                                                                onChange={(e) => setCamposEditados({
+                                                                    ...camposEditados,
+                                                                    injetada_muc_kwh: parseFloat(e.target.value) || 0
+                                                                })}
+                                                                className="w-24 px-2 py-1 border border-blue-300 dark:border-blue-600 rounded bg-white dark:bg-slate-900 text-sm"
+                                                            />
+                                                        ) : (
+                                                            <span className="font-medium text-blue-600">
+                                                                {dados.itens_fatura?.energia_injetada_muc?.reduce((s, i) => s + (i.quantidade || 0), 0) || 0}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-sm text-slate-500">kWh</span>
+                                                    </div>
+                                                    <span className="text-sm text-blue-600">
+                                                        Credito: {formatarMoeda(
+                                                            dados.itens_fatura?.energia_injetada_muc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Totalizador Injetada */}
+                                            <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                                    TOTAL INJETADO:
+                                                </span>
+                                                <span className="font-bold text-lg text-green-600">
+                                                    {editMode
+                                                        ? (camposEditados.injetada_ouc_kwh || 0) + (camposEditados.injetada_muc_kwh || 0)
+                                                        : calcularInjetadaTotal(dados)
+                                                    } kWh
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* RESUMO ECONOMIA GD */}
+                                <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                                    <h5 className="text-sm font-medium text-green-700 dark:text-green-400 mb-3 flex items-center gap-2">
+                                        <TrendingDown size={16} />
+                                        Resumo Economia GD
+                                    </h5>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="text-center">
+                                            <span className="text-xs text-slate-500 block mb-1">Fatura Original</span>
+                                            <p className="font-bold text-lg text-slate-900 dark:text-white">
+                                                {formatarMoeda(fatura.valor_fatura)}
+                                            </p>
+                                        </div>
+                                        <div className="text-center">
+                                            <span className="text-xs text-slate-500 block mb-1">Creditos GD</span>
+                                            <p className="font-bold text-lg text-green-600">
+                                                -{formatarMoeda(
+                                                    editMode
+                                                        ? calcularEconomiaSimulada()
+                                                        : (dados?.itens_fatura?.energia_injetada_ouc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0) +
+                                                          (dados?.itens_fatura?.energia_injetada_muc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0)
+                                                )}
+                                            </p>
+                                        </div>
+                                        <div className="text-center bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
+                                            <span className="text-xs text-slate-500 block mb-1">Economia Estimada</span>
+                                            <p className="font-bold text-xl text-green-600">
+                                                {formatarMoeda(
+                                                    editMode
+                                                        ? calcularEconomiaSimulada()
+                                                        : (dados?.itens_fatura?.energia_injetada_ouc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0) +
+                                                          (dados?.itens_fatura?.energia_injetada_muc?.reduce((s, i) => s + (i.valor_total || 0), 0) || 0)
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Cliente Contratante */}
+                                {fatura.cliente && (
+                                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                                        <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                                            <User size={16} />
+                                            Cliente Contratante
+                                        </h5>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                            <div>
+                                                <span className="text-slate-500">Nome:</span>
+                                                <p className="font-medium">{fatura.cliente.nome}</p>
+                                            </div>
+                                            {fatura.cliente.cpf && (
+                                                <div>
+                                                    <span className="text-slate-500">CPF:</span>
+                                                    <p className="font-medium">{fatura.cliente.cpf}</p>
+                                                </div>
+                                            )}
+                                            {fatura.cliente.email && (
+                                                <div>
+                                                    <span className="text-slate-500">Email:</span>
+                                                    <p className="font-medium">{fatura.cliente.email}</p>
+                                                </div>
+                                            )}
+                                            {fatura.cliente.telefone && (
+                                                <div>
+                                                    <span className="text-slate-500">Telefone:</span>
+                                                    <p className="font-medium">{fatura.cliente.telefone}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Acoes */}
+                                <div className="flex justify-between items-center gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                    <div className="flex items-center gap-2">
+                                        {editMode && (
+                                            <button
+                                                onClick={async () => {
+                                                    setSalvando(true);
+                                                    // TODO: Implementar salvamento no backend
+                                                    await new Promise(r => setTimeout(r, 500));
+                                                    setSalvando(false);
+                                                    setEditMode(false);
+                                                    alert('Funcionalidade em desenvolvimento. Valores serao considerados na geracao da cobranca.');
+                                                }}
+                                                disabled={salvando}
+                                                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {salvando ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                                Salvar Alteracoes
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => onRefazer(fatura.id)}
+                                            disabled={isLoading}
+                                            className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-2"
+                                            title="Volta para Aguardando Extracao"
+                                        >
+                                            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                                            Reprocessar PDF
+                                        </button>
+                                        <button
+                                            onClick={() => onGerarCobranca(fatura)}
+                                            disabled={isLoading || !fatura.beneficiario}
+                                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
+                                        >
+                                            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
+                                            Gerar Cobranca
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ========================================
+                            Seção original para 'pdf_recebido' e 'relatorio_gerado'
+                        ======================================== */}
+
+                        {/* Dados Extraidos - para pdf_recebido (quando já tem dados) */}
+                        {dados && activeTab === 'pdf_recebido' && (
                             <div className="space-y-4">
                                 <h4 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                                     <BarChart3 size={18} />
@@ -855,59 +1399,6 @@ function FaturaAccordionItem({
                                     </div>
                                 </div>
 
-                                {/* Detalhes de Energia */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {/* Consumo */}
-                                    <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3">
-                                        <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                            Consumo
-                                        </h5>
-                                        <div className="space-y-1 text-sm">
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-500">Quantidade:</span>
-                                                <span className="font-medium">{dados.itens_fatura?.consumo_kwh?.quantidade || 0} kWh</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-500">Tarifa c/ tributos:</span>
-                                                <span className="font-medium">
-                                                    R$ {(dados.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0).toFixed(6)}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-500">Valor:</span>
-                                                <span className="font-medium">
-                                                    {formatarMoeda(dados.itens_fatura?.consumo_kwh?.valor_total)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Energia Injetada */}
-                                    <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3">
-                                        <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                            Energia Injetada
-                                        </h5>
-                                        <div className="space-y-1 text-sm">
-                                            {dados.itens_fatura?.energia_injetada_ouc?.map((item, idx) => (
-                                                <div key={`ouc-${idx}`} className="flex justify-between">
-                                                    <span className="text-slate-500">oUC #{idx + 1}:</span>
-                                                    <span className="font-medium text-green-600">
-                                                        {item.quantidade} kWh ({formatarMoeda(item.valor_total)})
-                                                    </span>
-                                                </div>
-                                            ))}
-                                            {dados.itens_fatura?.energia_injetada_muc?.map((item, idx) => (
-                                                <div key={`muc-${idx}`} className="flex justify-between">
-                                                    <span className="text-slate-500">mUC #{idx + 1}:</span>
-                                                    <span className="font-medium text-blue-600">
-                                                        {item.quantidade} kWh ({formatarMoeda(item.valor_total)})
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
                                 {/* Totalizadores */}
                                 <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-3">
                                     <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -929,77 +1420,21 @@ function FaturaAccordionItem({
                                     </div>
                                 </div>
 
-                                {/* Acoes */}
+                                {/* Acoes pdf_recebido */}
                                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                                    {activeTab === 'pdf_recebido' && (
-                                        <button
-                                            onClick={() => onExtrair(fatura.id)}
-                                            disabled={isLoading}
-                                            className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 flex items-center gap-2"
-                                        >
-                                            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-                                            Extrair Dados
-                                        </button>
-                                    )}
-                                    {activeTab === 'extraida' && (
-                                        <>
-                                            <button
-                                                onClick={() => onRefazer(fatura.id)}
-                                                disabled={isLoading}
-                                                className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-2"
-                                                title="Volta para Aguardando Extracao"
-                                            >
-                                                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                                                Refazer
-                                            </button>
-                                            <button
-                                                onClick={() => onGerarCobranca(fatura)}
-                                                disabled={isLoading || !fatura.beneficiario}
-                                                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
-                                            >
-                                                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
-                                                Gerar Cobranca
-                                            </button>
-                                        </>
-                                    )}
-                                    {activeTab === 'relatorio_gerado' && fatura.cobranca && (
-                                        <>
-                                            {fatura.cobranca.status !== 'PAGA' && (
-                                                <button
-                                                    onClick={() => onRefazer(fatura.id)}
-                                                    disabled={isLoading}
-                                                    className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-2"
-                                                    title="Exclui cobranca e volta para Aguardando Extracao"
-                                                >
-                                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                                                    Refazer
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => onVerRelatorio(fatura.cobranca!.id)}
-                                                disabled={isLoading}
-                                                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-50 flex items-center gap-2"
-                                            >
-                                                <Eye size={16} />
-                                                Ver Relatorio
-                                            </button>
-                                            {fatura.cobranca.status === 'RASCUNHO' && (
-                                                <button
-                                                    onClick={() => onAprovar(fatura.cobranca!.id, false)}
-                                                    disabled={isLoading}
-                                                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 flex items-center gap-2"
-                                                >
-                                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                                                    Aprovar
-                                                </button>
-                                            )}
-                                        </>
-                                    )}
+                                    <button
+                                        onClick={() => onExtrair(fatura.id)}
+                                        disabled={isLoading}
+                                        className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                                        Extrair Dados
+                                    </button>
                                 </div>
                             </div>
                         )}
 
-                        {/* Sem dados extraidos - mostra dados da API */}
+                        {/* Sem dados extraidos - mostra dados da API (pdf_recebido) */}
                         {!dados && activeTab === 'pdf_recebido' && (
                             <div className="py-4">
                                 {/* Alerta + botao */}
@@ -1018,7 +1453,7 @@ function FaturaAccordionItem({
                                     </button>
                                 </div>
 
-                                {/* Dados da API (disponiveis antes da extracao) */}
+                                {/* Dados da API */}
                                 <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
                                     Dados da Fatura (via API)
                                 </h5>
@@ -1055,45 +1490,9 @@ function FaturaAccordionItem({
                                             ) : 'N/A'}
                                         </p>
                                     </div>
-                                    <div>
-                                        <span className="text-slate-500">Periodo:</span>
-                                        <p className="font-medium">{fatura.quantidade_dias ? `${fatura.quantidade_dias} dias` : 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                        <span className="text-slate-500">Leitura:</span>
-                                        <p className="font-medium">
-                                            {fatura.leitura_anterior && fatura.leitura_atual
-                                                ? `${fatura.leitura_anterior} -> ${fatura.leitura_atual}`
-                                                : 'N/A'
-                                            }
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <span className="text-slate-500">Situacao:</span>
-                                        <p>
-                                            {fatura.situacao_pagamento ? (
-                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                    fatura.situacao_pagamento === 'PAGA' ? 'bg-green-100 text-green-800' :
-                                                    fatura.situacao_pagamento === 'VENCIDA' ? 'bg-red-100 text-red-800' :
-                                                    'bg-yellow-100 text-yellow-800'
-                                                }`}>
-                                                    {fatura.situacao_pagamento}
-                                                </span>
-                                            ) : 'N/A'}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <span className="text-slate-500">Iluminacao Publica:</span>
-                                        <p className="font-medium">
-                                            {fatura.valor_iluminacao_publica
-                                                ? formatarMoeda(fatura.valor_iluminacao_publica)
-                                                : 'N/A'
-                                            }
-                                        </p>
-                                    </div>
                                 </div>
 
-                                {/* Cliente Contratante (quando disponível) */}
+                                {/* Cliente Contratante */}
                                 {fatura.cliente && (
                                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                                         <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -1110,18 +1509,6 @@ function FaturaAccordionItem({
                                                     <p className="font-medium">{fatura.cliente.cpf}</p>
                                                 </div>
                                             )}
-                                            {fatura.cliente.email && (
-                                                <div>
-                                                    <span className="text-slate-500">Email:</span>
-                                                    <p className="font-medium">{fatura.cliente.email}</p>
-                                                </div>
-                                            )}
-                                            {fatura.cliente.telefone && (
-                                                <div>
-                                                    <span className="text-slate-500">Telefone:</span>
-                                                    <p className="font-medium">{fatura.cliente.telefone}</p>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -1135,12 +1522,13 @@ function FaturaAccordionItem({
                             </div>
                         )}
 
-                        {/* Cobranca Info */}
+                        {/* Cobranca Info - relatorio_gerado */}
                         {fatura.cobranca && activeTab === 'relatorio_gerado' && (
-                            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            <div className="space-y-4">
+                                <h4 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Receipt size={18} />
                                     Dados da Cobranca
-                                </h5>
+                                </h4>
                                 <div className="grid grid-cols-3 gap-4 text-sm">
                                     <div>
                                         <span className="text-slate-500">Valor Final:</span>
@@ -1162,6 +1550,39 @@ function FaturaAccordionItem({
                                             </span>
                                         </p>
                                     </div>
+                                </div>
+
+                                {/* Acoes relatorio_gerado */}
+                                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                    {fatura.cobranca.status !== 'PAGA' && (
+                                        <button
+                                            onClick={() => onRefazer(fatura.id)}
+                                            disabled={isLoading}
+                                            className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-2"
+                                            title="Exclui cobranca e volta para Aguardando Extracao"
+                                        >
+                                            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                                            Refazer
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => onVerRelatorio(fatura.cobranca!.id)}
+                                        disabled={isLoading}
+                                        className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        <Eye size={16} />
+                                        Ver Relatorio
+                                    </button>
+                                    {fatura.cobranca.status === 'RASCUNHO' && (
+                                        <button
+                                            onClick={() => onAprovar(fatura.cobranca!.id, false)}
+                                            disabled={isLoading}
+                                            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 flex items-center gap-2"
+                                        >
+                                            {isLoading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                                            Aprovar
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )}

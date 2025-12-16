@@ -39,9 +39,9 @@ class StatusLead(str, Enum):
 
 
 class TipoPessoa(str, Enum):
-    """Tipo de pessoa"""
-    FISICA = "FISICA"
-    JURIDICA = "JURIDICA"
+    """Tipo de pessoa - valores conforme constraint do banco (PF/PJ)"""
+    FISICA = "PF"
+    JURIDICA = "PJ"
 
 
 class TitularidadeStatus(str, Enum):
@@ -217,6 +217,26 @@ class LeadCreateRequest(BaseModel):
             v = v[:2]  # Truncar para 2 caracteres
         return v
 
+    @field_validator("tipo_pessoa", mode="before")
+    @classmethod
+    def converter_tipo_pessoa(cls, v):
+        """Aceita FISICA/JURIDICA e converte para PF/PJ"""
+        if v is None:
+            return TipoPessoa.FISICA
+        if isinstance(v, TipoPessoa):
+            return v
+        v_upper = str(v).upper().strip()
+        # Mapear valores alternativos
+        mapeamento = {
+            "FISICA": TipoPessoa.FISICA,
+            "JURIDICA": TipoPessoa.JURIDICA,
+            "PF": TipoPessoa.FISICA,
+            "PJ": TipoPessoa.JURIDICA,
+        }
+        if v_upper in mapeamento:
+            return mapeamento[v_upper]
+        return TipoPessoa.FISICA  # Default
+
 
 class LeadUpdateRequest(BaseModel):
     """Atualizar dados do lead - Campos completos"""
@@ -258,6 +278,23 @@ class LeadUpdateRequest(BaseModel):
     titularidade_protocolo: Optional[str] = None
     titularidade_data_solicitacao: Optional[date] = None
     titularidade_data_conclusao: Optional[date] = None
+
+    @field_validator("tipo_pessoa", mode="before")
+    @classmethod
+    def converter_tipo_pessoa(cls, v):
+        """Aceita FISICA/JURIDICA e converte para PF/PJ"""
+        if v is None:
+            return None
+        if isinstance(v, TipoPessoa):
+            return v
+        v_upper = str(v).upper().strip()
+        mapeamento = {
+            "FISICA": TipoPessoa.FISICA,
+            "JURIDICA": TipoPessoa.JURIDICA,
+            "PF": TipoPessoa.FISICA,
+            "PJ": TipoPessoa.JURIDICA,
+        }
+        return mapeamento.get(v_upper)
 
 
 class LeadSimulacaoRequest(BaseModel):
@@ -441,6 +478,16 @@ class LeadResponse(BaseModel):
     id: int
     nome: str
     tipo_pessoa: Optional[str] = "FISICA"
+
+    @field_validator("tipo_pessoa", mode="before")
+    @classmethod
+    def converter_tipo_pessoa_response(cls, v):
+        """Converte PF/PJ para FISICA/JURIDICA na resposta"""
+        if v is None:
+            return "FISICA"
+        v_upper = str(v).upper().strip()
+        mapeamento = {"PF": "FISICA", "PJ": "JURIDICA"}
+        return mapeamento.get(v_upper, v_upper)
 
     # Documentos
     cpf: Optional[str] = None

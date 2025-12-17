@@ -338,6 +338,51 @@ const getTaxaMinima = (tipoLigacao: string | undefined): number => {
     }
 };
 
+// ===========================================
+// Cálculo de Economia GD (Regras de Negócio)
+// ===========================================
+// GD1: economia = min(consumo_liquido, injetada) × diferença_tarifa
+//      onde consumo_liquido = consumo - taxa_minima
+// GD2: economia = injetada × diferença_tarifa
+// diferença_tarifa = tarifa_base × 0.30 (30% de desconto)
+
+interface CalculoEconomiaParams {
+    consumoKwh: number;
+    injetadaKwh: number;
+    tipoGd?: string;
+    tipoLigacao?: string;
+    tarifaBase: number;
+}
+
+const calcularEconomiaGD = ({
+    consumoKwh,
+    injetadaKwh,
+    tipoGd,
+    tipoLigacao,
+    tarifaBase
+}: CalculoEconomiaParams): { economia: number; energiaCompensada: number } => {
+    // Desconto GD = 30% sobre a tarifa
+    const DESCONTO_GD = 0.30;
+
+    // Determinar energia compensada baseado no modelo GD
+    let energiaCompensada: number;
+
+    if (tipoGd?.toUpperCase() === 'GDII' || tipoGd?.toUpperCase() === 'GD2') {
+        // GD2: toda energia injetada recebe desconto (sem taxa mínima)
+        energiaCompensada = injetadaKwh;
+    } else {
+        // GD1 (default): desconta taxa mínima do consumo
+        const taxaMinima = getTaxaMinima(tipoLigacao);
+        const consumoLiquido = Math.max(0, consumoKwh - taxaMinima);
+        energiaCompensada = Math.min(consumoLiquido, injetadaKwh);
+    }
+
+    // Economia = energia compensada × (tarifa_base × 30%)
+    const economia = energiaCompensada * tarifaBase * DESCONTO_GD;
+
+    return { economia, energiaCompensada };
+};
+
 // ========================
 // Configuracoes
 // ========================
@@ -846,11 +891,20 @@ function FaturaAccordionItem({
         );
     };
 
-    // Calcular economia simulada com valores editados
+    // Calcular economia simulada com valores editados (usando lógica GD correta)
     const calcularEconomiaSimulada = () => {
-        const tarifaMedia = dados?.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0.85;
-        const injetadaTotal = (camposEditados.injetada_ouc_kwh || 0) + (camposEditados.injetada_muc_kwh || 0);
-        return injetadaTotal * tarifaMedia;
+        const consumoKwh = fatura.consumo_kwh || dados?.itens_fatura?.consumo_kwh?.quantidade || 0;
+        const injetadaKwh = (camposEditados.injetada_ouc_kwh || 0) + (camposEditados.injetada_muc_kwh || 0);
+        const tarifaBase = dados?.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0.85;
+
+        const { economia } = calcularEconomiaGD({
+            consumoKwh,
+            injetadaKwh,
+            tipoGd: fatura.tipo_gd,
+            tipoLigacao: fatura.tipo_ligacao,
+            tarifaBase
+        });
+        return economia;
     };
 
     return (
@@ -1521,40 +1575,63 @@ function FaturaAccordionItem({
                                 )}
 
                                 {/* RESUMO ECONOMIA GD */}
-                                <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-                                    <h5 className="text-sm font-medium text-green-700 dark:text-green-400 mb-3 flex items-center gap-2">
-                                        <TrendingDown size={16} />
-                                        Resumo Economia GD
-                                    </h5>
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div className="text-center">
-                                            <span className="text-xs text-slate-500 block mb-1">Fatura Original</span>
-                                            <p className="font-bold text-lg text-slate-900 dark:text-white">
-                                                {formatarMoeda(fatura.valor_fatura)}
-                                            </p>
+                                {(() => {
+                                    // Calcular valores para exibição
+                                    const consumoKwh = fatura.consumo_kwh || dados?.itens_fatura?.consumo_kwh?.quantidade || 0;
+                                    const injetadaKwh = editMode
+                                        ? (camposEditados.injetada_ouc_kwh || 0) + (camposEditados.injetada_muc_kwh || 0)
+                                        : calcularInjetadaOUC(dados?.itens_fatura) + calcularInjetadaMUC(dados?.itens_fatura);
+                                    const tarifaBase = dados?.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0.85;
+
+                                    // Valor total dos créditos (quanto "vale" a energia injetada)
+                                    const creditosGD = editMode
+                                        ? injetadaKwh * tarifaBase
+                                        : calcularValorInjetadaOUC(dados?.itens_fatura) + calcularValorInjetadaMUC(dados?.itens_fatura);
+
+                                    // Economia real (30% de desconto sobre energia compensada)
+                                    const { economia, energiaCompensada } = calcularEconomiaGD({
+                                        consumoKwh,
+                                        injetadaKwh,
+                                        tipoGd: fatura.tipo_gd,
+                                        tipoLigacao: fatura.tipo_ligacao,
+                                        tarifaBase
+                                    });
+
+                                    return (
+                                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                                            <h5 className="text-sm font-medium text-green-700 dark:text-green-400 mb-3 flex items-center gap-2">
+                                                <TrendingDown size={16} />
+                                                Resumo Economia GD {fatura.tipo_gd && <span className="text-xs bg-green-100 dark:bg-green-800 px-2 py-0.5 rounded">{fatura.tipo_gd}</span>}
+                                            </h5>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <div className="text-center">
+                                                    <span className="text-xs text-slate-500 block mb-1">Fatura Original</span>
+                                                    <p className="font-bold text-lg text-slate-900 dark:text-white">
+                                                        {formatarMoeda(fatura.valor_fatura)}
+                                                    </p>
+                                                </div>
+                                                <div className="text-center">
+                                                    <span className="text-xs text-slate-500 block mb-1">Créditos GD</span>
+                                                    <p className="font-bold text-lg text-green-600">
+                                                        -{formatarMoeda(creditosGD)}
+                                                    </p>
+                                                    <span className="text-xs text-slate-400">
+                                                        {injetadaKwh.toFixed(0)} kWh × R$ {tarifaBase.toFixed(4)}
+                                                    </span>
+                                                </div>
+                                                <div className="text-center bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
+                                                    <span className="text-xs text-slate-500 block mb-1">Economia Estimada</span>
+                                                    <p className="font-bold text-xl text-green-600">
+                                                        {formatarMoeda(economia)}
+                                                    </p>
+                                                    <span className="text-xs text-slate-400">
+                                                        {energiaCompensada.toFixed(0)} kWh × 30%
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="text-center">
-                                            <span className="text-xs text-slate-500 block mb-1">Creditos GD</span>
-                                            <p className="font-bold text-lg text-green-600">
-                                                -{formatarMoeda(
-                                                    editMode
-                                                        ? calcularEconomiaSimulada()
-                                                        : calcularValorInjetadaOUC(dados?.itens_fatura) + calcularValorInjetadaMUC(dados?.itens_fatura)
-                                                )}
-                                            </p>
-                                        </div>
-                                        <div className="text-center bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-                                            <span className="text-xs text-slate-500 block mb-1">Economia Estimada</span>
-                                            <p className="font-bold text-xl text-green-600">
-                                                {formatarMoeda(
-                                                    editMode
-                                                        ? calcularEconomiaSimulada()
-                                                        : calcularValorInjetadaOUC(dados?.itens_fatura) + calcularValorInjetadaMUC(dados?.itens_fatura)
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                                    );
+                                })()}
 
                                 {/* BANDEIRA TARIFARIA - Previsao vs Extracao */}
                                 {(fatura.bandeira_prevista || dados?.totais?.adicionais_bandeira) && (

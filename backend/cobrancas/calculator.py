@@ -306,29 +306,77 @@ class CobrancaCalculator:
         )
 
     def _calcular_totais(self, resultado: CobrancaCalculada):
-        """Calcula totais finais e economia"""
+        """
+        Calcula totais finais e economia com lógica correta por modelo GD.
 
-        # Encargos fixos (independente de assinatura)
+        Regras de Negócio:
+        - GD1: Taxa mínima e energia excedente são cobradas na tarifa CHEIA (sem desconto)
+        - GD2: Custo de disponibilidade (fio_b) é adicional
+        - Economia = energia compensada × diferença de tarifa
+        - Bandeiras, iluminação e serviços são encargos fixos
+        """
+
+        # Encargos fixos (independente de modelo GD)
         encargos_fixos = (
-            resultado.taxa_minima_valor +
-            resultado.energia_excedente_valor +
-            resultado.disponibilidade_valor +
             resultado.bandeiras_valor +
             resultado.iluminacao_publica_valor +
             resultado.servicos_valor
         )
 
-        # Sem assinatura (tarifa cheia)
-        resultado.valor_sem_assinatura = resultado.valor_energia_base + encargos_fixos
+        # Calcular energia efetivamente compensada (que recebe desconto)
+        # Para GD1: min(consumo_liquido, injetada) onde consumo_liquido = consumo - taxa_minima
+        # Para GD2: injetada total
+        if resultado.modelo_gd == "GDI":
+            consumo_liquido = max(0, resultado.consumo_kwh - resultado.taxa_minima_kwh)
+            energia_compensada = min(consumo_liquido, resultado.injetada_kwh)
+        else:  # GDII
+            energia_compensada = resultado.injetada_kwh
 
-        # Com assinatura (tarifa com desconto)
-        resultado.valor_com_assinatura = resultado.valor_energia_assinatura + encargos_fixos
+        energia_compensada = max(0, energia_compensada)  # Não pode ser negativo
 
-        # Economia mensal
-        resultado.economia_mes = resultado.valor_sem_assinatura - resultado.valor_com_assinatura
+        # Economia = energia que usou crédito × diferença de tarifa (30% de desconto)
+        resultado.economia_mes = Decimal(str(energia_compensada)) * (
+            resultado.tarifa_base - resultado.tarifa_assinatura
+        )
 
-        # Valor total a pagar (com assinatura)
+        if resultado.modelo_gd == "GDI":
+            # GD1: Taxa mínima e energia excedente são cobradas SEM desconto
+            # valor_sem_assinatura = quanto pagaria sem o benefício GD
+            resultado.valor_sem_assinatura = (
+                Decimal(str(energia_compensada)) * resultado.tarifa_base +
+                resultado.taxa_minima_valor +
+                resultado.energia_excedente_valor +
+                encargos_fixos
+            )
+            # valor_com_assinatura = quanto paga com o benefício GD (30% desconto na energia compensada)
+            resultado.valor_com_assinatura = (
+                Decimal(str(energia_compensada)) * resultado.tarifa_assinatura +
+                resultado.taxa_minima_valor +  # Taxa mínima sempre tarifa cheia
+                resultado.energia_excedente_valor +  # Excedente sempre tarifa cheia
+                encargos_fixos
+            )
+        else:  # GDII
+            # GD2: Disponibilidade (fio_b) + energia com desconto
+            resultado.valor_sem_assinatura = (
+                Decimal(str(resultado.injetada_kwh)) * resultado.tarifa_base +
+                resultado.disponibilidade_valor +
+                encargos_fixos
+            )
+            resultado.valor_com_assinatura = (
+                Decimal(str(resultado.injetada_kwh)) * resultado.tarifa_assinatura +
+                resultado.disponibilidade_valor +
+                encargos_fixos
+            )
+
+        # Valor total a pagar
         resultado.valor_total = resultado.valor_com_assinatura
+
+        logger.debug(
+            f"Totais - Modelo: {resultado.modelo_gd}, "
+            f"Energia compensada: {energia_compensada} kWh, "
+            f"Economia: R$ {resultado.economia_mes:.2f}, "
+            f"Total: R$ {resultado.valor_total:.2f}"
+        )
 
     def _calcular_bandeira_proporcional(
         self,

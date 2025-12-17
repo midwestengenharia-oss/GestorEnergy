@@ -249,6 +249,16 @@ TOTAIS
 totais.adicionais_bandeira: soma de itens com "Bandeira" no nome (0 se não houver). NUNCA colocar ajuste Lei 14.300 aqui.
 totais.total_geral_fatura: valor total geral exibido (preferir "TOTAL A PAGAR", senão "VALOR COBRADO/VALOR DO DOCUMENTO").
 
+BANDEIRA TARIFÁRIA (tipo - campo raiz):
+
+Se a fatura contiver itens com "Bandeira" no nome, identifique o TIPO da bandeira:
+- "Adic. B. Vermelha", "Bandeira Vermelha", "B. Vermelha" → bandeira_tarifaria = "VERMELHA"
+- "Adic. B. Amarela", "Bandeira Amarela", "B. Amarela" → bandeira_tarifaria = "AMARELA"
+- Se não encontrar nenhum item de bandeira → bandeira_tarifaria = "VERDE" (bandeira verde não aparece na fatura)
+- Se não conseguir identificar → bandeira_tarifaria = null
+
+Preencher no JSON raiz (NÃO dentro de totais): "bandeira_tarifaria": "VERMELHA|AMARELA|VERDE|null"
+
 QUADRO ATENÇÃO (se existir)
 
 quadro_atencao.saldo_acumulado (ex.: "Saldo Acumulado: 140" → 140.00)
@@ -295,6 +305,7 @@ Formato de resposta JSON
   "mes_ano_referencia": "string|null",
   "vencimento": "string|null",
   "total_a_pagar": "number|null",
+  "bandeira_tarifaria": "VERMELHA|AMARELA|VERDE|null",
 
   "leitura_anterior_data": "string|null",
   "leitura_atual_data": "string|null",

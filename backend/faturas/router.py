@@ -505,13 +505,39 @@ async def listar_faturas_kanban(
         consumo_obj = itens.get("consumo_kwh") or {}
         consumo_kwh = consumo_obj.get("quantidade")
 
-        # Suportar ambos os formatos de chave
-        ouc_items = itens.get("energia_injetada oUC") or itens.get("energia_injetada_ouc") or []
-        muc_items = itens.get("energia_injetada mUC") or itens.get("energia_injetada_muc") or []
+        # DEBUG: Verificar quais chaves existem em itens_fatura
+        if itens:
+            logger.debug(f"Fatura {fatura.get('id')} - Chaves em itens_fatura: {list(itens.keys())}")
 
-        injetada_ouc = sum((item.get("quantidade") or 0) for item in ouc_items)
-        injetada_muc = sum((item.get("quantidade") or 0) for item in muc_items)
+        # Suportar TODOS os formatos possíveis de chave (com/sem espaço, underscore, variações)
+        ouc_items = (
+            itens.get("energia_injetada oUC") or
+            itens.get("energia_injetada_ouc") or
+            itens.get("energia_injetada_o_uc") or
+            itens.get("energiaInjetadaOuc") or
+            []
+        )
+        muc_items = (
+            itens.get("energia_injetada mUC") or
+            itens.get("energia_injetada_muc") or
+            itens.get("energia_injetada_m_uc") or
+            itens.get("energiaInjetadaMuc") or
+            []
+        )
+
+        # Garantir que são listas
+        if not isinstance(ouc_items, list):
+            ouc_items = [ouc_items] if ouc_items else []
+        if not isinstance(muc_items, list):
+            muc_items = [muc_items] if muc_items else []
+
+        injetada_ouc = sum((item.get("quantidade") or 0) for item in ouc_items if isinstance(item, dict))
+        injetada_muc = sum((item.get("quantidade") or 0) for item in muc_items if isinstance(item, dict))
         injetada_total = injetada_ouc + injetada_muc
+
+        # DEBUG: Log dos valores de energia injetada
+        if injetada_ouc or injetada_muc:
+            logger.debug(f"Fatura {fatura.get('id')} - oUC: {injetada_ouc} kWh, mUC: {injetada_muc} kWh, Total: {injetada_total} kWh")
 
         # Usar método do schema para detectar modelo GD (lógica correta e unificada)
         tipo_gd = None

@@ -116,7 +116,8 @@ export function LeadDetail() {
     const [vincularUCForm, setVincularUCForm] = useState({ uc_codigo: '', tipo: 'BENEFICIARIA' });
     const [converterForm, setConverterForm] = useState({
         usina_id: '',
-        uc_id: '',
+        uc_id: '',           // UC nova (pos-titularidade, no nome da geradora)
+        uc_id_origem: '',    // UC origem (antes da troca, no nome do cliente)
         desconto_percentual: '30',
         criar_contrato: true,
         enviar_convite: false
@@ -282,7 +283,7 @@ export function LeadDetail() {
             return;
         }
         if (!converterForm.uc_id) {
-            alert('Selecione uma UC');
+            alert('Informe a UC nova (pos-titularidade)');
             return;
         }
 
@@ -291,6 +292,8 @@ export function LeadDetail() {
             await leadsApi.converter(lead.id, {
                 usina_id: parseInt(converterForm.usina_id),
                 uc_id: parseInt(converterForm.uc_id),
+                // UC origem e opcional - se informada, sera registrada como UC do cliente antes da troca
+                uc_id_origem: converterForm.uc_id_origem ? parseInt(converterForm.uc_id_origem) : undefined,
                 desconto_percentual: parseFloat(converterForm.desconto_percentual) / 100,
                 criar_contrato: converterForm.criar_contrato,
                 enviar_convite: converterForm.enviar_convite
@@ -300,6 +303,7 @@ export function LeadDetail() {
             setConverterForm({
                 usina_id: '',
                 uc_id: '',
+                uc_id_origem: '',
                 desconto_percentual: '30',
                 criar_contrato: true,
                 enviar_convite: false
@@ -998,13 +1002,23 @@ export function LeadDetail() {
             {/* Modal Converter em Beneficiario */}
             {showConverterModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-lg p-6">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
                             Converter Lead em Beneficiario
                         </h3>
                         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
                             Preencha os dados para converter este lead em um beneficiario ativo.
                         </p>
+
+                        {/* Aviso sobre troca de titularidade */}
+                        {lead?.titularidade_status === 'APROVADO' && (
+                            <div className="mb-4 p-3 bg-teal-50 dark:bg-teal-900/20 rounded-lg border border-teal-200 dark:border-teal-800">
+                                <p className="text-sm text-teal-700 dark:text-teal-300 flex items-center gap-2">
+                                    <RefreshCw size={16} />
+                                    Titularidade aprovada - informe a nova UC criada no nome da geradora
+                                </p>
+                            </div>
+                        )}
 
                         <div className="space-y-4">
                             {/* Usina ID (por enquanto input manual) */}
@@ -1024,23 +1038,43 @@ export function LeadDetail() {
                                 </p>
                             </div>
 
-                            {/* UC ID */}
-                            <div>
+                            {/* UC Origem (antes da troca de titularidade) */}
+                            <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                    ID da UC Beneficiaria *
+                                    UC Origem (antes da troca)
+                                </label>
+                                <select
+                                    value={converterForm.uc_id_origem}
+                                    onChange={(e) => setConverterForm({ ...converterForm, uc_id_origem: e.target.value })}
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                >
+                                    <option value="">Selecione (opcional)</option>
+                                    {ucs.map(uc => (
+                                        <option key={uc.id} value={uc.uc_id}>
+                                            {uc.uc_codigo} - {uc.uc_endereco || 'Sem endereco'}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    UC original do cliente (antes da troca de titularidade). Esta UC sera marcada como MIGRADA.
+                                </p>
+                            </div>
+
+                            {/* UC Nova (pos-titularidade) */}
+                            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                <label className="block text-sm font-medium text-emerald-700 dark:text-emerald-300 mb-1">
+                                    Nova UC (pos-titularidade) *
                                 </label>
                                 <input
                                     type="number"
                                     value={converterForm.uc_id}
                                     onChange={(e) => setConverterForm({ ...converterForm, uc_id: e.target.value })}
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                                    placeholder="ID da UC do lead"
+                                    className="w-full px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                    placeholder="ID da nova UC (no nome da geradora)"
                                 />
-                                {ucs.length > 0 && (
-                                    <p className="text-xs text-slate-400 mt-1">
-                                        UCs vinculadas: {ucs.map(uc => `#${uc.uc_id}`).join(', ')}
-                                    </p>
-                                )}
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                                    UC criada apos a troca de titularidade, no nome da usina geradora. Esta sera a UC ativa do beneficiario.
+                                </p>
                             </div>
 
                             {/* Desconto */}

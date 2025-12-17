@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usinasApi } from '../../api/usinas';
-import { beneficiariosApi, ClientePortfolio } from '../../api/beneficiarios';
+import { beneficiariosApi, ClientePortfolio, ClienteUC } from '../../api/beneficiarios';
 import type { Usina } from '../../api/types';
 import {
     Users,
@@ -33,7 +33,9 @@ import {
     MapPin,
     Calendar,
     BadgeCheck,
-    BadgeAlert
+    BadgeAlert,
+    ArrowRight,
+    History
 } from 'lucide-react';
 
 export function GestaoClientes() {
@@ -432,10 +434,73 @@ export function GestaoClientes() {
                                             </div>
                                         </div>
 
-                                        {/* UC */}
+                                        {/* UCs */}
                                         <div>
-                                            <h4 className="font-medium text-gray-900 mb-3">Unidade Consumidora</h4>
-                                            {cliente.uc ? (
+                                            <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                                Unidades Consumidoras
+                                                {cliente.ucs && cliente.ucs.length > 1 && (
+                                                    <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                                                        {cliente.ucs.length} UCs
+                                                    </span>
+                                                )}
+                                                {cliente.data_migracao_titularidade && (
+                                                    <span className="px-2 py-0.5 text-xs bg-teal-100 text-teal-700 rounded-full flex items-center gap-1">
+                                                        <History className="h-3 w-3" />
+                                                        Migrada
+                                                    </span>
+                                                )}
+                                            </h4>
+
+                                            {/* Mostrar multiplas UCs se disponiveis */}
+                                            {cliente.ucs && cliente.ucs.length > 0 ? (
+                                                <div className="space-y-2">
+                                                    {cliente.ucs.map((uc) => (
+                                                        <div
+                                                            key={uc.id}
+                                                            className={`p-2 rounded-lg text-sm ${
+                                                                uc.tipo === 'ATIVA'
+                                                                    ? 'bg-green-50 border border-green-200'
+                                                                    : uc.tipo === 'ORIGEM'
+                                                                    ? 'bg-orange-50 border border-orange-200 opacity-75'
+                                                                    : 'bg-gray-50 border border-gray-200 opacity-50'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Zap className={`h-4 w-4 ${
+                                                                        uc.tipo === 'ATIVA' ? 'text-green-500' :
+                                                                        uc.tipo === 'ORIGEM' ? 'text-orange-500' :
+                                                                        'text-gray-400'
+                                                                    }`} />
+                                                                    <span className="font-medium">{uc.numero_uc}</span>
+                                                                </div>
+                                                                <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                                                    uc.tipo === 'ATIVA'
+                                                                        ? 'bg-green-100 text-green-700'
+                                                                        : uc.tipo === 'ORIGEM'
+                                                                        ? 'bg-orange-100 text-orange-700'
+                                                                        : 'bg-gray-100 text-gray-600'
+                                                                }`}>
+                                                                    {uc.tipo === 'ATIVA' ? 'Ativa' :
+                                                                     uc.tipo === 'ORIGEM' ? 'Original' : 'Inativa'}
+                                                                </span>
+                                                            </div>
+                                                            {uc.nome_titular && (
+                                                                <div className="text-xs text-gray-500 mt-1">
+                                                                    Titular: {uc.nome_titular}
+                                                                </div>
+                                                            )}
+                                                            {uc.tipo === 'ORIGEM' && uc.status_energisa === 'MIGRADA' && (
+                                                                <div className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+                                                                    <ArrowRight className="h-3 w-3" />
+                                                                    Migrada por troca de titularidade
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : cliente.uc ? (
+                                                /* Fallback: mostrar UC unica (compatibilidade) */
                                                 <div className="space-y-2 text-sm">
                                                     <div className="flex items-center gap-2 text-gray-600">
                                                         <Zap className="h-4 w-4 text-gray-400" />

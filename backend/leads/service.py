@@ -679,7 +679,15 @@ class LeadsService:
         return result.data[0]
 
     async def converter_completo(self, data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-        """Converte lead em beneficiario (fluxo completo)"""
+        """
+        Converte lead em beneficiario (fluxo completo)
+
+        Suporta cenário de troca de titularidade:
+        - uc_id: UC atual (pós-titularidade, no nome da geradora)
+        - uc_id_origem: UC original do cliente (antes da troca, opcional)
+
+        Se uc_id_origem for fornecido, registra a migração e marca a UC antiga como MIGRADA.
+        """
 
         lead_id = data["lead_id"]
         lead = await self.buscar(lead_id)
@@ -688,7 +696,8 @@ class LeadsService:
             raise ValidationError("Lead ja foi convertido")
 
         usina_id = data["usina_id"]
-        uc_id = data["uc_id"]
+        uc_id = data["uc_id"]  # UC atual (pós-titularidade)
+        uc_id_origem = data.get("uc_id_origem")  # UC original (antes da troca, opcional)
         desconto = Decimal(str(data["desconto_percentual"]))
         percentual_rateio = Decimal(str(data.get("percentual_rateio", 0)))
         criar_contrato = data.get("criar_contrato", True)
@@ -699,15 +708,30 @@ class LeadsService:
         if not usina.data:
             raise NotFoundError("Usina nao encontrada")
 
-        # Verificar se UC existe
+        # Verificar se UC atual existe
         uc = self.supabase.table("unidades_consumidoras").select("id").eq("id", uc_id).single().execute()
         if not uc.data:
             raise NotFoundError("UC nao encontrada")
+
+        # Se tem UC origem, verificar se existe e marcar como MIGRADA
+        if uc_id_origem:
+            uc_origem = self.supabase.table("unidades_consumidoras").select("id").eq("id", uc_id_origem).single().execute()
+            if not uc_origem.data:
+                raise NotFoundError("UC de origem nao encontrada")
+
+            # Marcar UC origem como MIGRADA
+            self.supabase.table("unidades_consumidoras").update({
+                "status_energisa": "MIGRADA",
+                "uc_substituta_id": uc_id,
+                "motivo_inativacao": "TROCA_TITULARIDADE"
+            }).eq("id", uc_id_origem).execute()
 
         # Criar beneficiario
         beneficiario_data = {
             "usina_id": usina_id,
             "uc_id": uc_id,
+            "uc_id_origem": uc_id_origem,  # Campo novo para UC original
+            "data_migracao_titularidade": datetime.now().isoformat() if uc_id_origem else None,
             "nome": lead["nome"],
             "email": lead.get("email"),
             "telefone": lead.get("telefone"),
@@ -722,6 +746,31 @@ class LeadsService:
 
         beneficiario = self.supabase.table("beneficiarios").insert(beneficiario_data).execute()
         beneficiario_id = beneficiario.data[0]["id"]
+
+        # Criar registro na tabela N:N beneficiario_ucs (UC atual)
+        self.supabase.table("beneficiario_ucs").insert({
+            "beneficiario_id": beneficiario_id,
+            "uc_id": uc_id,
+            "tipo": "ATIVA",
+            "motivo_transicao": "CONVERSAO_LEAD",
+            "criado_por": user_id
+        }).execute()
+
+        # Se tinha UC origem, registrar também como histórico
+        if uc_id_origem:
+            self.supabase.table("beneficiario_ucs").insert({
+                "beneficiario_id": beneficiario_id,
+                "uc_id": uc_id_origem,
+                "tipo": "ORIGEM",
+                "data_fim": datetime.now().isoformat(),
+                "motivo_transicao": "TROCA_TITULARIDADE",
+                "criado_por": user_id
+            }).execute()
+
+            # Atualizar leads_ucs se existir relação
+            self.supabase.table("leads_ucs").update({
+                "status": "MIGRADA"
+            }).eq("lead_id", lead_id).eq("uc_id", uc_id_origem).execute()
 
         contrato_id = None
         convite_id = None

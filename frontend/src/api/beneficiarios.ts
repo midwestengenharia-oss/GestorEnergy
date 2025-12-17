@@ -103,6 +103,21 @@ export const beneficiariosApi = {
         api.get<PortfolioClientesResponse>('/beneficiarios/portfolio/clientes', { params: filters }),
 };
 
+// Interface para UC do cliente
+export interface ClienteUC {
+    id: number;
+    numero_uc: string;
+    apelido?: string;
+    nome_titular?: string;
+    endereco?: string;
+    cidade?: string;
+    uf?: string;
+    tipo: 'ATIVA' | 'ORIGEM' | 'INATIVA';  // Tipo de vinculo com o beneficiario
+    data_inicio?: string;
+    data_fim?: string;
+    status_energisa?: 'ATIVA' | 'INATIVA' | 'MIGRADA';  // Status na Energisa
+}
+
 // Interface para o response do portfolio
 export interface ClientePortfolio {
     id: number;
@@ -115,6 +130,7 @@ export interface ClientePortfolio {
     origem: 'LEAD' | 'LEGADO';
     lead_id?: number;
     convertido_em?: string;
+    // UC principal (ativa) - mantido para compatibilidade
     uc?: {
         id: number;
         numero_uc: string;
@@ -124,6 +140,11 @@ export interface ClientePortfolio {
         cidade?: string;
         uf?: string;
     };
+    // Todas as UCs vinculadas (inclui origem, ativas e inativas)
+    ucs?: ClienteUC[];
+    // Dados de migracao de titularidade
+    uc_id_origem?: number;
+    data_migracao_titularidade?: string;
     usina?: {
         id: number;
         nome: string;

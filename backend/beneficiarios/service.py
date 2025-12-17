@@ -694,6 +694,192 @@ class BeneficiariosService:
 
         return await self.buscar_por_id(beneficiario_id)
 
+    # ========================
+    # Múltiplas UCs por Beneficiário
+    # ========================
+
+    async def listar_ucs(self, beneficiario_id: int) -> List[dict]:
+        """
+        Lista todas as UCs vinculadas a um beneficiário.
+
+        Args:
+            beneficiario_id: ID do beneficiário
+
+        Returns:
+            Lista de UCs com tipo e status
+        """
+        # Verificar se beneficiário existe
+        await self.buscar_por_id(beneficiario_id)
+
+        # Buscar UCs na tabela N:N
+        result = self.db.table("beneficiario_ucs").select(
+            "id, uc_id, tipo, data_inicio, data_fim, motivo_transicao",
+            "unidades_consumidoras(id, cod_empresa, cdc, digito_verificador, nome_titular, endereco, cidade, uf, status_energisa)"
+        ).eq("beneficiario_id", beneficiario_id).order("data_inicio", desc=True).execute()
+
+        ucs = []
+        for item in (result.data or []):
+            uc = item.get("unidades_consumidoras") or {}
+            ucs.append({
+                "id": item["id"],
+                "uc_id": item["uc_id"],
+                "tipo": item["tipo"],
+                "data_inicio": item.get("data_inicio"),
+                "data_fim": item.get("data_fim"),
+                "motivo_transicao": item.get("motivo_transicao"),
+                "vigente": item.get("data_fim") is None,
+                "numero_uc": f"{uc.get('cod_empresa')}/{uc.get('cdc')}-{uc.get('digito_verificador')}" if uc.get('cdc') else None,
+                "nome_titular": uc.get("nome_titular"),
+                "endereco": uc.get("endereco"),
+                "cidade": uc.get("cidade"),
+                "uf": uc.get("uf"),
+                "status_energisa": uc.get("status_energisa", "ATIVA")
+            })
+
+        return ucs
+
+    async def adicionar_uc(
+        self,
+        beneficiario_id: int,
+        uc_id: int,
+        tipo: str = "ATIVA",
+        motivo: str = "ADICAO_MANUAL",
+        user_id: str = None
+    ) -> dict:
+        """
+        Adiciona uma UC ao beneficiário.
+
+        Args:
+            beneficiario_id: ID do beneficiário
+            uc_id: ID da UC a adicionar
+            tipo: Tipo da relação (ATIVA, ORIGEM, INATIVA)
+            motivo: Motivo da adição
+            user_id: ID do usuário que está adicionando
+
+        Returns:
+            Registro criado
+        """
+        # Verificar se beneficiário existe
+        await self.buscar_por_id(beneficiario_id)
+
+        # Verificar se UC existe
+        uc_result = self.db.unidades_consumidoras().select("id").eq("id", uc_id).execute()
+        if not uc_result.data:
+            raise NotFoundError("Unidade Consumidora")
+
+        # Verificar se já existe relação ativa com mesmo tipo
+        existing = self.db.table("beneficiario_ucs").select("id").eq(
+            "beneficiario_id", beneficiario_id
+        ).eq("uc_id", uc_id).eq("tipo", tipo).is_("data_fim", "null").execute()
+
+        if existing.data:
+            raise ConflictError("UC já está vinculada ao beneficiário com este tipo")
+
+        # Criar relação
+        result = self.db.table("beneficiario_ucs").insert({
+            "beneficiario_id": beneficiario_id,
+            "uc_id": uc_id,
+            "tipo": tipo,
+            "motivo_transicao": motivo,
+            "criado_por": user_id
+        }).execute()
+
+        return result.data[0] if result.data else None
+
+    async def remover_uc(
+        self,
+        beneficiario_id: int,
+        uc_id: int,
+        motivo: str = "REMOCAO"
+    ) -> bool:
+        """
+        Remove (encerra) uma UC do beneficiário.
+        Não deleta o registro, apenas marca data_fim.
+
+        Args:
+            beneficiario_id: ID do beneficiário
+            uc_id: ID da UC a remover
+
+        Returns:
+            True se removido com sucesso
+        """
+        # Atualizar registro para encerrar vigência
+        result = self.db.table("beneficiario_ucs").update({
+            "data_fim": datetime.now(timezone.utc).isoformat(),
+            "tipo": "INATIVA"
+        }).eq("beneficiario_id", beneficiario_id).eq(
+            "uc_id", uc_id
+        ).is_("data_fim", "null").execute()
+
+        return len(result.data or []) > 0
+
+    async def processar_troca_titularidade(
+        self,
+        beneficiario_id: int,
+        uc_origem_id: int,
+        uc_nova_id: int,
+        user_id: str = None
+    ) -> dict:
+        """
+        Processa troca de titularidade para um beneficiário existente.
+        Marca UC antiga como MIGRADA e adiciona nova UC como ATIVA.
+
+        Args:
+            beneficiario_id: ID do beneficiário
+            uc_origem_id: ID da UC original (que será marcada como MIGRADA)
+            uc_nova_id: ID da nova UC (que será a ativa)
+            user_id: ID do usuário executando
+
+        Returns:
+            Resumo da operação
+        """
+        # Verificar se beneficiário existe
+        benef = await self.buscar_por_id(beneficiario_id)
+
+        # Verificar se UCs existem
+        for uc_id in [uc_origem_id, uc_nova_id]:
+            uc_result = self.db.unidades_consumidoras().select("id").eq("id", uc_id).execute()
+            if not uc_result.data:
+                raise NotFoundError(f"UC {uc_id}")
+
+        # 1. Marcar UC origem como MIGRADA
+        self.db.unidades_consumidoras().update({
+            "status_energisa": "MIGRADA",
+            "uc_substituta_id": uc_nova_id,
+            "motivo_inativacao": "TROCA_TITULARIDADE"
+        }).eq("id", uc_origem_id).execute()
+
+        # 2. Encerrar relação antiga em beneficiario_ucs
+        self.db.table("beneficiario_ucs").update({
+            "data_fim": datetime.now(timezone.utc).isoformat(),
+            "tipo": "ORIGEM"
+        }).eq("beneficiario_id", beneficiario_id).eq(
+            "uc_id", uc_origem_id
+        ).is_("data_fim", "null").execute()
+
+        # 3. Criar nova relação com UC nova
+        self.db.table("beneficiario_ucs").insert({
+            "beneficiario_id": beneficiario_id,
+            "uc_id": uc_nova_id,
+            "tipo": "ATIVA",
+            "motivo_transicao": "TROCA_TITULARIDADE",
+            "criado_por": user_id
+        }).execute()
+
+        # 4. Atualizar beneficiário
+        self.db.beneficiarios().update({
+            "uc_id": uc_nova_id,
+            "uc_id_origem": uc_origem_id,
+            "data_migracao_titularidade": datetime.now(timezone.utc).isoformat()
+        }).eq("id", beneficiario_id).execute()
+
+        return {
+            "beneficiario_id": beneficiario_id,
+            "uc_origem_id": uc_origem_id,
+            "uc_nova_id": uc_nova_id,
+            "message": "Troca de titularidade processada com sucesso"
+        }
+
 
 # Instância global do serviço
 beneficiarios_service = BeneficiariosService()

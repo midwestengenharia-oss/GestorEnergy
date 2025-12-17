@@ -328,7 +328,8 @@ export interface LeadMarcarPerdidoRequest {
 
 export interface LeadConverterRequest {
     usina_id: number;
-    uc_id: number;
+    uc_id: number;                  // UC nova (pos-titularidade, no nome da geradora)
+    uc_id_origem?: number;          // UC original do cliente (antes da troca de titularidade)
     desconto_percentual: number;
     percentual_rateio?: number;
     criar_contrato?: boolean;

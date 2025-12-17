@@ -19,6 +19,114 @@ class CobrancasService:
     def __init__(self):
         self.supabase = get_supabase_admin()
 
+    def _obter_uc_periodo(
+        self,
+        beneficiario_id: int,
+        mes: int,
+        ano: int,
+        fallback_uc_id: Optional[int] = None
+    ) -> Optional[int]:
+        """
+        Obtém a UC correta para um beneficiário em um determinado período.
+
+        Com a troca de titularidade, um beneficiário pode ter múltiplas UCs ao longo do tempo:
+        - UC ORIGEM: A UC original do cliente (antes da troca de titularidade)
+        - UC ATIVA: A UC atual (após troca de titularidade, no nome da geradora)
+
+        Esta função busca a UC que estava ATIVA no período especificado.
+
+        Args:
+            beneficiario_id: ID do beneficiário
+            mes: Mês de referência (1-12)
+            ano: Ano de referência
+            fallback_uc_id: UC de fallback se não encontrar na tabela N:N
+
+        Returns:
+            ID da UC para o período, ou None se não encontrar
+        """
+        from datetime import datetime
+
+        # Criar data de referência (primeiro dia do mês)
+        data_referencia = datetime(ano, mes, 1)
+
+        # Buscar UC ativa no período da tabela beneficiario_ucs
+        # A UC válida é aquela onde:
+        # - data_inicio <= data_referencia
+        # - data_fim IS NULL ou data_fim > data_referencia
+        # - tipo = 'ATIVA' (preferencialmente)
+        try:
+            result = self.supabase.table("beneficiario_ucs").select(
+                "uc_id, tipo, data_inicio, data_fim"
+            ).eq("beneficiario_id", beneficiario_id).execute()
+
+            if result.data:
+                ucs_validas = []
+
+                for uc_rel in result.data:
+                    # Verificar se a UC estava válida no período
+                    data_inicio = uc_rel.get("data_inicio")
+                    data_fim = uc_rel.get("data_fim")
+                    tipo = uc_rel.get("tipo", "ATIVA")
+
+                    # Parsear datas
+                    if data_inicio:
+                        if isinstance(data_inicio, str):
+                            data_inicio = datetime.fromisoformat(data_inicio.replace("Z", "+00:00"))
+                        if data_inicio.tzinfo:
+                            data_inicio = data_inicio.replace(tzinfo=None)
+                    else:
+                        # Se não tem data_inicio, assumir que é válida desde sempre
+                        data_inicio = datetime(2000, 1, 1)
+
+                    if data_fim:
+                        if isinstance(data_fim, str):
+                            data_fim = datetime.fromisoformat(data_fim.replace("Z", "+00:00"))
+                        if data_fim.tzinfo:
+                            data_fim = data_fim.replace(tzinfo=None)
+
+                    # Verificar se período é válido
+                    inicio_valido = data_inicio <= data_referencia
+                    fim_valido = data_fim is None or data_fim > data_referencia
+
+                    if inicio_valido and fim_valido:
+                        ucs_validas.append({
+                            "uc_id": uc_rel["uc_id"],
+                            "tipo": tipo,
+                            "data_inicio": data_inicio
+                        })
+
+                if ucs_validas:
+                    # Priorizar UC ATIVA sobre ORIGEM
+                    ucs_ativas = [u for u in ucs_validas if u["tipo"] == "ATIVA"]
+                    if ucs_ativas:
+                        # Se múltiplas ativas, pegar a mais recente
+                        ucs_ativas.sort(key=lambda x: x["data_inicio"], reverse=True)
+                        return ucs_ativas[0]["uc_id"]
+
+                    # Se não tem ATIVA, usar a ORIGEM mais recente
+                    ucs_validas.sort(key=lambda x: x["data_inicio"], reverse=True)
+                    return ucs_validas[0]["uc_id"]
+
+        except Exception as e:
+            logger.warning(f"Erro ao buscar UC do período via beneficiario_ucs: {e}")
+
+        # Fallback: usar uc_id direto do beneficiário (compatibilidade legado)
+        if fallback_uc_id:
+            return fallback_uc_id
+
+        # Última tentativa: buscar uc_id do beneficiário
+        try:
+            benef = self.supabase.table("beneficiarios").select("uc_id").eq(
+                "id", beneficiario_id
+            ).single().execute()
+
+            if benef.data:
+                return benef.data.get("uc_id")
+        except Exception as e:
+            logger.warning(f"Erro ao buscar uc_id do beneficiário: {e}")
+
+        return None
+
     async def listar(
         self,
         user_id: str,
@@ -262,8 +370,13 @@ class CobrancasService:
                     if existente.data:
                         continue
 
-                # Buscar fatura do beneficiário para o mês
-                uc_id = benef.get("uc_id")
+                # Buscar UC correta para o período (considera múltiplas UCs/troca de titularidade)
+                uc_id = self._obter_uc_periodo(
+                    beneficiario_id=benef["id"],
+                    mes=mes,
+                    ano=ano,
+                    fallback_uc_id=benef.get("uc_id")
+                )
                 fatura = None
                 valor_energia = Decimal("0")
 
@@ -455,15 +568,25 @@ class CobrancasService:
             raise ValidationError(f"Dados extraídos inválidos: {str(e)}")
 
         # 2. Buscar beneficiário
-        benef_result = self.supabase.table("beneficiarios").select(
-            "*, unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, cidade, uf)"
-        ).eq("id", beneficiario_id).single().execute()
+        benef_result = self.supabase.table("beneficiarios").select("*").eq(
+            "id", beneficiario_id
+        ).single().execute()
 
         if not benef_result.data:
             raise NotFoundError(f"Beneficiário {beneficiario_id} não encontrado")
 
         beneficiario = benef_result.data
-        uc = beneficiario.get("unidades_consumidoras")
+
+        # 2.1 Buscar UC da fatura (não do beneficiário, pois pode ter mudado após troca de titularidade)
+        # A UC da fatura é a UC correta para aquele período de cobrança
+        uc_id_fatura = fatura.get("uc_id")
+        uc = None
+        if uc_id_fatura:
+            uc_result = self.supabase.table("unidades_consumidoras").select(
+                "id, cod_empresa, cdc, digito_verificador, cidade, uf"
+            ).eq("id", uc_id_fatura).single().execute()
+            if uc_result.data:
+                uc = uc_result.data
 
         # 2.1 Verificar se já existe cobrança para este beneficiário/mês/ano
         mes_ref = fatura.get("mes_referencia")
@@ -573,6 +696,7 @@ class CobrancasService:
             "beneficiario_id": beneficiario_id,
             "fatura_id": fatura_id,
             "fatura_dados_extraidos_id": fatura_id,
+            "uc_id": uc_id_fatura,  # UC usada para esta cobrança (pode diferir da UC atual do beneficiário)
 
             "mes": fatura["mes_referencia"],
             "ano": fatura["ano_referencia"],
@@ -711,9 +835,27 @@ class CobrancasService:
                     })
                     continue
 
+                # Buscar UC correta para o período (considera múltiplas UCs/troca de titularidade)
+                uc_id = self._obter_uc_periodo(
+                    beneficiario_id=benef["id"],
+                    mes=mes_referencia,
+                    ano=ano_referencia,
+                    fallback_uc_id=benef.get("uc_id")
+                )
+
+                if not uc_id:
+                    erro_count += 1
+                    resultados.append({
+                        "beneficiario_id": benef["id"],
+                        "beneficiario_nome": benef["nome"],
+                        "status": "erro",
+                        "erro": "Nenhuma UC encontrada para o período"
+                    })
+                    continue
+
                 # Buscar fatura do beneficiário para o período
                 fatura_result = self.supabase.table("faturas").select("id").eq(
-                    "uc_id", benef["uc_id"]
+                    "uc_id", uc_id
                 ).eq("mes_referencia", mes_referencia).eq("ano_referencia", ano_referencia).execute()
 
                 if not fatura_result.data:

@@ -654,20 +654,29 @@ class CobrancasService:
             fio_b=fio_b
         )
 
-        # 5.1 Calcular bandeira proporcional se dados_api disponível
+        # 5.1 Bandeira: prioridade para dados do PDF, API apenas como fallback
+        # O PDF pode ter o valor extraído em totais.adicionais_bandeira
+        # Só usar cálculo da API se o PDF não tiver valor de bandeira
         dados_api = fatura.get("dados_api")
         if dados_api:
-            bandeira_proporcional = calculator.calcular_bandeira_com_dados_api(
-                dados_api=dados_api,
-                pis_cofins=pis_cofins,
-                icms=icms
-            )
-            if bandeira_proporcional is not None:
-                logger.info(f"Bandeira proporcional calculada: R$ {bandeira_proporcional:.2f}")
-                # Substituir valor de bandeira pelo calculado proporcionalmente
-                cobranca_calc.bandeiras_valor = bandeira_proporcional
-                # Recalcular totais
-                calculator._calcular_totais(cobranca_calc)
+            # Verificar se PDF já tem valor de bandeira (prioridade)
+            bandeira_pdf = cobranca_calc.bandeiras_valor
+            if bandeira_pdf and float(bandeira_pdf) > 0:
+                logger.info(f"Usando bandeira extraída do PDF: R$ {float(bandeira_pdf):.2f}")
+            else:
+                # Fallback: calcular bandeira proporcional com dados da API
+                bandeira_proporcional = calculator.calcular_bandeira_com_dados_api(
+                    dados_api=dados_api,
+                    pis_cofins=pis_cofins,
+                    icms=icms
+                )
+                if bandeira_proporcional is not None:
+                    logger.info(f"Fallback API: Bandeira proporcional calculada: R$ {bandeira_proporcional:.2f}")
+                    cobranca_calc.bandeiras_valor = bandeira_proporcional
+                    # Recalcular totais
+                    calculator._calcular_totais(cobranca_calc)
+                else:
+                    logger.info("Nenhum valor de bandeira disponível (PDF ou API)")
 
         # 6. Gerar relatório HTML (usando V3 baseado no código n8n)
         # Buscar economia acumulada do beneficiário (se houver)

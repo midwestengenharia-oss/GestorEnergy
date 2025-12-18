@@ -241,7 +241,13 @@ Preencher itens_fatura.ajuste_lei_14300: {{ descricao, unidade, quantidade, prec
 Lançamentos e Serviços:
 
 Capturar linhas do bloco "LANÇAMENTOS E SERVIÇOS" (ex.: "Contrib de Ilum Pub", "JUROS DE MORA …", "MULTA …", etc.).
-IMPORTANTE: NÃO incluir itens de bandeira tarifária aqui! Bandeiras vão para totais.adicionais_bandeira.
+
+REGRAS CRÍTICAS:
+1. NÃO incluir itens de bandeira tarifária aqui! Bandeiras vão para totais.adicionais_bandeira.
+2. NÃO criar item genérico "Outros serviços" - extrair CADA lançamento individualmente com sua descrição original.
+3. Se não houver outros lançamentos além de iluminação pública, a lista deve conter APENAS iluminação pública.
+4. NÃO duplicar a iluminação pública com outro nome.
+
 itens_fatura.lancamentos_e_servicos = lista de {{ descricao, valor }} com sinal conforme a fatura.
 totais.lancamentos_e_servicos = soma dos valores em itens_fatura.lancamentos_e_servicos (SEM bandeiras).
 
@@ -250,7 +256,7 @@ TOTAIS
 totais.adicionais_bandeira: soma de TODOS os itens com "Bandeira", "B. Vermelha", "B. Amarela" no nome.
 totais.total_geral_fatura: valor total geral exibido (preferir "TOTAL A PAGAR", senão "VALOR COBRADO/VALOR DO DOCUMENTO").
 
-BANDEIRAS TARIFÁRIAS - EXTRAÇÃO CRÍTICA:
+BANDEIRAS TARIFÁRIAS - EXTRAÇÃO COM DETALHAMENTO:
 
 1. IDENTIFICAR linhas de bandeira:
    - "Adic. B. Vermelha", "Adic. B. Amarela", "Adic. B. Verde"
@@ -261,16 +267,22 @@ BANDEIRAS TARIFÁRIAS - EXTRAÇÃO CRÍTICA:
    Exemplo de linha: "Adic. B. Vermelha | | | | 1.90 | 0.15 | 1.90 | 17 | 0.31 |"
    → O valor correto é 1.90 (primeira coluna numérica após descrição = Valor R$)
 
-3. SOMAR todos os valores de bandeira encontrados:
+3. PARA CADA BANDEIRA ENCONTRADA, extrair cor e valor:
+   - Identificar a COR: VERDE, AMARELA ou VERMELHA
+   - Criar objeto com {{"cor": "COR", "valor": X.XX}}
+   - Adicionar à lista totais.bandeiras_detalhamento
+
+4. SOMAR todos os valores de bandeira encontrados:
    Exemplo: Adic. B. Amarela = 0.46, Adic. B. Vermelha = 1.90
    → totais.adicionais_bandeira = 0.46 + 1.90 = 2.36
+   → totais.bandeiras_detalhamento = [{{"cor": "AMARELA", "valor": 0.46}}, {{"cor": "VERMELHA", "valor": 1.90}}]
 
-4. IDENTIFICAR COR predominante (prioridade: VERMELHA > AMARELA > VERDE):
+5. IDENTIFICAR COR predominante (prioridade: VERMELHA > AMARELA > VERDE):
    - Se houver bandeira vermelha → bandeira_tarifaria = "VERMELHA"
    - Se só houver amarela → bandeira_tarifaria = "AMARELA"
    - Se não houver bandeiras → bandeira_tarifaria = "VERDE"
 
-5. NÃO COLOCAR bandeiras em lancamentos_e_servicos! Apenas em totais.adicionais_bandeira.
+6. NÃO COLOCAR bandeiras em lancamentos_e_servicos! Apenas em totais.
 
 Preencher no JSON raiz: "bandeira_tarifaria": "VERMELHA|AMARELA|VERDE|null"
 
@@ -382,6 +394,12 @@ Formato de resposta JSON
 
   "totais": {{
     "adicionais_bandeira": "number|null",
+    "bandeiras_detalhamento": [
+      {{
+        "cor": "VERDE|AMARELA|VERMELHA",
+        "valor": "number"
+      }}
+    ],
     "lancamentos_e_servicos": "number|null",
     "total_geral_fatura": "number|null"
   }},

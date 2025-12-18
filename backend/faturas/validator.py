@@ -289,37 +289,48 @@ class FaturaValidator:
 
         itens = dados.get("itens_fatura", {})
 
-        # Somar consumo
+        # Somar consumo (usando _safe_float para evitar erros com None)
         if itens.get("consumo_kwh") and itens["consumo_kwh"].get("valor"):
-            total_calculado += float(itens["consumo_kwh"]["valor"])
+            valor = self._safe_float(itens["consumo_kwh"]["valor"])
+            if valor is not None:
+                total_calculado += valor
 
         # Somar energia injetada OUC
         if itens.get("energia_injetada_ouc"):
             for item in itens["energia_injetada_ouc"]:
                 if item.get("valor"):
-                    total_calculado += float(item["valor"])
+                    valor = self._safe_float(item["valor"])
+                    if valor is not None:
+                        total_calculado += valor
 
         # Somar energia injetada MUC
         if itens.get("energia_injetada_muc"):
             for item in itens["energia_injetada_muc"]:
                 if item.get("valor"):
-                    total_calculado += float(item["valor"])
+                    valor = self._safe_float(item["valor"])
+                    if valor is not None:
+                        total_calculado += valor
 
         # Somar ajuste lei 14300
         if itens.get("ajuste_lei_14300") and itens["ajuste_lei_14300"].get("valor"):
-            total_calculado += float(itens["ajuste_lei_14300"]["valor"])
+            valor = self._safe_float(itens["ajuste_lei_14300"]["valor"])
+            if valor is not None:
+                total_calculado += valor
 
         # Somar lançamentos e serviços
         if itens.get("lancamentos_e_servicos"):
             for item in itens["lancamentos_e_servicos"]:
                 if item.get("valor"):
-                    total_calculado += float(item["valor"])
+                    valor = self._safe_float(item["valor"])
+                    if valor is not None:
+                        total_calculado += valor
 
         # Comparar com total informado
-        total_itens = totais.get("itens", 0)
+        # Usar "or 0" para tratar casos onde a chave existe mas o valor é null
+        total_itens = self._safe_float(totais.get("itens")) or 0
 
         if total_itens > 0:
-            diferenca = abs(total_calculado - float(total_itens))
+            diferenca = abs(total_calculado - total_itens)
             if diferenca > 0.02:  # Tolerância de 2 centavos
                 resultado.adicionar_aviso(
                     "calculos", "totais.itens",
@@ -328,13 +339,14 @@ class FaturaValidator:
                 )
 
         # Validar total final
-        total_final = totais.get("total", 0)
-        adicionais_bandeira = totais.get("adicionais_bandeira", 0)
+        # Usar "or 0" para tratar casos onde a chave existe mas o valor é null
+        total_final = self._safe_float(totais.get("total")) or 0
+        adicionais_bandeira = self._safe_float(totais.get("adicionais_bandeira")) or 0
 
-        total_esperado = float(total_itens) + float(adicionais_bandeira)
+        total_esperado = total_itens + adicionais_bandeira
 
         if total_final > 0:
-            diferenca = abs(total_esperado - float(total_final))
+            diferenca = abs(total_esperado - total_final)
             if diferenca > 0.02:
                 resultado.adicionar_aviso(
                     "calculos", "totais.total",

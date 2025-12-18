@@ -189,6 +189,10 @@ interface DadosExtraidos {
     };
     totais?: {
         adicionais_bandeira?: number;
+        bandeiras_detalhamento?: Array<{
+            cor?: 'VERDE' | 'AMARELA' | 'VERMELHA' | string;
+            valor?: number;
+        }>;
         lancamentos_e_servicos?: number;
         total_geral_fatura?: number;
     };
@@ -311,12 +315,26 @@ const calcularValorInjetadaMUC = (itens: DadosExtraidos['itens_fatura']): number
     );
 };
 
-// Filtra lançamentos (exclui iluminação pública)
+// Filtra lançamentos (exclui iluminação pública e duplicatas)
 const getLancamentosSemIluminacao = (itens: DadosExtraidos['itens_fatura']): LancamentoServico[] => {
     if (!itens?.lancamentos_e_servicos) return [];
-    return itens.lancamentos_e_servicos.filter(
-        s => !s.descricao?.toLowerCase().includes('ilum')
+
+    // Primeiro encontra o valor de iluminação para detectar duplicatas
+    const ilumItem = itens.lancamentos_e_servicos.find(
+        s => s.descricao?.toLowerCase().includes('ilum')
     );
+    const valorIlum = ilumItem?.valor || 0;
+
+    return itens.lancamentos_e_servicos.filter(s => {
+        const desc = s.descricao?.toLowerCase() || '';
+        // Excluir iluminação pública
+        if (desc.includes('ilum')) return false;
+        // Excluir "outros serviços" se valor for igual ao de iluminação (provável duplicação do LLM)
+        if ((desc.includes('outros') || desc.includes('serviço')) && s.valor === valorIlum && valorIlum > 0) return false;
+        // Excluir bandeiras (já são contabilizadas separadamente)
+        if (desc.includes('bandeira') || desc.includes('b. verm') || desc.includes('b. amar') || desc.includes('b. verde')) return false;
+        return true;
+    });
 };
 
 // Pega valor de iluminação pública
@@ -1714,21 +1732,42 @@ function FaturaAccordionItem({
                                                             : 'N/A'
                                                         }
                                                     </p>
-                                                    <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-                                                        {(() => {
-                                                            const bandeiraTipo = fatura.bandeira_tarifaria_pdf || dados?.bandeira_tarifaria;
-                                                            return (
-                                                                <span className={`px-1.5 py-0.5 rounded ${
-                                                                    bandeiraTipo?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
-                                                                    bandeiraTipo?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
-                                                                    bandeiraTipo?.toLowerCase().includes('vermelha') ? 'bg-red-100 text-red-700' :
-                                                                    'bg-slate-100 text-slate-700'
-                                                                }`}>
-                                                                    {bandeiraTipo || 'N/A'}
-                                                                </span>
-                                                            );
-                                                        })()}
-                                                    </div>
+                                                    {/* Detalhamento por cor (se disponível) */}
+                                                    {dados?.totais?.bandeiras_detalhamento && dados.totais.bandeiras_detalhamento.length > 0 ? (
+                                                        <div className="mt-2 space-y-1">
+                                                            {dados.totais.bandeiras_detalhamento.map((b, idx) => (
+                                                                <div key={idx} className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                                                                    <span className={`px-1.5 py-0.5 rounded ${
+                                                                        b.cor?.toLowerCase() === 'verde' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                                                        b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                                                        b.cor?.toLowerCase() === 'vermelha' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                                                        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                                                                    }`}>
+                                                                        {b.cor || 'N/A'}
+                                                                    </span>
+                                                                    <span className="ml-auto font-medium">
+                                                                        {formatarMoeda(b.valor || 0)}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                                                            {(() => {
+                                                                const bandeiraTipo = fatura.bandeira_tarifaria_pdf || dados?.bandeira_tarifaria;
+                                                                return (
+                                                                    <span className={`px-1.5 py-0.5 rounded ${
+                                                                        bandeiraTipo?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
+                                                                        bandeiraTipo?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
+                                                                        bandeiraTipo?.toLowerCase().includes('vermelha') ? 'bg-red-100 text-red-700' :
+                                                                        'bg-slate-100 text-slate-700'
+                                                                    }`}>
+                                                                        {bandeiraTipo || 'N/A'}
+                                                                    </span>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 

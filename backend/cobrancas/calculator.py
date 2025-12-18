@@ -173,7 +173,12 @@ class CobrancaCalculator:
         logger.info(f"Calculando cobrança - Modelo: {resultado.modelo_gd}, Ligação: {resultado.tipo_ligacao}")
 
         # 2. Métricas de energia
-        resultado.consumo_kwh = float(dados_extraidos.itens_fatura.consumo_kwh.quantidade or 0)
+        # Proteção para caso consumo_kwh seja None (extração falhou)
+        if dados_extraidos.itens_fatura.consumo_kwh and dados_extraidos.itens_fatura.consumo_kwh.quantidade is not None:
+            resultado.consumo_kwh = float(dados_extraidos.itens_fatura.consumo_kwh.quantidade)
+        else:
+            resultado.consumo_kwh = 0.0
+            logger.warning("consumo_kwh não encontrado nos dados extraídos, usando 0")
         resultado.injetada_kwh = dados_extraidos.calcular_injetada_total()
 
         # Compensado é o que foi efetivamente usado dos créditos

@@ -89,11 +89,27 @@ class ItensFaturaExtracted(BaseModel):
         populate_by_name = True  # Permite usar alias e nome original
 
 
+class BandeiraDetalheExtracted(BaseModel):
+    """Detalhamento de uma bandeira tarifária"""
+    cor: Optional[Literal["VERDE", "AMARELA", "VERMELHA"]] = Field(
+        None,
+        description="Cor da bandeira: VERDE, AMARELA ou VERMELHA"
+    )
+    valor: Optional[Decimal] = Field(
+        None,
+        description="Valor da bandeira em R$"
+    )
+
+
 class TotaisExtracted(BaseModel):
     """Totalizadores da fatura"""
     adicionais_bandeira: Optional[Decimal] = Field(
         None,
         description="Soma de todos os itens com 'Bandeira' no nome"
+    )
+    bandeiras_detalhamento: List[BandeiraDetalheExtracted] = Field(
+        default_factory=list,
+        description="Detalhamento de cada bandeira encontrada (cor e valor)"
     )
     lancamentos_e_servicos: Optional[Decimal] = Field(
         None,

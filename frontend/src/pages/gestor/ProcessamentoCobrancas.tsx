@@ -32,8 +32,10 @@ import {
     Save,
     XCircle,
     TrendingDown,
+    TrendingUp,
     Pencil,
-    Info
+    Info,
+    CheckCircle
 } from 'lucide-react';
 import { faturasApi } from '../../api/faturas';
 import { cobrancasApi, type Cobranca } from '../../api/cobrancas';

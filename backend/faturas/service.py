@@ -618,8 +618,10 @@ class FaturasService:
         from backend.faturas.pdf_extractor import FaturaPDFExtractor
         from backend.faturas.python_parser import FaturaPythonParser
 
-        # 1. Buscar fatura com PDF
-        result = self.db.table("faturas").select("id, pdf_base64, extracao_status").eq("id", fatura_id).single().execute()
+        # 1. Buscar fatura com PDF e metadados necessários para comparação com API
+        result = self.db.table("faturas").select(
+            "id, pdf_base64, extracao_status, uc_id, mes_referencia, ano_referencia, valor_fatura, consumo, dados_api"
+        ).eq("id", fatura_id).single().execute()
 
         if not result.data:
             raise NotFoundError(f"Fatura {fatura_id} não encontrada")
@@ -655,9 +657,7 @@ class FaturasService:
             # Tentar obter dados da API Energisa (se disponível)
             dados_energisa = None
             try:
-                # TODO: Implementar busca de dados da API Energisa
-                # dados_energisa = await self._buscar_dados_energisa(fatura)
-                pass
+                dados_energisa = self._buscar_dados_energisa(fatura)
             except Exception as e:
                 logger.warning(f"Não foi possível obter dados da API Energisa: {e}")
 
@@ -938,6 +938,66 @@ class FaturasService:
             "status": "resetado",
             "cobranca_excluida": cobranca_excluida
         }
+
+    def _buscar_dados_energisa(self, fatura: dict) -> Optional[dict]:
+        """Busca dados sincronizados da Energisa para comparação na validação.
+
+        Prioriza o campo `dados_api` salvo na sincronização; caso ausente, usa
+        colunas normalizadas (valor_fatura, consumo). Retorna None se nada útil
+        for encontrado.
+        """
+        try:
+            # Recarrega dados completos da fatura para garantir consistência
+            result = self.db.table("faturas").select(
+                "id, uc_id, mes_referencia, ano_referencia, valor_fatura, consumo, dados_api"
+            ).eq("id", fatura["id"]).single().execute()
+
+            if not result.data:
+                return None
+
+            dados = result.data
+            dados_api = dados.get("dados_api") or {}
+
+            valor_fatura = dados_api.get("valorFatura") if isinstance(dados_api, dict) else None
+            consumo_kwh = dados_api.get("consumo") if isinstance(dados_api, dict) else None
+
+            # Fallbacks para colunas já normalizadas
+            if valor_fatura is None:
+                valor_fatura = dados.get("valor_fatura")
+            if consumo_kwh is None:
+                consumo_kwh = dados.get("consumo")
+
+            # Código do cliente pode vir da API ou da UC
+            codigo_cliente = None
+            if isinstance(dados_api, dict):
+                codigo_cliente = dados_api.get("codigoCliente") or dados_api.get("codigoDoCliente")
+
+            if not codigo_cliente and dados.get("uc_id"):
+                uc_result = self.db.table("unidades_consumidoras").select(
+                    "codigo_cliente, cod_empresa, cdc, digito_verificador"
+                ).eq("id", dados["uc_id"]).single().execute()
+                if uc_result.data:
+                    codigo_cliente = uc_result.data.get("codigo_cliente")
+                    if not codigo_cliente and all([
+                        uc_result.data.get("cod_empresa"),
+                        uc_result.data.get("cdc"),
+                        uc_result.data.get("digito_verificador"),
+                    ]):
+                        codigo_cliente = f"{uc_result.data['cod_empresa']}/{uc_result.data['cdc']}-{uc_result.data['digito_verificador']}"
+
+            if valor_fatura is None and consumo_kwh is None and codigo_cliente is None:
+                return None
+
+            return {
+                "valor_fatura": valor_fatura,
+                "consumo_kwh": consumo_kwh,
+                "codigo_cliente": codigo_cliente,
+                "mes_referencia": dados.get("mes_referencia"),
+                "ano_referencia": dados.get("ano_referencia"),
+            }
+        except Exception as e:
+            logger.warning(f"Erro ao buscar dados da Energisa para fatura {fatura.get('id')}: {e}")
+            return None
 
 
 # Instância global do serviço

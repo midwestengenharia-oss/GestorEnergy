@@ -56,6 +56,27 @@ class FaturaValidator:
     def __init__(self):
         pass
 
+    def _safe_float(self, valor) -> Optional[float]:
+        """Converte valor para float de forma resiliente.
+
+        A API da Energisa pode retornar strings vazias, valores com vírgula
+        ou None. Para evitar que a validação quebre durante a comparação,
+        convertemos de forma segura e retornamos None se não for possível.
+        """
+        if valor is None:
+            return None
+
+        try:
+            if isinstance(valor, str):
+                valor = valor.strip().replace(",", ".")
+                if valor == "":
+                    return None
+
+            return float(valor)
+        except (ValueError, TypeError):
+            logger.debug(f"Não foi possível converter valor '{valor}' para float durante validação")
+            return None
+
     def validar(
         self,
         dados_extraidos: dict,
@@ -187,9 +208,9 @@ class FaturaValidator:
         """Valida valores monetários"""
 
         # Validar total_a_pagar
-        total_extraido = dados.get("total_a_pagar")
+        total_extraido = self._safe_float(dados.get("total_a_pagar"))
 
-        if not total_extraido:
+        if total_extraido is None:
             resultado.adicionar_aviso(
                 "valores", "total_a_pagar",
                 "Total a pagar não foi extraído",
@@ -198,26 +219,28 @@ class FaturaValidator:
             return
 
         # Comparar com valor do banco (se disponível)
-        if fatura_db.get("valor_fatura"):
-            diferenca = abs(float(total_extraido) - float(fatura_db["valor_fatura"]))
-            percentual = (diferenca / float(fatura_db["valor_fatura"])) * 100
+        valor_fatura_db = self._safe_float(fatura_db.get("valor_fatura"))
+        if valor_fatura_db is not None and valor_fatura_db > 0:
+            diferenca = abs(total_extraido - valor_fatura_db)
+            percentual = (diferenca / valor_fatura_db) * 100
 
             if percentual > 1:  # Tolerância de 1%
                 resultado.adicionar_aviso(
                     "valores", "total_a_pagar",
-                    f"Total extraído (R$ {total_extraido:.2f}) difere do banco (R$ {fatura_db['valor_fatura']:.2f}) em {percentual:.2f}%",
+                    f"Total extraído (R$ {total_extraido:.2f}) difere do banco (R$ {valor_fatura_db:.2f}) em {percentual:.2f}%",
                     "warning"
                 )
 
         # Comparar com dados da Energisa (se disponível)
-        if dados_energisa and dados_energisa.get("valor_fatura"):
-            diferenca = abs(float(total_extraido) - float(dados_energisa["valor_fatura"]))
-            percentual = (diferenca / float(dados_energisa["valor_fatura"])) * 100
+        valor_fatura_api = self._safe_float(dados_energisa.get("valor_fatura")) if dados_energisa else None
+        if valor_fatura_api is not None and valor_fatura_api > 0:
+            diferenca = abs(total_extraido - valor_fatura_api)
+            percentual = (diferenca / valor_fatura_api) * 100
 
             if percentual > 1:
                 resultado.adicionar_aviso(
                     "valores", "total_a_pagar",
-                    f"Total extraído (R$ {total_extraido:.2f}) difere da API Energisa (R$ {dados_energisa['valor_fatura']:.2f}) em {percentual:.2f}%",
+                    f"Total extraído (R$ {total_extraido:.2f}) difere da API Energisa (R$ {valor_fatura_api:.2f}) em {percentual:.2f}%",
                     "error"
                 )
 
@@ -323,11 +346,13 @@ class FaturaValidator:
         """Valida dados extraídos contra API Energisa"""
 
         # Validar consumo
-        if dados_energisa.get("consumo_kwh") and dados.get("itens_fatura", {}).get("consumo_kwh"):
-            consumo_api = float(dados_energisa["consumo_kwh"])
-            consumo_extraido = float(dados["itens_fatura"]["consumo_kwh"].get("quantidade", 0))
+        consumo_api = self._safe_float(dados_energisa.get("consumo_kwh"))
+        consumo_extraido = None
+        if dados.get("itens_fatura", {}).get("consumo_kwh"):
+            consumo_extraido = self._safe_float(dados["itens_fatura"]["consumo_kwh"].get("quantidade", 0))
 
-            diferenca_percentual = abs(consumo_api - consumo_extraido) / consumo_api * 100 if consumo_api > 0 else 0
+        if consumo_api is not None and consumo_api > 0 and consumo_extraido is not None:
+            diferenca_percentual = abs(consumo_api - consumo_extraido) / consumo_api * 100
 
             if diferenca_percentual > 5:  # Tolerância 5%
                 resultado.adicionar_aviso(

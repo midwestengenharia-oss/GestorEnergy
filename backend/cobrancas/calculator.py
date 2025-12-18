@@ -275,27 +275,41 @@ class CobrancaCalculator:
     def _calcular_extras(self, resultado: CobrancaCalculada, dados: FaturaExtraidaSchema):
         """Calcula valores extras (bandeiras, iluminação, serviços)"""
 
-        # Bandeiras
+        # BANDEIRAS - Prioridade 1: totais.adicionais_bandeira
         bandeiras = dados.totais.adicionais_bandeira or Decimal("0")
 
-        # Fallback: se ajuste_lei_14300 tem descrição de bandeira, usar esse valor
-        # Isso acontece quando a extração por IA coloca bandeira no campo errado
+        # BANDEIRAS - Prioridade 2: buscar em ajuste_lei_14300 (fallback antigo)
         if bandeiras == Decimal("0") and dados.itens_fatura.ajuste_lei_14300:
             desc = (dados.itens_fatura.ajuste_lei_14300.descricao or "").lower()
             if "bandeira" in desc or "b. verm" in desc or "b. amar" in desc or "b. verde" in desc:
                 bandeiras = abs(dados.itens_fatura.ajuste_lei_14300.valor or Decimal("0"))
-                logger.info(f"Fallback: Bandeira detectada em ajuste_lei_14300: R$ {bandeiras:.2f}")
+                logger.info(f"Fallback ajuste_lei_14300: Bandeira detectada: R$ {bandeiras:.2f}")
+
+        # BANDEIRAS - Prioridade 3: buscar em lancamentos_e_servicos
+        # Isso acontece quando a extração por IA coloca bandeira no campo errado
+        if bandeiras == Decimal("0"):
+            for lanc in dados.itens_fatura.lancamentos_e_servicos:
+                desc = (lanc.descricao or "").lower()
+                if "bandeira" in desc or "b. verm" in desc or "b. amar" in desc or "b. verde" in desc:
+                    bandeiras += abs(lanc.valor or Decimal("0"))
+                    logger.info(f"Fallback lancamentos: Bandeira '{lanc.descricao}' = R$ {lanc.valor}")
 
         resultado.bandeiras_valor = bandeiras
 
         # Iluminação pública
         resultado.iluminacao_publica_valor = dados.extrair_valor_iluminacao_publica()
 
-        # Serviços (outros lançamentos, exceto iluminação)
+        # Serviços (outros lançamentos, EXCETO iluminação e bandeiras)
         servicos_total = Decimal("0")
         for lanc in dados.itens_fatura.lancamentos_e_servicos:
-            if lanc.descricao and "ilum" not in lanc.descricao.lower():
-                servicos_total += (lanc.valor or Decimal("0"))
+            desc = (lanc.descricao or "").lower()
+            # Pular iluminação pública
+            if "ilum" in desc:
+                continue
+            # Pular bandeiras (já contabilizadas acima)
+            if "bandeira" in desc or "b. verm" in desc or "b. amar" in desc or "b. verde" in desc:
+                continue
+            servicos_total += (lanc.valor or Decimal("0"))
 
         resultado.servicos_valor = servicos_total
 

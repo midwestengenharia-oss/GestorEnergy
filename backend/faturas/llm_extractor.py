@@ -240,32 +240,39 @@ Preencher itens_fatura.ajuste_lei_14300: {{ descricao, unidade, quantidade, prec
 
 Lançamentos e Serviços:
 
-Capturar todas as linhas do bloco "LANÇAMENTOS E SERVIÇOS" (ex.: "Contrib de Ilum Pub", "JUROS DE MORA …", "MULTA …", etc.).
+Capturar linhas do bloco "LANÇAMENTOS E SERVIÇOS" (ex.: "Contrib de Ilum Pub", "JUROS DE MORA …", "MULTA …", etc.).
+IMPORTANTE: NÃO incluir itens de bandeira tarifária aqui! Bandeiras vão para totais.adicionais_bandeira.
 itens_fatura.lancamentos_e_servicos = lista de {{ descricao, valor }} com sinal conforme a fatura.
-totais.lancamentos_e_servicos = soma dos valores em itens_fatura.lancamentos_e_servicos.
+totais.lancamentos_e_servicos = soma dos valores em itens_fatura.lancamentos_e_servicos (SEM bandeiras).
 
 TOTAIS
 
-totais.adicionais_bandeira: soma de itens com "Bandeira" no nome (0 se não houver). NUNCA colocar ajuste Lei 14.300 aqui.
+totais.adicionais_bandeira: soma de TODOS os itens com "Bandeira", "B. Vermelha", "B. Amarela" no nome.
 totais.total_geral_fatura: valor total geral exibido (preferir "TOTAL A PAGAR", senão "VALOR COBRADO/VALOR DO DOCUMENTO").
 
-BANDEIRA TARIFÁRIA (tipo - campo raiz):
+BANDEIRAS TARIFÁRIAS - EXTRAÇÃO CRÍTICA:
 
-Se a fatura contiver itens com "Bandeira" no nome, identifique o TIPO da bandeira:
-- "Adic. B. Vermelha", "Bandeira Vermelha", "B. Vermelha" → bandeira_tarifaria = "VERMELHA"
-- "Adic. B. Amarela", "Bandeira Amarela", "B. Amarela" → bandeira_tarifaria = "AMARELA"
-- Se não encontrar nenhum item de bandeira → bandeira_tarifaria = "VERDE" (bandeira verde não aparece na fatura)
-- Se não conseguir identificar → bandeira_tarifaria = null
+1. IDENTIFICAR linhas de bandeira:
+   - "Adic. B. Vermelha", "Adic. B. Amarela", "Adic. B. Verde"
+   - "Bandeira Vermelha", "Bandeira Amarela", "Bandeira Verde"
+   - "B. Vermelha", "B. Amarela", "B. Verde"
 
-Preencher no JSON raiz (NÃO dentro de totais): "bandeira_tarifaria": "VERMELHA|AMARELA|VERDE|null"
+2. EXTRAIR VALOR da coluna "Valor (R$)" (NÃO usar PIS/COFINS/Base ICMS/ICMS):
+   Exemplo de linha: "Adic. B. Vermelha | | | | 1.90 | 0.15 | 1.90 | 17 | 0.31 |"
+   → O valor correto é 1.90 (primeira coluna numérica após descrição = Valor R$)
 
-EXTRAÇÃO DE VALORES DE BANDEIRA - CRÍTICO:
-- Linhas de bandeira geralmente aparecem como: "Adic. B. Vermelha" ou "Adic. B. Amarela"
-- O VALOR está na coluna "Valor (R$)", NÃO nas colunas de impostos (PIS/COFINS/ICMS)
-- Exemplo de linha: "Adic. B. Vermelha | | | | 15.50 | 0.19 | 15.50 | 17 | 2.64 |"
-  → totais.adicionais_bandeira = 15.50 (usar coluna Valor, NÃO as outras)
-  → bandeira_tarifaria = "VERMELHA"
-- Se houver múltiplas linhas de bandeira, SOME os valores da coluna "Valor (R$)"
+3. SOMAR todos os valores de bandeira encontrados:
+   Exemplo: Adic. B. Amarela = 0.46, Adic. B. Vermelha = 1.90
+   → totais.adicionais_bandeira = 0.46 + 1.90 = 2.36
+
+4. IDENTIFICAR COR predominante (prioridade: VERMELHA > AMARELA > VERDE):
+   - Se houver bandeira vermelha → bandeira_tarifaria = "VERMELHA"
+   - Se só houver amarela → bandeira_tarifaria = "AMARELA"
+   - Se não houver bandeiras → bandeira_tarifaria = "VERDE"
+
+5. NÃO COLOCAR bandeiras em lancamentos_e_servicos! Apenas em totais.adicionais_bandeira.
+
+Preencher no JSON raiz: "bandeira_tarifaria": "VERMELHA|AMARELA|VERDE|null"
 
 QUADRO ATENÇÃO (se existir)
 

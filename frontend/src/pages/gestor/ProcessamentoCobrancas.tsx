@@ -1304,8 +1304,11 @@ function FaturaAccordionItem({
                                     const taxaMinimaKwh = getTaxaMinima(tipoLigacao);
                                     const taxaMinimaValor = taxaMinimaKwh * consumoTarifa;
 
-                                    // Bandeiras
-                                    const bandeiras = dados?.totais?.adicionais_bandeira || 0;
+                                    // Bandeiras - priorizar detalhamento (soma individual) sobre total
+                                    const bandeirasDetalhamento = dados?.totais?.bandeiras_detalhamento || [];
+                                    const bandeiras = bandeirasDetalhamento.length > 0
+                                        ? bandeirasDetalhamento.reduce((sum: number, b: { valor?: number }) => sum + (b.valor || 0), 0)
+                                        : (dados?.totais?.adicionais_bandeira || 0);
 
                                     // Iluminação pública
                                     const iluminacao = getValorIluminacaoPublica(dados?.itens_fatura) || 0;
@@ -1368,15 +1371,31 @@ function FaturaAccordionItem({
                                                                 <td className="py-2 text-right font-medium">{formatarMoeda(taxaMinimaValor)}</td>
                                                             </tr>
                                                         ) : null}
-                                                        {/* Bandeiras */}
-                                                        {bandeiras > 0 && (
+                                                        {/* Bandeiras - mostrar detalhamento quando disponível */}
+                                                        {bandeirasDetalhamento.length > 0 ? (
+                                                            bandeirasDetalhamento.map((b: { cor?: string; valor?: number }, idx: number) => (
+                                                                <tr key={`bandeira-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
+                                                                    <td className="py-2 text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                                        <span className={`w-2 h-2 rounded-full ${
+                                                                            b.cor?.toLowerCase() === 'verde' ? 'bg-green-500' :
+                                                                            b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-500' :
+                                                                            'bg-red-500'
+                                                                        }`}></span>
+                                                                        Bandeira {b.cor}
+                                                                    </td>
+                                                                    <td className="py-2 text-center">-</td>
+                                                                    <td className="py-2 text-center">-</td>
+                                                                    <td className="py-2 text-right font-medium">{formatarMoeda(b.valor || 0)}</td>
+                                                                </tr>
+                                                            ))
+                                                        ) : bandeiras > 0 ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras Tarifarias</td>
                                                                 <td className="py-2 text-center">-</td>
                                                                 <td className="py-2 text-center">-</td>
                                                                 <td className="py-2 text-right font-medium">{formatarMoeda(bandeiras)}</td>
                                                             </tr>
-                                                        )}
+                                                        ) : null}
                                                         {/* Iluminação Pública */}
                                                         {iluminacao > 0 && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
@@ -1426,10 +1445,14 @@ function FaturaAccordionItem({
                                     const taxaMinimaValor = taxaMinimaKwh * tarifaBase;
                                     const disponibilidade = ajuste?.valor || 0;
 
-                                    // Bandeiras (só GDI se consumo > injetada)
+                                    // Bandeiras (só GDI se consumo > injetada) - priorizar detalhamento
                                     const gapKwh = Math.max(0, consumoKwh - injetadaKwh);
                                     const temConsumoNaoCompensado = gapKwh > 0;
-                                    const bandeiras = (fatura.tipo_gd === 'GDI' || temConsumoNaoCompensado) ? (dados?.totais?.adicionais_bandeira || 0) : 0;
+                                    const bandeirasDetalhamentoPrev = dados?.totais?.bandeiras_detalhamento || [];
+                                    const bandeirasTotalPrev = bandeirasDetalhamentoPrev.length > 0
+                                        ? bandeirasDetalhamentoPrev.reduce((sum: number, b: { valor?: number }) => sum + (b.valor || 0), 0)
+                                        : (dados?.totais?.adicionais_bandeira || 0);
+                                    const bandeiras = (fatura.tipo_gd === 'GDI' || temConsumoNaoCompensado) ? bandeirasTotalPrev : 0;
 
                                     // Iluminação pública
                                     const iluminacao = getValorIluminacaoPublica(dados?.itens_fatura) || 0;
@@ -1488,14 +1511,32 @@ function FaturaAccordionItem({
                                                                 <td className="py-2 text-right font-medium">{formatarMoeda(taxaMinimaValor)}</td>
                                                             </tr>
                                                         ) : null}
-                                                        {/* Bandeiras (se aplicável) */}
-                                                        {bandeiras > 0 && (
-                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
-                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras Tarifarias</td>
-                                                                <td className="py-2 text-center">-</td>
-                                                                <td className="py-2 text-center">-</td>
-                                                                <td className="py-2 text-right font-medium">{formatarMoeda(bandeiras)}</td>
-                                                            </tr>
+                                                        {/* Bandeiras (se aplicável) - mostrar detalhamento quando disponível */}
+                                                        {bandeiras > 0 && (fatura.tipo_gd === 'GDI' || temConsumoNaoCompensado) && (
+                                                            bandeirasDetalhamentoPrev.length > 0 ? (
+                                                                bandeirasDetalhamentoPrev.map((b: { cor?: string; valor?: number }, idx: number) => (
+                                                                    <tr key={`bandeira-prev-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
+                                                                        <td className="py-2 text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                                            <span className={`w-2 h-2 rounded-full ${
+                                                                                b.cor?.toLowerCase() === 'verde' ? 'bg-green-500' :
+                                                                                b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-500' :
+                                                                                'bg-red-500'
+                                                                            }`}></span>
+                                                                            Bandeira {b.cor}
+                                                                        </td>
+                                                                        <td className="py-2 text-center">-</td>
+                                                                        <td className="py-2 text-center">-</td>
+                                                                        <td className="py-2 text-right font-medium">{formatarMoeda(b.valor || 0)}</td>
+                                                                    </tr>
+                                                                ))
+                                                            ) : (
+                                                                <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                    <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras Tarifarias</td>
+                                                                    <td className="py-2 text-center">-</td>
+                                                                    <td className="py-2 text-center">-</td>
+                                                                    <td className="py-2 text-right font-medium">{formatarMoeda(bandeiras)}</td>
+                                                                </tr>
+                                                            )
                                                         )}
                                                         {/* Iluminação Pública */}
                                                         {iluminacao > 0 && (
@@ -1707,7 +1748,22 @@ function FaturaAccordionItem({
                                     <div className="grid grid-cols-3 gap-4 text-sm">
                                         <div>
                                             <span className="text-slate-500">Bandeira:</span>
-                                            <p className="font-medium">{formatarMoeda(dados.totais?.adicionais_bandeira)}</p>
+                                            {dados.totais?.bandeiras_detalhamento?.length > 0 ? (
+                                                <div className="space-y-1">
+                                                    {dados.totais.bandeiras_detalhamento.map((b: { cor?: string; valor?: number }, idx: number) => (
+                                                        <p key={idx} className="font-medium flex items-center gap-1">
+                                                            <span className={`w-2 h-2 rounded-full ${
+                                                                b.cor?.toLowerCase() === 'verde' ? 'bg-green-500' :
+                                                                b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-500' :
+                                                                'bg-red-500'
+                                                            }`}></span>
+                                                            {b.cor}: {formatarMoeda(b.valor || 0)}
+                                                        </p>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="font-medium">{formatarMoeda(dados.totais?.adicionais_bandeira)}</p>
+                                            )}
                                         </div>
                                         <div>
                                             <span className="text-slate-500">Servicos:</span>

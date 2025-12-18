@@ -323,16 +323,27 @@ const getLancamentosSemIluminacao = (itens: DadosExtraidos['itens_fatura']): Lan
     const ilumItem = itens.lancamentos_e_servicos.find(
         s => s.descricao?.toLowerCase().includes('ilum')
     );
-    const valorIlum = ilumItem?.valor || 0;
+    const valorIlum = Number(ilumItem?.valor) || 0;
 
     return itens.lancamentos_e_servicos.filter(s => {
         const desc = s.descricao?.toLowerCase() || '';
+        const valorItem = Number(s.valor) || 0;
+
         // Excluir iluminação pública
         if (desc.includes('ilum')) return false;
-        // Excluir "outros serviços" se valor for igual ao de iluminação (provável duplicação do LLM)
-        if ((desc.includes('outros') || desc.includes('serviço')) && s.valor === valorIlum && valorIlum > 0) return false;
+
+        // Excluir "outros serviços" se valor for igual (ou muito próximo) ao de iluminação
+        // Isso detecta duplicações feitas pelo LLM
+        if (desc.includes('outros') || desc.includes('serviço')) {
+            // Comparação com tolerância de 1 centavo para evitar problemas de arredondamento
+            if (valorIlum > 0 && Math.abs(valorItem - valorIlum) < 0.02) {
+                return false;
+            }
+        }
+
         // Excluir bandeiras (já são contabilizadas separadamente)
         if (desc.includes('bandeira') || desc.includes('b. verm') || desc.includes('b. amar') || desc.includes('b. verde')) return false;
+
         return true;
     });
 };
@@ -1222,14 +1233,33 @@ function FaturaAccordionItem({
                                                 </div>
                                                 <div className="flex justify-between text-sm">
                                                     <span className="text-slate-500">Bandeira:</span>
-                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                        fatura.bandeira_tarifaria?.includes('VERDE') ? 'bg-green-100 text-green-700' :
-                                                        fatura.bandeira_tarifaria?.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
-                                                        fatura.bandeira_tarifaria?.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
-                                                        'bg-slate-100 text-slate-700'
-                                                    }`}>
-                                                        {fatura.bandeira_tarifaria || 'N/A'}
-                                                    </span>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                            fatura.bandeira_tarifaria?.includes('VERDE') ? 'bg-green-100 text-green-700' :
+                                                            fatura.bandeira_tarifaria?.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
+                                                            fatura.bandeira_tarifaria?.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
+                                                            'bg-slate-100 text-slate-700'
+                                                        }`}>
+                                                            {fatura.bandeira_tarifaria || 'N/A'}
+                                                        </span>
+                                                        {/* Detalhamento de períodos da API */}
+                                                        {fatura.bandeira_prevista?.periodos && fatura.bandeira_prevista.periodos.length > 0 && (
+                                                            <div className="mt-1 space-y-0.5">
+                                                                {fatura.bandeira_prevista.periodos.map((p, idx) => (
+                                                                    <div key={idx} className="text-xs text-slate-500 flex items-center gap-1">
+                                                                        <span className={`px-1 py-0.5 rounded ${
+                                                                            p.bandeira?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                                                            p.bandeira?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                                                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                                        }`}>
+                                                                            {p.bandeira}
+                                                                        </span>
+                                                                        <span>{p.dias} dias</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <div className="flex justify-between text-sm">
                                                     <span className="text-slate-500">Leitura:</span>
@@ -1300,14 +1330,33 @@ function FaturaAccordionItem({
                                                 <div className="flex justify-between items-center text-sm">
                                                     <span className="text-slate-500">Bandeira:</span>
                                                     <div className="flex items-center gap-2">
-                                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                            dados?.bandeira_tarifaria?.includes('VERDE') ? 'bg-green-100 text-green-700' :
-                                                            dados?.bandeira_tarifaria?.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
-                                                            dados?.bandeira_tarifaria?.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
-                                                            'bg-slate-100 text-slate-700'
-                                                        }`}>
-                                                            {dados?.bandeira_tarifaria || 'N/A'}
-                                                        </span>
+                                                        <div className="flex flex-col items-end">
+                                                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                                dados?.bandeira_tarifaria?.includes('VERDE') ? 'bg-green-100 text-green-700' :
+                                                                dados?.bandeira_tarifaria?.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
+                                                                dados?.bandeira_tarifaria?.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
+                                                                'bg-slate-100 text-slate-700'
+                                                            }`}>
+                                                                {dados?.bandeira_tarifaria || 'N/A'}
+                                                            </span>
+                                                            {/* Detalhamento de bandeiras extraídas */}
+                                                            {dados?.totais?.bandeiras_detalhamento && dados.totais.bandeiras_detalhamento.length > 0 && (
+                                                                <div className="mt-1 space-y-0.5">
+                                                                    {dados.totais.bandeiras_detalhamento.map((b, idx) => (
+                                                                        <div key={idx} className="text-xs text-slate-500 flex items-center gap-1">
+                                                                            <span className={`px-1 py-0.5 rounded ${
+                                                                                b.cor?.toLowerCase() === 'verde' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                                                                b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                                                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                                            }`}>
+                                                                                {b.cor}
+                                                                            </span>
+                                                                            <span>{formatarMoeda(b.valor || 0)}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                         {renderStatusIndicador(
                                                             // GD2 sem bandeira: OK (esperado - consumo 100% compensado não gera bandeira)
                                                             (!dados?.totais?.adicionais_bandeira && fatura.tipo_gd === 'GDII')

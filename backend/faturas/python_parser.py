@@ -429,6 +429,7 @@ class FaturaPythonParser:
             r'(CONTRIB.*?ILUM.*?PUB.*?)[|\s]+([\d.,]+)',
             r'((?:MULTA|JUROS).*?)[|\s]+([\d.,]+)',
             r'(BANDEIRA.*?)[|\s]+([\d.,]+)',
+            r'(ADIC\.\s*B\.?\s*(?:AMARELA|VERMELHA)[^\d\n]*)\s+([\d.,]+)',
             r'([A-Z\s]{10,50}?)[|\s]+(\-?[\d.,]+)'  # Genérico
         ]
 

@@ -103,11 +103,11 @@ class LLMWhispererExtractor:
 
 
 class OpenAIParser:
-    """Parser de faturas usando OpenAI GPT-4o-mini"""
+    """Parser de faturas usando OpenAI GPT-5-mini"""
 
     def __init__(self, api_key: str):
         self.client = OpenAI(api_key=api_key)
-        self.model = "gpt-4o-mini"
+        self.model = "gpt-5-mini"
 
     def parse_fatura(self, texto: str) -> dict:
         """
@@ -153,7 +153,7 @@ class OpenAIParser:
             raise
 
     def _criar_prompt(self, texto: str) -> str:
-        """Cria o prompt para o OpenAI - Versão alinhada com n8n"""
+        """Cria o prompt para o OpenAI - Baseado no N8N que funcionava bem"""
         return f"""Você é um extrator rigoroso de dados de faturas de energia recebendo como entrada texto cru obtido de OCR/parsers. Sua tarefa é identificar, normalizar e estruturar os campos abaixo exatamente no formato JSON especificado.
 
 Regras:
@@ -184,6 +184,8 @@ Itens da fatura:
 Quadro típico com colunas:
 [Descrição] | Unid. | Quant. | Preço unit (R$) com tributos | Valor (R$) | PIS/COFINS (R$) - Evitar utilizar | Base Calc. ICMS (R$) - Evitar utilizar | % Alíq. ICMS - Evitar utilizar | ICMS (R$) - Evitar utilizar | Tarifa Unit (R$) - Evitar utilizar
 
+Precisam ser coletados todos os itens, como consumo em kWh, Energia Ativa Injetada oUC ou mUC referente ao mês atual ou meses anteriores (em alguns casos podem haver vários itens de Energia Atv Injetada) e ajuste tarifário em casos GD2 - TRF Reduzida pela Lei 14.300/22.
+
 Consumo:
 
 Linha "Consumo em kWh" → {{ unidade, quantidade, preco_unit_com_tributos, valor }}.
@@ -211,92 +213,61 @@ Separe SEMPRE em listas:
 itens_fatura["energia_injetada oUC"]: []
 itens_fatura["energia_injetada mUC"]: []
 
-tipo_gd: se a linha mencionar GD II/GDII → GDII; se GD I/GDI → GDI. Sem evidência → DESCONHECIDO.
+Se a descrição não contiver explicitamente o token oUC ou mUC (pelas regex acima), não inclua em nenhuma das duas listas.
 
-IMPORTANTE - DIFERENCIAÇÃO BANDEIRA vs AJUSTE LEI 14.300:
+tipo_gd: se a linha mencionar GD II/GDII → GDII; se GD I/GDI → GDI. Se não mencionar mas houver "Ajuste ... Lei 14.300/22" na fatura, assuma GDII para as linhas sem indicação explícita. Sem evidência → DESCONHECIDO.
 
-NÃO CONFUNDIR:
-
-| Item | Vai para | Exemplos de descrição |
-|------|----------|----------------------|
-| Bandeira Tarifária | totais.adicionais_bandeira | "Adic. B. Vermelha", "Adic. B. Amarela", "Adic Bandeira Vermelha", "Bandeira Tarifária" |
-| Ajuste Lei 14.300 | itens_fatura.ajuste_lei_14300 | "Ajuste GDII - TRF Reduzida(Lei 14.300/22)", "Ajuste GD II - Tarifa Reduzida Lei 14.300" |
-
-REGRAS:
-1. ajuste_lei_14300 SOMENTE se a descrição contiver:
-   - "Lei 14.300" OU
-   - "TRF Reduzida" OU
-   - "Tarifa Reduzida" OU
-   - "GDII" junto com "Ajuste"
-
-2. Itens com "Bandeira" ou "B. Vermelha/Amarela/Verde" → SEMPRE vão para totais.adicionais_bandeira
-
-3. Se a fatura for GD I (não tem ajuste 14.300), o campo ajuste_lei_14300 deve ter todos os valores como null
-
-Ajuste Lei 14.300/22 (SOMENTE GDII – tarifa reduzida):
+Ajuste Lei 14.300/22 (GDII – tarifa reduzida):
 
 Linhas tipo: "Ajuste GDII - TRF Reduzida (Lei 14.300/22) - ...".
 Preencher itens_fatura.ajuste_lei_14300: {{ descricao, unidade, quantidade, preco_unit_com_tributos, valor }}.
 
 Lançamentos e Serviços:
 
-Capturar linhas do bloco "LANÇAMENTOS E SERVIÇOS" (ex.: "Contrib de Ilum Pub", "JUROS DE MORA …", "MULTA …", etc.).
+Capturar TODAS as linhas do bloco "LANÇAMENTOS E SERVIÇOS" (ex.: "Contrib de Ilum Pub", "JUROS DE MORA …", "MULTA …", "Adic. B. Amarela", "Adic. B. Vermelha", etc.).
 
-REGRAS CRÍTICAS:
-1. NÃO incluir itens de bandeira tarifária aqui! Bandeiras vão para totais.adicionais_bandeira.
-2. NÃO criar item genérico "Outros serviços" - extrair CADA lançamento individualmente com sua descrição original.
-3. Se não houver outros lançamentos além de iluminação pública, a lista deve conter APENAS iluminação pública.
-4. NÃO duplicar a iluminação pública com outro nome.
+IMPORTANTE para itens de BANDEIRA e ILUMINAÇÃO:
+Entenda que Consumo, Energia Injetada, Ajuste GDII e alguns outros possuem informações em todas as colunas do quadro de itens da fatura. Utilize apenas a descrição, unidade, quantidade e valor.
+Já os Adicionais de Bandeiras, Iluminação Pública e outros lançamentos ou serviços NÃO possuem unidade, quantidade e preço unitário, apenas valor, pis/cofins, base de cálculo, alíquota e valor do ICMS e tarifa unitária.
+Portanto, atente-se para estes itens onde a PRIMEIRA informação numérica já é o VALOR. Ou seja, evite utilizar os demais valores.
 
 itens_fatura.lancamentos_e_servicos = lista de {{ descricao, valor }} com sinal conforme a fatura.
-totais.lancamentos_e_servicos = soma dos valores em itens_fatura.lancamentos_e_servicos (SEM bandeiras).
+totais.lancamentos_e_servicos = soma de TODOS os valores em itens_fatura.lancamentos_e_servicos.
 
 TOTAIS
 
-totais.adicionais_bandeira: soma de TODOS os itens com "Bandeira", "B. Vermelha", "B. Amarela" no nome.
+totais.adicionais_bandeira: soma de TODOS os itens com "Bandeira", "B. Vermelha", "B. Amarela", "B. Verde" no nome.
 totais.total_geral_fatura: valor total geral exibido (preferir "TOTAL A PAGAR", senão "VALOR COBRADO/VALOR DO DOCUMENTO").
 
-BANDEIRAS TARIFÁRIAS - EXTRAÇÃO COM DETALHAMENTO:
+Quando possível, totais.total_geral_fatura deve bater com total_a_pagar (tolerância ±0.05). Não compute, apenas reporte.
 
-1. IDENTIFICAR linhas de bandeira:
-   - "Adic. B. Vermelha", "Adic. B. Amarela", "Adic. B. Verde"
-   - "Bandeira Vermelha", "Bandeira Amarela", "Bandeira Verde"
-   - "B. Vermelha", "B. Amarela", "B. Verde"
+BANDEIRAS TARIFÁRIAS - DETALHAMENTO:
 
-2. EXTRAIR VALOR da coluna "Valor (R$)" (NÃO usar PIS/COFINS/Base ICMS/ICMS):
-   Exemplo de linha: "Adic. B. Vermelha | | | | 1.90 | 0.15 | 1.90 | 17 | 0.31 |"
-   → O valor correto é 1.90 (primeira coluna numérica após descrição = Valor R$)
+Para CADA bandeira encontrada (Amarela, Vermelha, Verde), criar um objeto em totais.bandeiras_detalhamento:
+- Identificar a COR: VERDE, AMARELA ou VERMELHA
+- Extrair o VALOR da coluna "Valor (R$)" (primeira coluna numérica após descrição)
+- Adicionar {{"cor": "COR", "valor": VALOR_EXTRAIDO}}
 
-3. PARA CADA BANDEIRA ENCONTRADA, extrair cor e valor:
-   - Identificar a COR: VERDE, AMARELA ou VERMELHA
-   - Criar objeto com {{"cor": "COR", "valor": X.XX}}
-   - Adicionar à lista totais.bandeiras_detalhamento
+Se não houver bandeiras na fatura → totais.bandeiras_detalhamento = []
 
-4. SOMAR todos os valores de bandeira encontrados:
-   Exemplo: Adic. B. Amarela = 0.46, Adic. B. Vermelha = 1.90
-   → totais.adicionais_bandeira = 0.46 + 1.90 = 2.36
-   → totais.bandeiras_detalhamento = [{{"cor": "AMARELA", "valor": 0.46}}, {{"cor": "VERMELHA", "valor": 1.90}}]
-
-5. IDENTIFICAR COR predominante (prioridade: VERMELHA > AMARELA > VERDE):
-   - Se houver bandeira vermelha → bandeira_tarifaria = "VERMELHA"
-   - Se só houver amarela → bandeira_tarifaria = "AMARELA"
-   - Se não houver bandeiras → bandeira_tarifaria = "VERDE"
-
-6. NÃO COLOCAR bandeiras em lancamentos_e_servicos! Apenas em totais.
-
-Preencher no JSON raiz: "bandeira_tarifaria": "VERMELHA|AMARELA|VERDE|null"
+Preencher no JSON raiz: "bandeira_tarifaria":
+- Se houver bandeira vermelha → "VERMELHA"
+- Se só houver amarela → "AMARELA"
+- Se não houver bandeiras → "VERDE"
 
 QUADRO ATENÇÃO (se existir)
 
-quadro_atencao.saldo_acumulado (ex.: "Saldo Acumulado: 140" → 140.00)
-quadro_atencao.a_expirar_proximo_ciclo (ex.: "A expirar no próximo ciclo: 0" → 0.00)
+Capturar em blocos de GD/compensação:
+• quadro_atencao.saldo_acumulado (ex.: "Saldo Acumulado: 140" → 140.00)
+• quadro_atencao.a_expirar_proximo_ciclo (ex.: "A expirar no próximo ciclo: 0" → 0.00)
 
-ESTRUTURA DE CONSUMO (se existir tabela de estrutura/consumo faturado)
+ESTRUTURA/COMPOSIÇÃO DO CONSUMO (se existir)
 
-Busque tabela com colunas como "Atual", "Anterior", "Medido", "Faturado".
-estrutura_consumo.kwh_ponta = linha de kWh ponta (se houver)
-estrutura_consumo.inj_ponta = linha de injeção ponta (se houver)
-Se não existir essa tabela → estrutura_consumo com todos campos null.
+Em "DADOS/ESTRUTURA DO CONSUMO" com "Ponta/Intermediário/Fora de Ponta", preencher quando possível:
+• estrutura_consumo.kwh_ponta: {{ atual, anterior, medido, faturado }}
+• estrutura_consumo.inj_ponta: {{ atual, anterior, medido, faturado }}
+
+Campos ausentes → null.
 
 MÉDIA DOS ÚLTIMOS 13 MESES (se existir)
 
@@ -304,15 +275,9 @@ Ler "CONSUMO DOS ÚLTIMOS 13 MESES". Converter "SET/25" → 2025-09, "AGO/25" �
 media_consumo_13m.meses = lista (ordem cronológica quando claro, senão a da fatura).
 media_consumo_13m.media_kwh = média simples dos kWh capturados (se nenhum mês for numérico, null).
 
-IMPOSTOS E TRIBUTOS (IMPORTANTE - extrair se existir)
+IMPOSTOS E TRIBUTOS (extrair se existir)
 
 Busque a seção "Base de Cálculo dos Tributos", "Composição dos Tributos" ou "Impostos e Contribuições".
-Esta seção geralmente mostra:
-- PIS/PASEP: alíquota (%) e valor (R$)
-- COFINS: alíquota (%) e valor (R$)
-- ICMS: alíquota (%) e valor (R$)
-- Base de cálculo total
-
 Se encontrar, preencha impostos_detalhados com:
 - pis_aliquota: decimal (ex: 1.2102% → 0.012102)
 - pis_valor: valor em R$
@@ -322,13 +287,10 @@ Se encontrar, preencha impostos_detalhados com:
 - icms_valor: valor em R$
 - base_calculo: valor total da base de cálculo
 
-REGRAS para impostos:
-1. Se a seção NÃO existir na fatura → impostos_detalhados = null
-2. Converta SEMPRE percentuais para decimal: 17% → 0.17, 1.2102% → 0.012102
-3. Extraia valores numéricos sem formatação (sem R$)
-4. Se apenas alguns campos estiverem disponíveis, extraia o que encontrar e deixe os outros como null
+Se a seção NÃO existir na fatura → impostos_detalhados = null
 
 Não invente. Não explique. Apenas JSON com as chaves especificadas.
+Certifique-se de verificar todos os possíveis itens da fatura antes e depois de "Lançamentos e Serviços".
 
 Formato de resposta JSON
 

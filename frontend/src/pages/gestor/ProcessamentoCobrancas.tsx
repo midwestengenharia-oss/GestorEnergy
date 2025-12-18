@@ -197,6 +197,10 @@ interface DadosExtraidos {
         total_geral_fatura?: number;
     };
     bandeira_tarifaria?: string;
+    quadro_atencao?: {
+        saldo_acumulado?: number;
+        a_expirar_proximo_ciclo?: number;
+    };
 }
 
 // Tipos para validação de campos
@@ -332,17 +336,24 @@ const getLancamentosSemIluminacao = (itens: DadosExtraidos['itens_fatura']): Lan
         // Excluir iluminação pública
         if (desc.includes('ilum')) return false;
 
-        // Excluir "outros serviços" se valor for igual (ou muito próximo) ao de iluminação
-        // Isso detecta duplicações feitas pelo LLM
-        if (desc.includes('outros') || desc.includes('serviço')) {
-            // Comparação com tolerância de 1 centavo para evitar problemas de arredondamento
-            if (valorIlum > 0 && Math.abs(valorItem - valorIlum) < 0.02) {
-                return false;
-            }
-        }
-
         // Excluir bandeiras (já são contabilizadas separadamente)
         if (desc.includes('bandeira') || desc.includes('b. verm') || desc.includes('b. amar') || desc.includes('b. verde')) return false;
+
+        // Excluir "outros serviços" se valor for igual (ou muito próximo) ao de iluminação
+        // Verifica múltiplas variações: "outros", "serviço", "servico", "serviços", "servicos"
+        const isOutrosServicos = desc.includes('outros') ||
+                                 desc.includes('servi') ||  // Captura serviço, servico, serviços, servicos
+                                 desc === '';  // Descrição vazia também é suspeita
+
+        if (isOutrosServicos && valorIlum > 0 && Math.abs(valorItem - valorIlum) < 0.02) {
+            return false;
+        }
+
+        // Fallback: Se o valor é EXATAMENTE igual ao de iluminação, provavelmente é duplicata
+        // (isso pega casos onde a descrição é diferente mas o valor é idêntico)
+        if (valorIlum > 0 && valorItem === valorIlum) {
+            return false;
+        }
 
         return true;
     });
@@ -1134,462 +1145,182 @@ function FaturaAccordionItem({
                     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
 
                         {/* ========================================
-                            NOVA SEÇÃO: Visualização para tab 'extraida'
-                            Comparação API vs Extração com edição
+                            SEÇÕES REESTRUTURADAS: 5 Seções Organizadas
                         ======================================== */}
                         {activeTab === 'extraida' && (
-                            <div className="space-y-5">
-                                {/* Header com Score e Modelo GD */}
-                                <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-700">
-                                    <div className="flex items-center gap-4">
-                                        {/* Score de Confiança */}
+                            <div className="space-y-4">
+                                {/* Header com Score, Modelo GD e Referência */}
+                                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
+                                    <div className="flex items-center gap-3">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-sm text-slate-500">Score:</span>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-24 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full rounded-full ${
-                                                            (fatura.extracao_score || 0) >= 90 ? 'bg-green-500' :
-                                                            (fatura.extracao_score || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500'
-                                                        }`}
-                                                        style={{ width: `${fatura.extracao_score || 0}%` }}
-                                                    />
-                                                </div>
-                                                <span className={`text-sm font-bold ${
-                                                    (fatura.extracao_score || 0) >= 90 ? 'text-green-600' :
-                                                    (fatura.extracao_score || 0) >= 70 ? 'text-yellow-600' : 'text-red-600'
-                                                }`}>
-                                                    {fatura.extracao_score || 0}%
-                                                </span>
+                                            <span className="text-xs text-slate-500">Score:</span>
+                                            <div className="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                <div className={`h-full rounded-full ${(fatura.extracao_score || 0) >= 90 ? 'bg-green-500' : (fatura.extracao_score || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${fatura.extracao_score || 0}%` }} />
                                             </div>
+                                            <span className={`text-xs font-bold ${(fatura.extracao_score || 0) >= 90 ? 'text-green-600' : (fatura.extracao_score || 0) >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>{fatura.extracao_score || 0}%</span>
                                         </div>
-                                        {/* Modelo GD - usando tipo_gd do backend (unificado) */}
-                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                            fatura.tipo_gd === 'GDII'
-                                                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
-                                                : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
-                                        }`}>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${fatura.tipo_gd === 'GDII' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'}`}>
                                             {fatura.tipo_gd === 'GDII' ? 'GD II' : fatura.tipo_gd === 'GDI' ? 'GD I' : 'GD ?'}
                                         </span>
-                                        {/* Tipo Ligação */}
                                         {(fatura.tipo_ligacao || dados?.ligacao) && (
-                                            <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full text-sm">
+                                            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full text-xs">
                                                 {fatura.tipo_ligacao || dados?.ligacao}
                                             </span>
                                         )}
                                     </div>
-                                    {/* Vencimento */}
-                                    <div className="text-right">
-                                        <span className="text-xs text-slate-500">Vencimento:</span>
-                                        <p className="font-medium text-slate-900 dark:text-white">
-                                            {fatura.data_vencimento
-                                                ? new Date(fatura.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')
-                                                : dados?.vencimento || 'N/A'
-                                            }
-                                        </p>
+                                    <div className="text-right text-xs">
+                                        <span className="text-slate-500">Ref: </span>
+                                        <span className="font-medium">{dados?.mes_ano_referencia || `${fatura.mes_referencia}/${fatura.ano_referencia}`}</span>
                                     </div>
                                 </div>
 
-                                {/* COMPARAÇÃO API vs EXTRAÇÃO */}
-                                <div>
-                                    <h4 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
-                                        <BarChart3 size={18} />
-                                        Comparacao API vs Extracao
-                                    </h4>
-
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                        {/* Coluna API */}
-                                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                                            <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
-                                                <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                                    Dados API (Energisa)
-                                                </h5>
+                                {/* ==================== SEÇÃO 1: CLIENTE CONTRATANTE ==================== */}
+                                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                    <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                                        <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                            <User size={16} />
+                                            Cliente Contratante
+                                        </h5>
+                                    </div>
+                                    <div className="p-4">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                            <div>
+                                                <span className="text-slate-500 block text-xs">Nome</span>
+                                                <span className="font-medium">{fatura.cliente?.nome || fatura.beneficiario?.nome || 'N/A'}</span>
                                             </div>
-                                            <div className="p-4 space-y-3">
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-slate-500">Valor Fatura:</span>
-                                                    <span className="font-medium">{formatarMoeda(fatura.valor_fatura)}</span>
-                                                </div>
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-slate-500">
-                                                        Consumo {fatura.tipo_gd === 'GDI' ? '(líquido)' : ''}:
-                                                    </span>
-                                                    <span className="font-medium">{fatura.consumo_api ? `${fatura.consumo_api} kWh` : 'N/A'}</span>
-                                                </div>
-                                                {/* Info para GD1 explicando a diferença */}
-                                                {fatura.tipo_gd === 'GDI' && fatura.consumo_api !== undefined && (
-                                                    <div className="text-xs text-slate-400 -mt-2">
-                                                        Após compensação GD
-                                                    </div>
-                                                )}
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-slate-500">Vencimento:</span>
-                                                    <span className="font-medium">
-                                                        {fatura.data_vencimento
-                                                            ? new Date(fatura.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR')
-                                                            : 'N/A'
-                                                        }
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-slate-500">Bandeira:</span>
-                                                    <div className="flex flex-col items-end">
-                                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                            fatura.bandeira_tarifaria?.includes('VERDE') ? 'bg-green-100 text-green-700' :
-                                                            fatura.bandeira_tarifaria?.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
-                                                            fatura.bandeira_tarifaria?.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
-                                                            'bg-slate-100 text-slate-700'
-                                                        }`}>
-                                                            {fatura.bandeira_tarifaria || 'N/A'}
-                                                        </span>
-                                                        {/* Detalhamento de períodos da API */}
-                                                        {fatura.bandeira_prevista?.periodos && fatura.bandeira_prevista.periodos.length > 0 && (
-                                                            <div className="mt-1 space-y-0.5">
-                                                                {fatura.bandeira_prevista.periodos.map((p, idx) => (
-                                                                    <div key={idx} className="text-xs text-slate-500 flex items-center gap-1">
-                                                                        <span className={`px-1 py-0.5 rounded ${
-                                                                            p.bandeira?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                                                            p.bandeira?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                                                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                                                        }`}>
-                                                                            {p.bandeira}
-                                                                        </span>
-                                                                        <span>{p.dias} dias</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between text-sm">
-                                                    <span className="text-slate-500">Leitura:</span>
-                                                    <span className="font-medium">
-                                                        {fatura.leitura_anterior && fatura.leitura_atual
-                                                            ? `${fatura.leitura_anterior} → ${fatura.leitura_atual}`
-                                                            : 'N/A'
-                                                        }
-                                                    </span>
-                                                </div>
+                                            <div>
+                                                <span className="text-slate-500 block text-xs">CPF/CNPJ</span>
+                                                <span className="font-medium">{fatura.cliente?.cpf || 'N/A'}</span>
                                             </div>
-                                        </div>
-
-                                        {/* Coluna Extração */}
-                                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                                            <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
-                                                <h5 className="text-sm font-medium text-blue-700 dark:text-blue-400">
-                                                    Dados Extraidos (PDF)
-                                                </h5>
+                                            <div>
+                                                <span className="text-slate-500 block text-xs">Email</span>
+                                                <span className="font-medium text-xs">{fatura.cliente?.email || 'N/A'}</span>
                                             </div>
-                                            <div className="p-4 space-y-3">
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <span className="text-slate-500">Total Fatura:</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-medium">{formatarMoeda(dados?.totais?.total_geral_fatura)}</span>
-                                                        {renderStatusIndicador(
-                                                            compararValores(fatura.valor_fatura, dados?.totais?.total_geral_fatura, 0.02)
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <span className="text-slate-500">
-                                                        Consumo {fatura.tipo_gd === 'GDI' ? '(bruto)' : ''}:
-                                                    </span>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-medium">
-                                                            {dados?.itens_fatura?.consumo_kwh?.quantidade
-                                                                ? `${dados.itens_fatura.consumo_kwh.quantidade} kWh`
-                                                                : 'N/A'
-                                                            }
-                                                        </span>
-                                                        {renderStatusIndicador(
-                                                            // GD1: Usar INFO porque são métricas diferentes (líquido vs bruto)
-                                                            // GD2 sem consumo_api: OK (esperado - consumo totalmente compensado pela usina)
-                                                            fatura.tipo_gd === 'GDI'
-                                                                ? 'INFO'
-                                                                : (fatura.tipo_gd === 'GDII' && !fatura.consumo_api)
-                                                                    ? 'OK'
-                                                                    : compararValores(fatura.consumo_api, dados?.itens_fatura?.consumo_kwh?.quantidade)
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                {/* Info para GD1 explicando a diferença */}
-                                                {fatura.tipo_gd === 'GDI' && dados?.itens_fatura?.consumo_kwh?.quantidade && (
-                                                    <div className="text-xs text-slate-400 -mt-2">
-                                                        Total consumido no período
-                                                    </div>
-                                                )}
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <span className="text-slate-500">Vencimento:</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-medium">{dados?.vencimento || 'N/A'}</span>
-                                                        {renderStatusIndicador(
-                                                            compararDatas(fatura.data_vencimento, dados?.vencimento)
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <span className="text-slate-500">Bandeira:</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="flex flex-col items-end">
-                                                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                                dados?.bandeira_tarifaria?.includes('VERDE') ? 'bg-green-100 text-green-700' :
-                                                                dados?.bandeira_tarifaria?.includes('AMARELA') ? 'bg-yellow-100 text-yellow-700' :
-                                                                dados?.bandeira_tarifaria?.includes('VERMELHA') ? 'bg-red-100 text-red-700' :
-                                                                'bg-slate-100 text-slate-700'
-                                                            }`}>
-                                                                {dados?.bandeira_tarifaria || 'N/A'}
-                                                            </span>
-                                                            {/* Detalhamento de bandeiras extraídas */}
-                                                            {dados?.totais?.bandeiras_detalhamento && dados.totais.bandeiras_detalhamento.length > 0 && (
-                                                                <div className="mt-1 space-y-0.5">
-                                                                    {dados.totais.bandeiras_detalhamento.map((b, idx) => (
-                                                                        <div key={idx} className="text-xs text-slate-500 flex items-center gap-1">
-                                                                            <span className={`px-1 py-0.5 rounded ${
-                                                                                b.cor?.toLowerCase() === 'verde' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                                                                b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                                                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                                                            }`}>
-                                                                                {b.cor}
-                                                                            </span>
-                                                                            <span>{formatarMoeda(b.valor || 0)}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        {renderStatusIndicador(
-                                                            // GD2 sem bandeira: OK (esperado - consumo 100% compensado não gera bandeira)
-                                                            (!dados?.totais?.adicionais_bandeira && fatura.tipo_gd === 'GDII')
-                                                                ? 'OK'
-                                                                : compararStrings(fatura.bandeira_tarifaria, dados?.bandeira_tarifaria)
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <span className="text-slate-500">Leitura:</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-medium">
-                                                            {dados?.leitura_anterior && dados?.leitura_atual
-                                                                ? `${dados.leitura_anterior} → ${dados.leitura_atual}`
-                                                                : 'N/A'
-                                                            }
-                                                        </span>
-                                                        {renderStatusIndicador(
-                                                            compararValores(fatura.leitura_atual, dados?.leitura_atual)
-                                                        )}
-                                                    </div>
-                                                </div>
+                                            <div>
+                                                <span className="text-slate-500 block text-xs">Telefone</span>
+                                                <span className="font-medium">{fatura.cliente?.telefone || 'N/A'}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-slate-500 block text-xs">UC</span>
+                                                <span className="font-medium">{fatura.uc_formatada}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-slate-500 block text-xs">Usina</span>
+                                                <span className="font-medium">{fatura.usina_nome || 'N/A'}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-slate-500 block text-xs">Cliente desde</span>
+                                                <span className="font-medium">{fatura.cliente?.convertido_em ? new Date(fatura.cliente.convertido_em).toLocaleDateString('pt-BR') : 'N/A'}</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* ENERGIA GD - Editável */}
-                                {dados && (
-                                    <div className="border border-blue-200 dark:border-blue-800 rounded-lg overflow-hidden">
-                                        <div className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 border-b border-blue-200 dark:border-blue-800 flex justify-between items-center">
-                                            <h5 className="text-sm font-medium text-blue-700 dark:text-blue-400 flex items-center gap-2">
-                                                <Zap size={16} />
-                                                Energia GD {editMode && <span className="text-xs">(Editando)</span>}
-                                            </h5>
-                                            <button
-                                                onClick={() => setEditMode(!editMode)}
-                                                className={`text-xs px-2 py-1 rounded flex items-center gap-1 transition ${
-                                                    editMode
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-200'
-                                                }`}
-                                            >
-                                                <Pencil size={12} />
-                                                {editMode ? 'Editando' : 'Editar'}
-                                            </button>
-                                        </div>
-                                        <div className="p-4 space-y-4">
-                                            {/* Consumo */}
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm text-slate-500 w-32">Consumo:</span>
-                                                    {editMode ? (
-                                                        <input
-                                                            type="number"
-                                                            value={camposEditados.consumo_kwh || 0}
-                                                            onChange={(e) => setCamposEditados({
-                                                                ...camposEditados,
-                                                                consumo_kwh: parseFloat(e.target.value) || 0
-                                                            })}
-                                                            className="w-24 px-2 py-1 border border-blue-300 dark:border-blue-600 rounded bg-white dark:bg-slate-900 text-sm"
-                                                        />
-                                                    ) : (
-                                                        <span className="font-medium">{dados.itens_fatura?.consumo_kwh?.quantidade || 0}</span>
-                                                    )}
-                                                    <span className="text-sm text-slate-500">kWh</span>
-                                                </div>
-                                                <span className="text-sm text-slate-600">
-                                                    x R$ {(dados.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0).toFixed(4)} = {formatarMoeda(
-                                                        (dados.itens_fatura?.consumo_kwh?.quantidade || 0) *
-                                                        (dados.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0)
-                                                    )}
-                                                </span>
-                                            </div>
-
-                                            {/* Injetada oUC (GD I) */}
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm text-slate-500 w-32">Injetada oUC:</span>
-                                                    {editMode ? (
-                                                        <input
-                                                            type="number"
-                                                            value={camposEditados.injetada_ouc_kwh || 0}
-                                                            onChange={(e) => setCamposEditados({
-                                                                ...camposEditados,
-                                                                injetada_ouc_kwh: parseFloat(e.target.value) || 0
-                                                            })}
-                                                            className="w-24 px-2 py-1 border border-green-300 dark:border-green-600 rounded bg-white dark:bg-slate-900 text-sm"
-                                                        />
-                                                    ) : (
-                                                        <span className="font-medium text-green-600">
-                                                            {calcularInjetadaOUC(dados.itens_fatura)}
-                                                        </span>
-                                                    )}
-                                                    <span className="text-sm text-slate-500">kWh</span>
-                                                </div>
-                                                <span className="text-sm text-green-600">
-                                                    Credito: {formatarMoeda(calcularValorInjetadaOUC(dados.itens_fatura))}
-                                                </span>
-                                            </div>
-
-                                            {/* Injetada mUC (GD II) */}
-                                            {getEnergiaInjetadaMUC(dados.itens_fatura).length > 0 && (
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-sm text-slate-500 w-32">Injetada mUC:</span>
-                                                        {editMode ? (
-                                                            <input
-                                                                type="number"
-                                                                value={camposEditados.injetada_muc_kwh || 0}
-                                                                onChange={(e) => setCamposEditados({
-                                                                    ...camposEditados,
-                                                                    injetada_muc_kwh: parseFloat(e.target.value) || 0
-                                                                })}
-                                                                className="w-24 px-2 py-1 border border-blue-300 dark:border-blue-600 rounded bg-white dark:bg-slate-900 text-sm"
-                                                            />
-                                                        ) : (
-                                                            <span className="font-medium text-blue-600">
-                                                                {calcularInjetadaMUC(dados.itens_fatura)}
-                                                            </span>
-                                                        )}
-                                                        <span className="text-sm text-slate-500">kWh</span>
-                                                    </div>
-                                                    <span className="text-sm text-blue-600">
-                                                        Credito: {formatarMoeda(calcularValorInjetadaMUC(dados.itens_fatura))}
-                                                    </span>
-                                                </div>
-                                            )}
-
-                                            {/* Totalizador Injetada */}
-                                            <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                                    TOTAL INJETADO:
-                                                </span>
-                                                <span className="font-bold text-lg text-green-600">
-                                                    {editMode
-                                                        ? (camposEditados.injetada_ouc_kwh || 0) + (camposEditados.injetada_muc_kwh || 0)
-                                                        : calcularInjetadaTotal(dados)
-                                                    } kWh
-                                                </span>
-                                            </div>
-                                        </div>
+                                {/* ==================== SEÇÃO 2: COMPARAÇÃO API vs EXTRAÇÃO ==================== */}
+                                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                    <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                                        <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                            <BarChart3 size={16} />
+                                            Comparacao API vs Extracao
+                                        </h5>
                                     </div>
-                                )}
-
-                                {/* TAXA MÍNIMA - Apenas GD1 */}
-                                {fatura.tipo_gd === 'GDI' && (
-                                    <div className="border border-purple-200 dark:border-purple-800 rounded-lg overflow-hidden">
-                                        <div className="bg-purple-50 dark:bg-purple-900/20 px-4 py-2 border-b border-purple-200 dark:border-purple-800">
-                                            <h5 className="text-sm font-medium text-purple-700 dark:text-purple-400 flex items-center gap-2">
-                                                <Zap size={16} />
-                                                Taxa Mínima (GD I)
-                                            </h5>
-                                        </div>
-                                        <div className="p-4">
-                                            <div className="grid grid-cols-3 gap-4 text-sm">
-                                                <div>
-                                                    <span className="text-slate-500 block mb-1">Tipo Ligação</span>
-                                                    <p className="font-medium text-slate-900 dark:text-white">
-                                                        {fatura.tipo_ligacao || dados?.ligacao || 'Não identificado'}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <span className="text-slate-500 block mb-1">Mínimo Obrigatório</span>
-                                                    <p className="font-medium text-purple-600">
-                                                        {(fatura.tipo_ligacao || dados?.ligacao) === 'MONOFASICO' ? '30' :
-                                                         (fatura.tipo_ligacao || dados?.ligacao) === 'BIFASICO' ? '50' :
-                                                         (fatura.tipo_ligacao || dados?.ligacao) === 'TRIFASICO' ? '100' : '?'} kWh
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <span className="text-slate-500 block mb-1">Consumo Líquido</span>
-                                                    <p className="font-medium text-purple-700">
-                                                        {Math.max(0, (fatura.consumo_kwh || 0) - (fatura.injetada_kwh || 0))} kWh
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            {/* Cálculo explicativo GD1 */}
-                                            <div className="mt-3 p-2 bg-purple-100 dark:bg-purple-900/30 rounded text-xs text-purple-800 dark:text-purple-300">
-                                                <strong>Cálculo GD1:</strong> {fatura.consumo_kwh || 0} kWh (consumo bruto)
-                                                - {fatura.injetada_kwh || 0} kWh (injetado)
-                                                = {Math.max(0, (fatura.consumo_kwh || 0) - (fatura.injetada_kwh || 0))} kWh (consumo líquido)
-                                            </div>
-                                        </div>
+                                    <div className="p-4">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-slate-200 dark:border-slate-700">
+                                                    <th className="text-left py-2 font-medium text-slate-600 dark:text-slate-400">Campo</th>
+                                                    <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400">API (Energisa)</th>
+                                                    <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400">Extracao (PDF)</th>
+                                                    <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-20">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                    <td className="py-2 text-slate-700 dark:text-slate-300">Valor Fatura</td>
+                                                    <td className="py-2 text-center">{formatarMoeda(fatura.valor_fatura)}</td>
+                                                    <td className="py-2 text-center">{formatarMoeda(dados?.totais?.total_geral_fatura)}</td>
+                                                    <td className="py-2 text-center">{renderStatusIndicador(compararValores(fatura.valor_fatura, dados?.totais?.total_geral_fatura, 0.02))}</td>
+                                                </tr>
+                                                <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                    <td className="py-2 text-slate-700 dark:text-slate-300">Consumo Bruto</td>
+                                                    <td className="py-2 text-center">{fatura.leitura_atual && fatura.leitura_anterior ? `${fatura.leitura_atual - fatura.leitura_anterior} kWh` : 'N/A'}</td>
+                                                    <td className="py-2 text-center">{dados?.itens_fatura?.consumo_kwh?.quantidade ? `${dados.itens_fatura.consumo_kwh.quantidade} kWh` : 'N/A'}</td>
+                                                    <td className="py-2 text-center">{renderStatusIndicador(compararValores(fatura.leitura_atual && fatura.leitura_anterior ? fatura.leitura_atual - fatura.leitura_anterior : null, dados?.itens_fatura?.consumo_kwh?.quantidade))}</td>
+                                                </tr>
+                                                <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                    <td className="py-2 text-slate-700 dark:text-slate-300">Consumo Faturado</td>
+                                                    <td className="py-2 text-center">{fatura.consumo_api ? `${fatura.consumo_api} kWh` : 'N/A'}</td>
+                                                    <td className="py-2 text-center">{(() => { const consumo = dados?.itens_fatura?.consumo_kwh?.quantidade || 0; const inj = calcularInjetadaOUC(dados?.itens_fatura) + calcularInjetadaMUC(dados?.itens_fatura); return `${Math.max(0, consumo - inj).toFixed(0)} kWh`; })()}</td>
+                                                    <td className="py-2 text-center">{renderStatusIndicador('INFO')}</td>
+                                                </tr>
+                                                <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                    <td className="py-2 text-slate-700 dark:text-slate-300">Bandeira</td>
+                                                    <td className="py-2 text-center">
+                                                        {fatura.bandeira_prevista?.periodos?.length ? fatura.bandeira_prevista.periodos.map((p, i) => <span key={i} className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium mr-1 ${p.bandeira?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' : p.bandeira?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{p.bandeira}</span>) : fatura.bandeira_tarifaria || 'N/A'}
+                                                    </td>
+                                                    <td className="py-2 text-center">
+                                                        {dados?.totais?.bandeiras_detalhamento?.length ? dados.totais.bandeiras_detalhamento.map((b, i) => <span key={i} className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium mr-1 ${b.cor?.toLowerCase() === 'verde' ? 'bg-green-100 text-green-700' : b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{b.cor}</span>) : dados?.bandeira_tarifaria || 'N/A'}
+                                                    </td>
+                                                    <td className="py-2 text-center">{renderStatusIndicador(compararStrings(fatura.bandeira_tarifaria, dados?.bandeira_tarifaria))}</td>
+                                                </tr>
+                                                <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                    <td className="py-2 text-slate-700 dark:text-slate-300">Leituras</td>
+                                                    <td className="py-2 text-center">{fatura.leitura_anterior && fatura.leitura_atual ? `${fatura.leitura_anterior} → ${fatura.leitura_atual}` : 'N/A'}</td>
+                                                    <td className="py-2 text-center">{dados?.leitura_anterior && dados?.leitura_atual ? `${dados.leitura_anterior} → ${dados.leitura_atual}` : 'N/A'}</td>
+                                                    <td className="py-2 text-center">{renderStatusIndicador(compararValores(fatura.leitura_atual, dados?.leitura_atual))}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td className="py-2 text-slate-700 dark:text-slate-300">Vencimento</td>
+                                                    <td className="py-2 text-center">{fatura.data_vencimento ? new Date(fatura.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : 'N/A'}</td>
+                                                    <td className="py-2 text-center">{dados?.vencimento || 'N/A'}</td>
+                                                    <td className="py-2 text-center">{renderStatusIndicador(compararDatas(fatura.data_vencimento, dados?.vencimento))}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                     </div>
-                                )}
+                                </div>
 
-                                {/* PRÉVIA DA COBRANÇA - Tabela com cálculos corretos (código n8n) */}
+                                {/* ==================== SEÇÃO 3: RESUMO DA FATURA ==================== */}
                                 {dados && (() => {
-                                    // Calcular valores usando fórmulas do n8n
-                                    const injetadaKwh = fatura.injetada_kwh || calcularInjetadaTotal(dados);
-                                    const tarifaBase = dados?.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0.85;
+                                    // Cálculos para a tabela de composição da fatura
+                                    const consumo = dados?.itens_fatura?.consumo_kwh || {};
+                                    const consumoKwh = consumo.quantidade || 0;
+                                    const consumoTarifa = consumo.preco_unit_com_tributos || 0;
+                                    const consumoValor = consumo.valor || (consumoKwh * consumoTarifa);
 
-                                    // Energia com desconto (30%): kWh × tarifa × 0.70
-                                    const comAssinatura = injetadaKwh * tarifaBase * 0.70;
+                                    // Energia injetada (créditos - valores negativos)
+                                    const injetadaOucKwh = calcularInjetadaOUC(dados?.itens_fatura);
+                                    const injetadaMucKwh = calcularInjetadaMUC(dados?.itens_fatura);
+                                    const injetadaOucValor = calcularValorInjetadaOUC(dados?.itens_fatura);
+                                    const injetadaMucValor = calcularValorInjetadaMUC(dados?.itens_fatura);
+                                    const injetadaTotalKwh = injetadaOucKwh + injetadaMucKwh;
+                                    const injetadaTotalValor = injetadaOucValor + injetadaMucValor;
 
-                                    // Disponibilidade (GD II - Lei 14.300)
-                                    const disponibilidade = dados?.itens_fatura?.ajuste_lei_14300?.valor || 0;
-                                    const disponibilidadeKwh = dados?.itens_fatura?.ajuste_lei_14300?.quantidade || 0;
-
-                                    // GD I: Taxa mínima ou Excedente
+                                    // Taxa mínima (GDI) ou Ajuste Lei 14.300 (GDII)
+                                    const ajuste = dados?.itens_fatura?.ajuste_lei_14300;
                                     const tipoLigacao = fatura.tipo_ligacao || dados?.ligacao;
                                     const taxaMinimaKwh = getTaxaMinima(tipoLigacao);
-                                    const consumoKwh = fatura.consumo_kwh || dados?.itens_fatura?.consumo_kwh?.quantidade || 0;
-                                    const gapKwh = Math.max(0, consumoKwh - injetadaKwh);
-                                    const isExcedente = gapKwh > taxaMinimaKwh;
-                                    const taxaMinimaValor = taxaMinimaKwh * tarifaBase;
-                                    const excedenteValor = gapKwh * tarifaBase;
-
-                                    // Iluminação Pública
-                                    const iluminacao = getValorIluminacaoPublica(dados?.itens_fatura) || fatura.valor_iluminacao_publica || 0;
+                                    const taxaMinimaValor = taxaMinimaKwh * consumoTarifa;
 
                                     // Bandeiras
                                     const bandeiras = dados?.totais?.adicionais_bandeira || 0;
+
+                                    // Iluminação pública
+                                    const iluminacao = getValorIluminacaoPublica(dados?.itens_fatura) || 0;
 
                                     // Outros serviços
                                     const outrosServicos = getLancamentosSemIluminacao(dados?.itens_fatura);
                                     const valorOutros = outrosServicos.reduce((s, item) => s + (item.valor || 0), 0);
 
-                                    // TOTAL DA COBRANÇA (NÃO é o valor da fatura!)
-                                    let totalCobranca = comAssinatura + iluminacao + valorOutros;
-                                    if (fatura.tipo_gd === 'GDII') {
-                                        totalCobranca += disponibilidade;
-                                    } else {
-                                        totalCobranca += (isExcedente ? excedenteValor : taxaMinimaValor) + bandeiras;
-                                    }
+                                    // Total da fatura
+                                    const totalFatura = dados?.totais?.total_geral_fatura || 0;
 
                                     return (
-                                        <div className="border-2 border-indigo-200 dark:border-indigo-800 rounded-lg overflow-hidden">
-                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 px-4 py-2 border-b border-indigo-200 dark:border-indigo-800">
-                                                <h5 className="text-sm font-medium text-indigo-700 dark:text-indigo-400 flex items-center gap-2">
-                                                    <Receipt size={16} />
-                                                    Prévia da Cobrança
+                                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                            <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                                                <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                    <FileText size={16} />
+                                                    Resumo da Fatura (Composicao Original)
                                                 </h5>
                                             </div>
                                             <div className="p-4">
@@ -1597,74 +1328,75 @@ function FaturaAccordionItem({
                                                     <thead>
                                                         <tr className="border-b border-slate-200 dark:border-slate-700">
                                                             <th className="text-left py-2 font-medium text-slate-600 dark:text-slate-400">Item</th>
-                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-24">kWh</th>
-                                                            <th className="text-right py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Valor</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-20">kWh</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Tarifa (R$/kWh)</th>
+                                                            <th className="text-right py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Valor (R$)</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {/* Energia Injetada (com desconto) */}
+                                                        {/* Consumo */}
                                                         <tr className="border-b border-slate-100 dark:border-slate-800">
-                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Energia injetada no período (assinatura)</td>
-                                                            <td className="py-2 text-center text-slate-600">{injetadaKwh.toFixed(0)}</td>
-                                                            <td className="py-2 text-right font-medium text-green-600">{formatarMoeda(comAssinatura)}</td>
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Consumo</td>
+                                                            <td className="py-2 text-center">{consumoKwh.toFixed(0)}</td>
+                                                            <td className="py-2 text-center">{consumoTarifa.toFixed(4)}</td>
+                                                            <td className="py-2 text-right font-medium">{formatarMoeda(consumoValor)}</td>
                                                         </tr>
-
-                                                        {/* GD II: Disponibilidade */}
-                                                        {fatura.tipo_gd === 'GDII' && disponibilidade > 0 && (
-                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
-                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Disponibilidade (GD II – Lei 14.300/22)</td>
-                                                                <td className="py-2 text-center text-slate-600">{disponibilidadeKwh || injetadaKwh.toFixed(0)}</td>
-                                                                <td className="py-2 text-right font-medium">{formatarMoeda(disponibilidade)}</td>
+                                                        {/* Créditos GD (energia injetada) - valores negativos */}
+                                                        {injetadaTotalKwh > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-900/10">
+                                                                <td className="py-2 text-red-700 dark:text-red-400">Creditos GD (oUC + mUC)</td>
+                                                                <td className="py-2 text-center text-red-600">-{injetadaTotalKwh.toFixed(0)}</td>
+                                                                <td className="py-2 text-center text-red-600">{consumoTarifa.toFixed(4)}</td>
+                                                                <td className="py-2 text-right font-medium text-red-600">-{formatarMoeda(Math.abs(injetadaTotalValor))}</td>
                                                             </tr>
                                                         )}
-
-                                                        {/* GD I: Taxa Mínima ou Excedente */}
-                                                        {fatura.tipo_gd === 'GDI' && gapKwh > 0 && (
+                                                        {/* Taxa Mínima (GDI) ou Ajuste Lei 14.300 (GDII) */}
+                                                        {fatura.tipo_gd === 'GDII' && ajuste && ajuste.valor ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
-                                                                <td className="py-2 text-slate-700 dark:text-slate-300">
-                                                                    {isExcedente
-                                                                        ? 'Energia excedente consumida da rede'
-                                                                        : `Taxa mínima (${tipoLigacao || 'GD I'} • ${taxaMinimaKwh} kWh)`
-                                                                    }
-                                                                </td>
-                                                                <td className="py-2 text-center text-slate-600">{isExcedente ? gapKwh : taxaMinimaKwh}</td>
-                                                                <td className={`py-2 text-right font-medium ${isExcedente ? 'text-amber-600' : 'text-purple-600'}`}>
-                                                                    {formatarMoeda(isExcedente ? excedenteValor : taxaMinimaValor)}
-                                                                </td>
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Ajuste Lei 14.300/22 (Fio B)</td>
+                                                                <td className="py-2 text-center">{ajuste.quantidade?.toFixed(0) || '-'}</td>
+                                                                <td className="py-2 text-center">{ajuste.preco_unit_com_tributos?.toFixed(4) || '-'}</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(ajuste.valor)}</td>
                                                             </tr>
-                                                        )}
-
-                                                        {/* Bandeiras (apenas GD I) */}
+                                                        ) : fatura.tipo_gd === 'GDI' ? (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Taxa Minima ({tipoLigacao || 'N/A'})</td>
+                                                                <td className="py-2 text-center">{taxaMinimaKwh}</td>
+                                                                <td className="py-2 text-center">{consumoTarifa.toFixed(4)}</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(taxaMinimaValor)}</td>
+                                                            </tr>
+                                                        ) : null}
+                                                        {/* Bandeiras */}
                                                         {bandeiras > 0 && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
-                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras e ajustes</td>
-                                                                <td className="py-2 text-center text-slate-600">-</td>
-                                                                <td className="py-2 text-right font-medium text-orange-600">{formatarMoeda(bandeiras)}</td>
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras Tarifarias</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(bandeiras)}</td>
                                                             </tr>
                                                         )}
-
                                                         {/* Iluminação Pública */}
                                                         {iluminacao > 0 && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
-                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Contrib de Ilum Pub</td>
-                                                                <td className="py-2 text-center text-slate-600">-</td>
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Iluminacao Publica</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
                                                                 <td className="py-2 text-right font-medium">{formatarMoeda(iluminacao)}</td>
                                                             </tr>
                                                         )}
-
                                                         {/* Outros Serviços */}
-                                                        {valorOutros > 0 && (
-                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
-                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Outros serviços</td>
-                                                                <td className="py-2 text-center text-slate-600">-</td>
-                                                                <td className="py-2 text-right font-medium">{formatarMoeda(valorOutros)}</td>
+                                                        {outrosServicos.map((item, idx) => (
+                                                            <tr key={idx} className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">{item.descricao || 'Outros'}</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(item.valor || 0)}</td>
                                                             </tr>
-                                                        )}
-
-                                                        {/* TOTAL DA COBRANÇA */}
-                                                        <tr className="bg-indigo-50 dark:bg-indigo-900/30">
-                                                            <td colSpan={2} className="py-3 font-bold text-indigo-700 dark:text-indigo-400">TOTAL DA COBRANÇA</td>
-                                                            <td className="py-3 text-right font-bold text-lg text-indigo-600">{formatarMoeda(totalCobranca)}</td>
+                                                        ))}
+                                                        {/* TOTAL */}
+                                                        <tr className="bg-slate-100 dark:bg-slate-800 font-bold">
+                                                            <td className="py-2 text-slate-900 dark:text-white" colSpan={3}>TOTAL DA FATURA</td>
+                                                            <td className="py-2 text-right text-slate-900 dark:text-white">{formatarMoeda(totalFatura)}</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -1673,220 +1405,203 @@ function FaturaAccordionItem({
                                     );
                                 })()}
 
-                                {/* RESUMO ECONOMIA GD - Fórmulas corretas do código n8n */}
-                                {(() => {
-                                    // Calcular valores para exibição usando fórmulas do n8n
-                                    const injetadaKwh = editMode
-                                        ? (camposEditados.injetada_ouc_kwh || 0) + (camposEditados.injetada_muc_kwh || 0)
-                                        : calcularInjetadaOUC(dados?.itens_fatura) + calcularInjetadaMUC(dados?.itens_fatura);
+                                {/* ==================== SEÇÃO 4: PRÉVIA DA COBRANÇA ==================== */}
+                                {dados && (() => {
+                                    // Cálculos para prévia da cobrança (com desconto 30%)
+                                    const injetadaKwh = calcularInjetadaOUC(dados?.itens_fatura) + calcularInjetadaMUC(dados?.itens_fatura);
                                     const tarifaBase = dados?.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0.85;
+                                    const consumoKwh = dados?.itens_fatura?.consumo_kwh?.quantidade || 0;
 
-                                    // FÓRMULAS CORRETAS (código n8n):
-                                    // semAssinatura = energia × tarifa CHEIA
-                                    const semAssinatura = injetadaKwh * tarifaBase;
+                                    // Energia com desconto (30%): kWh × tarifa × 0.70
+                                    const energiaSemDesconto = injetadaKwh * tarifaBase;
+                                    const energiaComDesconto = injetadaKwh * tarifaBase * 0.70;
+                                    const economiaEnergia = energiaSemDesconto - energiaComDesconto;
 
-                                    // comAssinatura = energia × tarifa × 0.70 (30% de desconto)
-                                    const comAssinatura = injetadaKwh * tarifaBase * 0.70;
+                                    // GDI: Taxa mínima / GDII: Disponibilidade
+                                    const ajuste = dados?.itens_fatura?.ajuste_lei_14300;
+                                    const tipoLigacao = fatura.tipo_ligacao || dados?.ligacao;
+                                    const taxaMinimaKwh = getTaxaMinima(tipoLigacao);
+                                    const taxaMinimaValor = taxaMinimaKwh * tarifaBase;
+                                    const disponibilidade = ajuste?.valor || 0;
 
-                                    // economia = diferença (30% sobre energia)
-                                    const economia = semAssinatura - comAssinatura;
+                                    // Bandeiras (só GDI se consumo > injetada)
+                                    const gapKwh = Math.max(0, consumoKwh - injetadaKwh);
+                                    const temConsumoNaoCompensado = gapKwh > 0;
+                                    const bandeiras = (fatura.tipo_gd === 'GDI' || temConsumoNaoCompensado) ? (dados?.totais?.adicionais_bandeira || 0) : 0;
+
+                                    // Iluminação pública
+                                    const iluminacao = getValorIluminacaoPublica(dados?.itens_fatura) || 0;
+
+                                    // Outros serviços
+                                    const outrosServicos = getLancamentosSemIluminacao(dados?.itens_fatura);
+                                    const valorOutros = outrosServicos.reduce((s, item) => s + (item.valor || 0), 0);
+
+                                    // Total da cobrança
+                                    let totalCobranca = energiaComDesconto + iluminacao + valorOutros;
+                                    if (fatura.tipo_gd === 'GDII') {
+                                        totalCobranca += disponibilidade;
+                                    } else {
+                                        totalCobranca += taxaMinimaValor + bandeiras;
+                                    }
 
                                     return (
-                                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-                                            <h5 className="text-sm font-medium text-green-700 dark:text-green-400 mb-3 flex items-center gap-2">
-                                                <TrendingDown size={16} />
-                                                Resumo Economia GD {fatura.tipo_gd && <span className="text-xs bg-green-100 dark:bg-green-800 px-2 py-0.5 rounded">{fatura.tipo_gd}</span>}
-                                            </h5>
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <div className="text-center">
-                                                    <span className="text-xs text-slate-500 block mb-1">Sem assinatura você pagaria</span>
-                                                    <p className="font-bold text-lg text-red-600">
-                                                        {formatarMoeda(semAssinatura)}
-                                                    </p>
-                                                    <span className="text-xs text-slate-400">
-                                                        {injetadaKwh.toFixed(0)} kWh × R$ {tarifaBase.toFixed(4)}
-                                                    </span>
-                                                </div>
-                                                <div className="text-center">
-                                                    <span className="text-xs text-slate-500 block mb-1">Com assinatura você pagará</span>
-                                                    <p className="font-bold text-lg text-blue-600">
-                                                        {formatarMoeda(comAssinatura)}
-                                                    </p>
-                                                    <span className="text-xs text-slate-400">
-                                                        {injetadaKwh.toFixed(0)} kWh × R$ {(tarifaBase * 0.70).toFixed(4)}
-                                                    </span>
-                                                </div>
-                                                <div className="text-center bg-white/50 dark:bg-slate-800/50 rounded-lg p-2">
-                                                    <span className="text-xs text-slate-500 block mb-1">Economia (30%)</span>
-                                                    <p className="font-bold text-xl text-green-600">
-                                                        {formatarMoeda(economia)}
-                                                    </p>
-                                                    <span className="text-xs text-slate-400">
-                                                        30% de R$ {semAssinatura.toFixed(2)}
-                                                    </span>
-                                                </div>
+                                        <div className="border-2 border-indigo-200 dark:border-indigo-800 rounded-lg overflow-hidden">
+                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 px-4 py-2 border-b border-indigo-200 dark:border-indigo-800">
+                                                <h5 className="text-sm font-medium text-indigo-700 dark:text-indigo-400 flex items-center gap-2">
+                                                    <Receipt size={16} />
+                                                    Previa da Cobranca (Com Desconto 30%)
+                                                </h5>
+                                            </div>
+                                            <div className="p-4">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="border-b border-slate-200 dark:border-slate-700">
+                                                            <th className="text-left py-2 font-medium text-slate-600 dark:text-slate-400">Item</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-20">kWh</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Tarifa (R$/kWh)</th>
+                                                            <th className="text-right py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Valor (R$)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {/* Energia Injetada com desconto */}
+                                                        <tr className="border-b border-slate-100 dark:border-slate-800 bg-green-50 dark:bg-green-900/10">
+                                                            <td className="py-2 text-green-700 dark:text-green-400">Energia GD (30% desc.)</td>
+                                                            <td className="py-2 text-center text-green-600">{injetadaKwh.toFixed(0)}</td>
+                                                            <td className="py-2 text-center text-green-600">{(tarifaBase * 0.70).toFixed(4)}</td>
+                                                            <td className="py-2 text-right font-medium text-green-600">{formatarMoeda(energiaComDesconto)}</td>
+                                                        </tr>
+                                                        {/* Taxa Mínima (GDI) ou Disponibilidade (GDII) */}
+                                                        {fatura.tipo_gd === 'GDII' && disponibilidade > 0 ? (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Disponibilidade (Lei 14.300)</td>
+                                                                <td className="py-2 text-center">{ajuste?.quantidade?.toFixed(0) || '-'}</td>
+                                                                <td className="py-2 text-center">{ajuste?.preco_unit_com_tributos?.toFixed(4) || '-'}</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(disponibilidade)}</td>
+                                                            </tr>
+                                                        ) : fatura.tipo_gd === 'GDI' ? (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Taxa Minima ({tipoLigacao || 'N/A'})</td>
+                                                                <td className="py-2 text-center">{taxaMinimaKwh}</td>
+                                                                <td className="py-2 text-center">{tarifaBase.toFixed(4)}</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(taxaMinimaValor)}</td>
+                                                            </tr>
+                                                        ) : null}
+                                                        {/* Bandeiras (se aplicável) */}
+                                                        {bandeiras > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras Tarifarias</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(bandeiras)}</td>
+                                                            </tr>
+                                                        )}
+                                                        {/* Iluminação Pública */}
+                                                        {iluminacao > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Iluminacao Publica</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(iluminacao)}</td>
+                                                            </tr>
+                                                        )}
+                                                        {/* Outros Serviços */}
+                                                        {outrosServicos.map((item, idx) => (
+                                                            <tr key={idx} className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">{item.descricao || 'Outros'}</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatarMoeda(item.valor || 0)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {/* TOTAL */}
+                                                        <tr className="bg-indigo-100 dark:bg-indigo-900/30 font-bold">
+                                                            <td className="py-2 text-indigo-900 dark:text-indigo-200" colSpan={3}>TOTAL DA COBRANCA</td>
+                                                            <td className="py-2 text-right text-indigo-900 dark:text-indigo-200">{formatarMoeda(totalCobranca)}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         </div>
                                     );
                                 })()}
 
-                                {/* BANDEIRA TARIFARIA - Previsao vs Extracao */}
-                                {(fatura.bandeira_prevista || dados?.totais?.adicionais_bandeira) && (
-                                    <div className="border border-orange-200 dark:border-orange-800 rounded-lg overflow-hidden">
-                                        <div className="bg-orange-50 dark:bg-orange-900/20 px-4 py-2 border-b border-orange-200 dark:border-orange-800">
-                                            <h5 className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-2">
-                                                <AlertTriangle size={16} />
-                                                Bandeira Tarifaria - Comparacao
-                                            </h5>
-                                        </div>
-                                        <div className="p-4">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {/* Previsao (API) */}
-                                                <div className="bg-orange-50/50 dark:bg-orange-900/10 rounded-lg p-3">
-                                                    <span className="text-xs text-slate-500 block mb-2">Previsao (API - Calculo Proporcional)</span>
-                                                    <p className="font-bold text-xl text-orange-600 dark:text-orange-400">
-                                                        {fatura.bandeira_prevista
-                                                            ? formatarMoeda(fatura.bandeira_prevista.valor_total)
-                                                            : 'N/A'
-                                                        }
-                                                    </p>
-                                                    {fatura.bandeira_prevista?.periodos && (
-                                                        <div className="mt-2 space-y-1">
-                                                            {fatura.bandeira_prevista.periodos.map((p, idx) => (
-                                                                <div key={idx} className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                                                                    <span className={`px-1.5 py-0.5 rounded ${
-                                                                        p.bandeira.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
-                                                                        p.bandeira.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
-                                                                        'bg-red-100 text-red-700'
-                                                                    }`}>
-                                                                        {p.bandeira}
-                                                                    </span>
-                                                                    <span>{p.dias} dias</span>
-                                                                    <span>({p.consumo_proporcional} kWh)</span>
-                                                                    <span className="ml-auto font-medium">
-                                                                        {formatarMoeda(p.valor_sem_impostos)}
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
+                                {/* ==================== SEÇÃO 5: RESUMO GD (ECONOMIA) ==================== */}
+                                {dados && (() => {
+                                    // Cálculos de economia
+                                    const injetadaKwh = calcularInjetadaOUC(dados?.itens_fatura) + calcularInjetadaMUC(dados?.itens_fatura);
+                                    const tarifaBase = dados?.itens_fatura?.consumo_kwh?.preco_unit_com_tributos || 0.85;
 
-                                                {/* Extraido (PDF) */}
-                                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3">
-                                                    <span className="text-xs text-slate-500 block mb-2">Extraido (PDF)</span>
-                                                    <p className="font-bold text-xl text-slate-900 dark:text-white">
-                                                        {(fatura.bandeira_extraida ?? dados?.totais?.adicionais_bandeira) != null
-                                                            ? formatarMoeda(fatura.bandeira_extraida ?? dados?.totais?.adicionais_bandeira ?? 0)
-                                                            : 'N/A'
-                                                        }
-                                                    </p>
-                                                    {/* Detalhamento por cor (se disponível) */}
-                                                    {dados?.totais?.bandeiras_detalhamento && dados.totais.bandeiras_detalhamento.length > 0 ? (
-                                                        <div className="mt-2 space-y-1">
-                                                            {dados.totais.bandeiras_detalhamento.map((b, idx) => (
-                                                                <div key={idx} className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                                                                    <span className={`px-1.5 py-0.5 rounded ${
-                                                                        b.cor?.toLowerCase() === 'verde' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                                                        b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                                                        b.cor?.toLowerCase() === 'vermelha' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                                                                        'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
-                                                                    }`}>
-                                                                        {b.cor || 'N/A'}
-                                                                    </span>
-                                                                    <span className="ml-auto font-medium">
-                                                                        {formatarMoeda(b.valor || 0)}
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-                                                            {(() => {
-                                                                const bandeiraTipo = fatura.bandeira_tarifaria_pdf || dados?.bandeira_tarifaria;
-                                                                return (
-                                                                    <span className={`px-1.5 py-0.5 rounded ${
-                                                                        bandeiraTipo?.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
-                                                                        bandeiraTipo?.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
-                                                                        bandeiraTipo?.toLowerCase().includes('vermelha') ? 'bg-red-100 text-red-700' :
-                                                                        'bg-slate-100 text-slate-700'
-                                                                    }`}>
-                                                                        {bandeiraTipo || 'N/A'}
-                                                                    </span>
-                                                                );
-                                                            })()}
-                                                        </div>
-                                                    )}
-                                                </div>
+                                    const semAssinatura = injetadaKwh * tarifaBase;
+                                    const comAssinatura = injetadaKwh * tarifaBase * 0.70;
+                                    const economiaMes = semAssinatura - comAssinatura;
+
+                                    // Saldo acumulado e a expirar (do quadro de atenção)
+                                    const saldoAcumulado = dados?.quadro_atencao?.saldo_acumulado || 0;
+                                    const aExpirar = dados?.quadro_atencao?.a_expirar_proximo_ciclo || 0;
+
+                                    // Economia acumulada (do beneficiário)
+                                    const economiaAcumulada = fatura.beneficiario?.economia_acumulada || 0;
+
+                                    return (
+                                        <div className="border border-emerald-200 dark:border-emerald-800 rounded-lg overflow-hidden">
+                                            <div className="bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 border-b border-emerald-200 dark:border-emerald-800">
+                                                <h5 className="text-sm font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                                                    <TrendingUp size={16} />
+                                                    Resumo GD (Economia)
+                                                </h5>
                                             </div>
-
-                                            {/* Indicador de divergencia */}
-                                            {fatura.bandeira_prevista && (fatura.bandeira_extraida ?? dados?.totais?.adicionais_bandeira) != null && (() => {
-                                                const bandeiraExtraida = fatura.bandeira_extraida ?? dados?.totais?.adicionais_bandeira ?? 0;
-                                                const diferenca = Math.abs(fatura.bandeira_prevista.valor_total - bandeiraExtraida);
-                                                return (
-                                                    <div className="mt-3 pt-3 border-t border-orange-200 dark:border-orange-800">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-sm text-slate-600 dark:text-slate-400">
-                                                                Diferenca:
-                                                            </span>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className={`font-medium ${
-                                                                    diferenca < 1 ? 'text-green-600' :
-                                                                    diferenca < 5 ? 'text-yellow-600' :
-                                                                    'text-red-600'
-                                                                }`}>
-                                                                    {formatarMoeda(diferenca)}
-                                                                </span>
-                                                                {renderStatusIndicador(
-                                                                    compararValores(
-                                                                        fatura.bandeira_prevista.valor_total,
-                                                                        bandeiraExtraida,
-                                                                        0.10
-                                                                    )
-                                                                )}
-                                                            </div>
+                                            <div className="p-4 space-y-4">
+                                                {/* Economia do Mês */}
+                                                <div>
+                                                    <p className="text-xs text-slate-500 mb-2 font-medium">Economia do Mes (Energia Injetada)</p>
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 text-center">
+                                                            <p className="text-xs text-slate-500 mb-1">Sem Assinatura</p>
+                                                            <p className="font-bold text-slate-700 dark:text-slate-300">{formatarMoeda(semAssinatura)}</p>
+                                                        </div>
+                                                        <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-3 text-center">
+                                                            <p className="text-xs text-green-600 mb-1">Com Assinatura (30% desc.)</p>
+                                                            <p className="font-bold text-green-700 dark:text-green-400">{formatarMoeda(comAssinatura)}</p>
+                                                        </div>
+                                                        <div className="bg-emerald-100 dark:bg-emerald-900/30 rounded-lg p-3 text-center">
+                                                            <p className="text-xs text-emerald-600 mb-1">Economia</p>
+                                                            <p className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center justify-center gap-1">
+                                                                {formatarMoeda(economiaMes)}
+                                                                <CheckCircle size={14} className="text-emerald-500" />
+                                                            </p>
                                                         </div>
                                                     </div>
-                                                );
-                                            })()}
-                                        </div>
-                                    </div>
-                                )}
+                                                </div>
 
-                                {/* Cliente Contratante */}
-                                {fatura.cliente && (
-                                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
-                                        <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
-                                            <User size={16} />
-                                            Cliente Contratante
-                                        </h5>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                                            <div>
-                                                <span className="text-slate-500">Nome:</span>
-                                                <p className="font-medium">{fatura.cliente.nome}</p>
+                                                {/* Informações de Crédito (do quadro de atenção) */}
+                                                <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+                                                    <p className="text-xs text-slate-500 mb-2 font-medium">Informacoes de Credito (da Fatura)</p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+                                                            <span className="text-sm text-slate-600 dark:text-slate-400">Saldo Acumulado:</span>
+                                                            <span className="font-medium text-slate-900 dark:text-white">{formatarMoeda(saldoAcumulado)}</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
+                                                            <span className="text-sm text-orange-600 dark:text-orange-400">A Expirar (prox. ciclo):</span>
+                                                            <span className="font-medium text-orange-700 dark:text-orange-300">{formatarMoeda(aExpirar)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Economia Acumulada (do cliente) */}
+                                                <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+                                                    <div className="flex items-center justify-between bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 rounded-lg p-4">
+                                                        <div>
+                                                            <p className="text-xs text-emerald-600 font-medium">Economia Acumulada Total</p>
+                                                            <p className="text-xs text-slate-500">(desde o inicio da assinatura)</p>
+                                                        </div>
+                                                        <p className="font-bold text-2xl text-emerald-700 dark:text-emerald-400">{formatarMoeda(economiaAcumulada)}</p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            {fatura.cliente.cpf && (
-                                                <div>
-                                                    <span className="text-slate-500">CPF:</span>
-                                                    <p className="font-medium">{fatura.cliente.cpf}</p>
-                                                </div>
-                                            )}
-                                            {fatura.cliente.email && (
-                                                <div>
-                                                    <span className="text-slate-500">Email:</span>
-                                                    <p className="font-medium">{fatura.cliente.email}</p>
-                                                </div>
-                                            )}
-                                            {fatura.cliente.telefone && (
-                                                <div>
-                                                    <span className="text-slate-500">Telefone:</span>
-                                                    <p className="font-medium">{fatura.cliente.telefone}</p>
-                                                </div>
-                                            )}
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
 
                                 {/* Acoes */}
                                 <div className="flex justify-between items-center gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">

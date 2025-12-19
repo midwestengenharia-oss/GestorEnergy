@@ -770,11 +770,11 @@ export default function GestaoFaturas() {
                     const temConsumoNaoCompensado = gapKwh > 0;
                     const bandeirasCobranca = (fatura.tipo_gd === 'GDI' || temConsumoNaoCompensado) ? bandeiras : 0;
 
-                    let totalCobranca = energiaComDesconto + energiaExcedenteValor + iluminacao + valorOutros;
+                    let totalCobranca = energiaComDesconto + energiaExcedenteValor + iluminacao + valorOutros + bandeirasCobranca;
                     if (fatura.tipo_gd === 'GDII') {
                         totalCobranca += disponibilidade;
                     } else {
-                        totalCobranca += taxaMinimaValor + bandeirasCobranca;
+                        totalCobranca += taxaMinimaValor;
                     }
 
                     const economiaMes = energiaSemDesconto - energiaComDesconto;
@@ -949,14 +949,14 @@ export default function GestaoFaturas() {
                                                         <tr className="border-b border-slate-100 dark:border-slate-800">
                                                             <td className="py-2 text-slate-700 dark:text-slate-300">Consumo</td>
                                                             <td className="py-2 text-center">{consumoKwh.toFixed(0)}</td>
-                                                            <td className="py-2 text-center">{consumoTarifa.toFixed(4)}</td>
+                                                            <td className="py-2 text-center">{consumoTarifa.toFixed(6)}</td>
                                                             <td className="py-2 text-right font-medium">{formatCurrency(consumoValor)}</td>
                                                         </tr>
                                                         {injetadaTotalKwh > 0 && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-900/10">
                                                                 <td className="py-2 text-red-700 dark:text-red-400">Creditos GD (oUC + mUC)</td>
                                                                 <td className="py-2 text-center text-red-600">-{injetadaTotalKwh.toFixed(0)}</td>
-                                                                <td className="py-2 text-center text-red-600">{consumoTarifa.toFixed(4)}</td>
+                                                                <td className="py-2 text-center text-red-600">{consumoTarifa.toFixed(6)}</td>
                                                                 <td className="py-2 text-right font-medium text-red-600">-{formatCurrency(Math.abs(injetadaTotalValor))}</td>
                                                             </tr>
                                                         )}
@@ -964,14 +964,14 @@ export default function GestaoFaturas() {
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Ajuste Lei 14.300/22</td>
                                                                 <td className="py-2 text-center">{ajuste.quantidade?.toFixed(0) || '-'}</td>
-                                                                <td className="py-2 text-center">{ajuste.preco_unit_com_tributos?.toFixed(4) || '-'}</td>
+                                                                <td className="py-2 text-center">{ajuste.preco_unit_com_tributos?.toFixed(6) || '-'}</td>
                                                                 <td className="py-2 text-right font-medium">{formatCurrency(ajuste.valor)}</td>
                                                             </tr>
                                                         ) : fatura.tipo_gd === 'GDI' ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Taxa Minima ({tipoLigacao || '-'})</td>
                                                                 <td className="py-2 text-center">{taxaMinimaKwh}</td>
-                                                                <td className="py-2 text-center">{consumoTarifa.toFixed(4)}</td>
+                                                                <td className="py-2 text-center">{consumoTarifa.toFixed(6)}</td>
                                                                 <td className="py-2 text-right font-medium">{formatCurrency(taxaMinimaValor)}</td>
                                                             </tr>
                                                         ) : null}
@@ -1047,14 +1047,14 @@ export default function GestaoFaturas() {
                                                         <tr className="border-b border-slate-100 dark:border-slate-800 bg-green-50 dark:bg-green-900/10">
                                                             <td className="py-2 text-green-700 dark:text-green-400">Energia GD (30% desc.)</td>
                                                             <td className="py-2 text-center text-green-600">{injetadaTotalKwh.toFixed(0)}</td>
-                                                            <td className="py-2 text-center text-green-600">{(tarifaBase * 0.70).toFixed(4)}</td>
+                                                            <td className="py-2 text-center text-green-600">{(tarifaBase * 0.70).toFixed(6)}</td>
                                                             <td className="py-2 text-right font-medium text-green-600">{formatCurrency(energiaComDesconto)}</td>
                                                         </tr>
                                                         {gapKwh > 0 && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800 bg-orange-50 dark:bg-orange-900/10">
                                                                 <td className="py-2 text-orange-700 dark:text-orange-400">Energia Excedente (nao compensada)</td>
                                                                 <td className="py-2 text-center text-orange-600">{gapKwh.toFixed(0)}</td>
-                                                                <td className="py-2 text-center text-orange-600">{tarifaBase.toFixed(4)}</td>
+                                                                <td className="py-2 text-center text-orange-600">{tarifaBase.toFixed(6)}</td>
                                                                 <td className="py-2 text-right font-medium text-orange-600">{formatCurrency(energiaExcedenteValor)}</td>
                                                             </tr>
                                                         )}
@@ -1062,14 +1062,14 @@ export default function GestaoFaturas() {
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Disponibilidade (Lei 14.300)</td>
                                                                 <td className="py-2 text-center">{ajuste?.quantidade?.toFixed(0) || '-'}</td>
-                                                                <td className="py-2 text-center">{ajuste?.preco_unit_com_tributos?.toFixed(4) || '-'}</td>
+                                                                <td className="py-2 text-center">{ajuste?.preco_unit_com_tributos?.toFixed(6) || '-'}</td>
                                                                 <td className="py-2 text-right font-medium">{formatCurrency(disponibilidade)}</td>
                                                             </tr>
                                                         ) : fatura.tipo_gd === 'GDI' ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Taxa Minima ({tipoLigacao || '-'})</td>
                                                                 <td className="py-2 text-center">{taxaMinimaKwh}</td>
-                                                                <td className="py-2 text-center">{tarifaBase.toFixed(4)}</td>
+                                                                <td className="py-2 text-center">{tarifaBase.toFixed(6)}</td>
                                                                 <td className="py-2 text-right font-medium">{formatCurrency(taxaMinimaValor)}</td>
                                                             </tr>
                                                         ) : null}

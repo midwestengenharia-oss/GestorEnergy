@@ -885,20 +885,20 @@ export default function GestaoFaturas() {
                                                             <td className="py-2 text-slate-700 dark:text-slate-300">Bandeira</td>
                                                             <td className="py-2 text-center">
                                                                 {bandeiraApi ? (
-                                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium capitalize ${
                                                                         bandeiraApi.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
                                                                         bandeiraApi.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
                                                                         'bg-red-100 text-red-700'
-                                                                    }`}>{bandeiraApi}</span>
+                                                                    }`}>{bandeiraApi.toLowerCase()}</span>
                                                                 ) : '-'}
                                                             </td>
                                                             <td className="py-2 text-center">
                                                                 {dados?.bandeira_tarifaria ? (
-                                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium capitalize ${
                                                                         dados.bandeira_tarifaria.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
                                                                         dados.bandeira_tarifaria.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
                                                                         'bg-red-100 text-red-700'
-                                                                    }`}>{dados.bandeira_tarifaria}</span>
+                                                                    }`}>{dados.bandeira_tarifaria.toLowerCase()}</span>
                                                                 ) : '-'}
                                                             </td>
                                                             <td className="py-2 text-center">{renderStatusIndicador(compararStrings(bandeiraApi, dados?.bandeira_tarifaria))}</td>

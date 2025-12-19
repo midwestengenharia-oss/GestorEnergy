@@ -1165,136 +1165,141 @@ class FaturasService:
             totais = TotaisGestaoResponse()
 
             for f in faturas_raw:
-                # Validar campos obrigatórios da fatura
-                fatura_id = f.get("id")
-                uc_id = f.get("uc_id")
-                mes_ref = f.get("mes_referencia")
-                ano_ref = f.get("ano_referencia")
-                if not fatura_id or not uc_id or not mes_ref or not ano_ref:
-                    logger.warning(f"Fatura com campos obrigatórios faltando: id={fatura_id}, uc={uc_id}")
-                    continue
-
-                beneficiario = beneficiarios_por_uc.get(uc_id)
-                if not beneficiario:
-                    continue
-
-                # Formatar UC
-                uc = f.get("unidades_consumidoras", {})
-                uc_formatada = self._formatar_uc(
-                    uc.get("cod_empresa", 0),
-                    uc.get("cdc", 0),
-                    uc.get("digito_verificador", 0)
-                )
-
-                # Buscar cobrança
-                cobranca = cobrancas_por_fatura.get(fatura_id)
-
-                # Calcular status do fluxo
-                status = self._calcular_status_fluxo(f, cobranca)
-
-                # Filtrar por status se especificado
-                if status_fluxo and status not in status_fluxo:
-                    continue
-
-                # Atualizar totais
-                if status == "AGUARDANDO_PDF":
-                    totais.aguardando_pdf += 1
-                elif status == "PDF_RECEBIDO":
-                    totais.pdf_recebido += 1
-                elif status == "EXTRAIDA":
-                    totais.extraida += 1
-                elif status == "COBRANCA_RASCUNHO":
-                    totais.cobranca_rascunho += 1
-                elif status == "COBRANCA_EMITIDA":
-                    totais.cobranca_emitida += 1
-                elif status == "COBRANCA_PAGA":
-                    totais.cobranca_paga += 1
-                elif status == "FATURA_QUITADA":
-                    totais.fatura_quitada += 1
-
-                # Determinar tipo GD
-                tipo_gd = None
-                dados_extraidos = f.get("dados_extraidos") or {}
-                if isinstance(dados_extraidos, dict):
-                    tipo_gd = dados_extraidos.get("tipo_gd") or dados_extraidos.get("modelo_gd")
-
-                # Busca via busca textual
-                if busca:
-                    busca_lower = busca.lower()
-                    nome = (beneficiario.get("nome") or "").lower()
-                    if busca_lower not in nome and busca_lower not in uc_formatada.lower():
+                try:
+                    # Validar campos obrigatórios da fatura
+                    fatura_id = f.get("id")
+                    uc_id = f.get("uc_id")
+                    mes_ref = f.get("mes_referencia")
+                    ano_ref = f.get("ano_referencia")
+                    if not fatura_id or not uc_id or not mes_ref or not ano_ref:
+                        logger.warning(f"Fatura com campos obrigatórios faltando: id={fatura_id}, uc={uc_id}")
                         continue
 
-                # Validar dados obrigatórios do beneficiário
-                beneficiario_id = beneficiario.get("id")
-                beneficiario_cpf = beneficiario.get("cpf") or ""  # CPF pode ser vazio
-                if not beneficiario_id:
-                    logger.warning(f"Beneficiário sem id, pulando fatura {fatura_id}")
+                    beneficiario = beneficiarios_por_uc.get(uc_id)
+                    if not beneficiario:
+                        continue
+
+                    # Formatar UC (pode ser None quando LEFT JOIN não encontra)
+                    uc = f.get("unidades_consumidoras") or {}
+                    uc_formatada = self._formatar_uc(
+                        uc.get("cod_empresa", 0) if uc else 0,
+                        uc.get("cdc", 0) if uc else 0,
+                        uc.get("digito_verificador", 0) if uc else 0
+                    )
+
+                    # Buscar cobrança
+                    cobranca = cobrancas_por_fatura.get(fatura_id)
+
+                    # Calcular status do fluxo
+                    status = self._calcular_status_fluxo(f, cobranca)
+
+                    # Filtrar por status se especificado
+                    if status_fluxo and status not in status_fluxo:
+                        continue
+
+                    # Atualizar totais
+                    if status == "AGUARDANDO_PDF":
+                        totais.aguardando_pdf += 1
+                    elif status == "PDF_RECEBIDO":
+                        totais.pdf_recebido += 1
+                    elif status == "EXTRAIDA":
+                        totais.extraida += 1
+                    elif status == "COBRANCA_RASCUNHO":
+                        totais.cobranca_rascunho += 1
+                    elif status == "COBRANCA_EMITIDA":
+                        totais.cobranca_emitida += 1
+                    elif status == "COBRANCA_PAGA":
+                        totais.cobranca_paga += 1
+                    elif status == "FATURA_QUITADA":
+                        totais.fatura_quitada += 1
+
+                    # Determinar tipo GD
+                    tipo_gd = None
+                    dados_extraidos = f.get("dados_extraidos") or {}
+                    if isinstance(dados_extraidos, dict):
+                        tipo_gd = dados_extraidos.get("tipo_gd") or dados_extraidos.get("modelo_gd")
+
+                    # Busca via busca textual
+                    if busca:
+                        busca_lower = busca.lower()
+                        nome = (beneficiario.get("nome") or "").lower()
+                        if busca_lower not in nome and busca_lower not in uc_formatada.lower():
+                            continue
+
+                    # Validar dados obrigatórios do beneficiário
+                    beneficiario_id = beneficiario.get("id")
+                    beneficiario_cpf = beneficiario.get("cpf") or ""  # CPF pode ser vazio
+                    if not beneficiario_id:
+                        logger.warning(f"Beneficiário sem id, pulando fatura {fatura_id}")
+                        continue
+
+                    # Validar usina_id
+                    usina_data = beneficiario.get("usinas") or {}
+                    usina_id_val = usina_data.get("id") or beneficiario.get("usina_id")
+                    if not usina_id_val:
+                        logger.warning(f"Beneficiário {beneficiario_id} sem usina_id, pulando fatura {fatura_id}")
+                        continue
+
+                    # Montar resposta do beneficiário
+                    beneficiario_resp = BeneficiarioGestaoResponse(
+                        id=beneficiario_id,
+                        nome=beneficiario.get("nome"),
+                        cpf=beneficiario_cpf,
+                        email=beneficiario.get("email"),
+                        telefone=beneficiario.get("telefone")
+                    )
+
+                    # Montar resposta da usina
+                    usina_resp = UsinaGestaoResponse(
+                        id=usina_id_val,
+                        nome=usina_data.get("nome") if usina_data else None
+                    )
+
+                    # Montar resposta da cobrança
+                    cobranca_resp = None
+                    if cobranca and cobranca.get("id"):
+                        vencimento = self._parse_date_field(cobranca.get("vencimento"))
+                        pago_em = self._parse_date_field(cobranca.get("pago_em"))
+
+                        # Só criar resposta se vencimento foi convertido com sucesso
+                        if vencimento:
+                            cobranca_resp = CobrancaGestaoResponse(
+                                id=cobranca["id"],
+                                status=cobranca.get("status") or "RASCUNHO",
+                                valor_total=self._parse_decimal_field(cobranca.get("valor_total")),
+                                vencimento=vencimento,
+                                qr_code_pix=cobranca.get("qr_code_pix"),
+                                qr_code_pix_image=cobranca.get("qr_code_pix_image"),
+                                pago_em=pago_em
+                            )
+
+                    # Montar fatura
+                    fatura_gestao = FaturaGestaoResponse(
+                        id=fatura_id,
+                        uc_id=uc_id,
+                        uc_formatada=uc_formatada,
+                        mes_referencia=mes_ref,
+                        ano_referencia=ano_ref,
+                        status_fluxo=status,
+                        tem_pdf=f.get("pdf_path") is not None,
+                        valor_fatura=self._parse_decimal_field(f.get("valor_fatura")) if f.get("valor_fatura") is not None else None,
+                        extracao_status=f.get("extracao_status"),
+                        extracao_score=f.get("extracao_score"),
+                        dados_extraidos=dados_extraidos if dados_extraidos else None,
+                        dados_api=f.get("dados_api"),
+                        tipo_gd=tipo_gd,
+                        tipo_ligacao=uc.get("tipo_ligacao") if uc else None,
+                        bandeira_tarifaria=f.get("bandeira_tarifaria"),
+                        beneficiario=beneficiario_resp,
+                        usina=usina_resp,
+                        cobranca=cobranca_resp
+                    )
+
+                    faturas_gestao.append(fatura_gestao)
+
+                except Exception as e:
+                    logger.warning(f"Erro ao processar fatura {f.get('id')}: {e}")
                     continue
-
-                # Validar usina_id
-                usina_data = beneficiario.get("usinas") or {}
-                usina_id_val = usina_data.get("id") or beneficiario.get("usina_id")
-                if not usina_id_val:
-                    logger.warning(f"Beneficiário {beneficiario_id} sem usina_id, pulando fatura {fatura_id}")
-                    continue
-
-                # Montar resposta do beneficiário
-                beneficiario_resp = BeneficiarioGestaoResponse(
-                    id=beneficiario_id,
-                    nome=beneficiario.get("nome"),
-                    cpf=beneficiario_cpf,
-                    email=beneficiario.get("email"),
-                    telefone=beneficiario.get("telefone")
-                )
-
-                # Montar resposta da usina
-                usina_resp = UsinaGestaoResponse(
-                    id=usina_id_val,
-                    nome=usina_data.get("nome")
-                )
-
-                # Montar resposta da cobrança
-                cobranca_resp = None
-                if cobranca and cobranca.get("id"):
-                    vencimento = self._parse_date_field(cobranca.get("vencimento"))
-                    pago_em = self._parse_date_field(cobranca.get("pago_em"))
-
-                    # Só criar resposta se vencimento foi convertido com sucesso
-                    if vencimento:
-                        cobranca_resp = CobrancaGestaoResponse(
-                            id=cobranca["id"],
-                            status=cobranca.get("status") or "RASCUNHO",
-                            valor_total=self._parse_decimal_field(cobranca.get("valor_total")),
-                            vencimento=vencimento,
-                            qr_code_pix=cobranca.get("qr_code_pix"),
-                            qr_code_pix_image=cobranca.get("qr_code_pix_image"),
-                            pago_em=pago_em
-                        )
-
-                # Montar fatura
-                fatura_gestao = FaturaGestaoResponse(
-                    id=fatura_id,
-                    uc_id=uc_id,
-                    uc_formatada=uc_formatada,
-                    mes_referencia=mes_ref,
-                    ano_referencia=ano_ref,
-                    status_fluxo=status,
-                    tem_pdf=f.get("pdf_path") is not None,
-                    valor_fatura=self._parse_decimal_field(f.get("valor_fatura")) if f.get("valor_fatura") is not None else None,
-                    extracao_status=f.get("extracao_status"),
-                    extracao_score=f.get("extracao_score"),
-                    dados_extraidos=dados_extraidos if dados_extraidos else None,
-                    dados_api=f.get("dados_api"),
-                    tipo_gd=tipo_gd,
-                    tipo_ligacao=uc.get("tipo_ligacao"),
-                    bandeira_tarifaria=f.get("bandeira_tarifaria"),
-                    beneficiario=beneficiario_resp,
-                    usina=usina_resp,
-                    cobranca=cobranca_resp
-                )
-
-                faturas_gestao.append(fatura_gestao)
 
             return GestaoFaturasResponse(faturas=faturas_gestao, totais=totais)
 

@@ -24,6 +24,7 @@ const STATUS_CONFIG: Record<StatusFluxo, { label: string; cor: string; corBg: st
 };
 
 const MESES = [
+    { value: '', label: 'Todos os meses' },
     { value: 1, label: 'Janeiro' },
     { value: 2, label: 'Fevereiro' },
     { value: 3, label: 'Marco' },
@@ -59,7 +60,7 @@ export default function GestaoFaturas() {
 
     // Filtros
     const [filtroUsina, setFiltroUsina] = useState<number | ''>('');
-    const [filtroMes, setFiltroMes] = useState<number>(new Date().getMonth() + 1);
+    const [filtroMes, setFiltroMes] = useState<number | ''>('');
     const [filtroAno, setFiltroAno] = useState<number>(new Date().getFullYear());
     const [filtroBusca, setFiltroBusca] = useState('');
 
@@ -85,7 +86,7 @@ export default function GestaoFaturas() {
             setRefreshing(true);
             const response = await faturasApi.gestao({
                 usina_id: filtroUsina || undefined,
-                mes_referencia: filtroMes,
+                mes_referencia: filtroMes || undefined,
                 ano_referencia: filtroAno,
                 busca: filtroBusca || undefined,
             });
@@ -594,11 +595,11 @@ export default function GestaoFaturas() {
                         <label className="block text-xs font-medium text-slate-500 mb-1">Mes</label>
                         <select
                             value={filtroMes}
-                            onChange={(e) => setFiltroMes(Number(e.target.value))}
+                            onChange={(e) => setFiltroMes(e.target.value ? Number(e.target.value) : '')}
                             className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
                             {MESES.map(m => (
-                                <option key={m.value} value={m.value}>{m.label}</option>
+                                <option key={String(m.value)} value={m.value}>{m.label}</option>
                             ))}
                         </select>
                     </div>

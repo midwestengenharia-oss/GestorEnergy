@@ -72,6 +72,26 @@ class CobrancaGerarLoteRequest(BaseModel):
     sobrescrever_existentes: bool = False
 
 
+class CamposEditaveisCobranca(BaseModel):
+    """
+    Campos que podem ser editados manualmente em uma cobrança.
+    Usado para ajustes manuais pelo gestor.
+    """
+    # Valores monetários editáveis
+    taxa_minima_valor: Optional[Decimal] = Field(None, ge=0, description="Valor da taxa mínima em R$")
+    energia_excedente_valor: Optional[Decimal] = Field(None, ge=0, description="Valor da energia excedente em R$")
+    disponibilidade_valor: Optional[Decimal] = Field(None, ge=0, description="Valor da disponibilidade GD2 em R$")
+    bandeiras_valor: Optional[Decimal] = Field(None, ge=0, description="Valor das bandeiras tarifárias em R$")
+    iluminacao_publica_valor: Optional[Decimal] = Field(None, ge=0, description="Valor da iluminação pública em R$")
+    servicos_valor: Optional[Decimal] = Field(None, ge=0, description="Valor de serviços adicionais em R$")
+
+    # Vencimento
+    vencimento: Optional[date] = Field(None, description="Nova data de vencimento")
+
+    # Observações
+    observacoes_internas: Optional[str] = Field(None, max_length=1000, description="Observações internas do gestor")
+
+
 # ========================
 # Response Schemas
 # ========================

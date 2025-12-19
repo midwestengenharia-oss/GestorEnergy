@@ -102,17 +102,17 @@ class ReportGeneratorV3:
     </div>
   </div>
 
-  <!-- Comparação energia -->
+  <!-- Comparação energia compensada (onde o desconto de 30% é aplicado) -->
   <div class="content-block">
     <div class="comparison-block">
       <div class="comparison-grid">
         <div class="comparison-row">
           <div class="comparison-label">Sem a assinatura você pagaria:</div>
-          <div class="comparison-value value-without">{self._fmt_money(cobranca.valor_sem_assinatura)}</div>
+          <div class="comparison-value value-without">{self._fmt_money(cobranca.energia_compensada_sem_desconto)}</div>
         </div>
         <div class="comparison-row">
           <div class="comparison-label">Com a assinatura você pagará:</div>
-          <div class="comparison-value value-with">{self._fmt_money(cobranca.valor_com_assinatura)}</div>
+          <div class="comparison-value value-with">{self._fmt_money(cobranca.energia_compensada_com_desconto)}</div>
         </div>
       </div>
       <div class="savings-row">

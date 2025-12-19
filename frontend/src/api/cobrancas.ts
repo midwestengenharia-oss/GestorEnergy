@@ -156,6 +156,22 @@ export const cobrancasApi = {
         api.post<Cobranca>(`/cobrancas/${id}/aprovar`, null, {
             params: { enviar_email: enviarEmail }
         }),
+
+    // Editar campos específicos da cobrança
+    editarCampos: (id: number, campos: CamposEditaveisCobranca) =>
+        api.put<Cobranca>(`/cobrancas/${id}/editar-campos`, campos),
 };
+
+// Interface para campos editáveis da cobrança
+export interface CamposEditaveisCobranca {
+    taxa_minima_valor?: number;
+    energia_excedente_valor?: number;
+    disponibilidade_valor?: number;
+    bandeiras_valor?: number;
+    iluminacao_publica_valor?: number;
+    servicos_valor?: number;
+    vencimento?: string;
+    observacoes_internas?: string;
+}
 
 export default cobrancasApi;

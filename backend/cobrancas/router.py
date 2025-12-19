@@ -13,6 +13,7 @@ from .schemas import (
     CobrancaUpdateRequest,
     CobrancaPagamentoRequest,
     CobrancaGerarLoteRequest,
+    CamposEditaveisCobranca,
     CobrancaResponse,
     CobrancaListResponse,
     EstatisticasCobrancaResponse,
@@ -391,6 +392,53 @@ async def aprovar_cobranca(
     resultado = await service.aprovar_cobranca(
         cobranca_id=cobranca_id,
         enviar_email=enviar_email,
+        user_id=current_user.id,
+        perfis=current_user.perfis
+    )
+    return resultado
+
+
+@router.put(
+    "/{cobranca_id}/editar-campos",
+    response_model=CobrancaResponse,
+    summary="Editar campos da cobrança",
+    description="Edita campos específicos da cobrança e regenera o relatório HTML",
+    dependencies=[Depends(require_perfil("superadmin", "proprietario", "gestor"))]
+)
+async def editar_campos_cobranca(
+    cobranca_id: int,
+    campos: CamposEditaveisCobranca,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)] = None,
+):
+    """
+    Edita campos específicos de uma cobrança.
+
+    Campos editáveis:
+    - taxa_minima_valor: Valor da taxa mínima em R$
+    - energia_excedente_valor: Valor da energia excedente em R$
+    - disponibilidade_valor: Valor da disponibilidade GD2 em R$
+    - bandeiras_valor: Valor das bandeiras tarifárias em R$
+    - iluminacao_publica_valor: Valor da iluminação pública em R$
+    - servicos_valor: Valor de serviços adicionais em R$
+    - vencimento: Nova data de vencimento
+    - observacoes_internas: Observações internas do gestor
+
+    Comportamento:
+    - Só permite edição de cobranças com status RASCUNHO ou EMITIDA
+    - Recalcula valor_total automaticamente
+    - Regenera o relatório HTML com os novos valores
+    - Marca a cobrança como editada manualmente
+
+    Args:
+        cobranca_id: ID da cobrança
+        campos: Campos a serem editados
+
+    Returns:
+        Cobrança atualizada com novo HTML gerado
+    """
+    resultado = await service.editar_campos_cobranca(
+        cobranca_id=cobranca_id,
+        campos=campos.model_dump(exclude_unset=True),
         user_id=current_user.id,
         perfis=current_user.perfis
     )

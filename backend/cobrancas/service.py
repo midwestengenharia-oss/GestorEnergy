@@ -583,7 +583,7 @@ class CobrancasService:
         uc = None
         if uc_id_fatura:
             uc_result = self.supabase.table("unidades_consumidoras").select(
-                "id, cod_empresa, cdc, digito_verificador, cidade, uf"
+                "id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, cidade, uf"
             ).eq("id", uc_id_fatura).single().execute()
             if uc_result.data:
                 uc = uc_result.data
@@ -689,8 +689,8 @@ class CobrancasService:
             dados_fatura=dados_extraidos,
             beneficiario={
                 "nome": beneficiario.get("nome"),
-                "endereco": beneficiario.get("endereco"),
-                "numero": beneficiario.get("numero"),
+                "endereco": uc.get("endereco") if uc else None,
+                "numero": uc.get("numero_imovel") if uc else None,
                 "cidade": uc.get("cidade") if uc else None
             },
             qr_code_pix=fatura.get("qr_code_pix_image"),
@@ -1172,3 +1172,220 @@ class CobrancasService:
         # response = sg.send(message)
 
         pass
+
+    async def editar_campos_cobranca(
+        self,
+        cobranca_id: int,
+        campos: dict,
+        user_id: str,
+        perfis: list[str]
+    ) -> dict:
+        """
+        Edita campos específicos de uma cobrança e regenera o relatório HTML.
+
+        Campos editáveis:
+        - taxa_minima_valor
+        - energia_excedente_valor
+        - disponibilidade_valor
+        - bandeiras_valor
+        - iluminacao_publica_valor
+        - servicos_valor
+        - vencimento
+        - observacoes_internas
+
+        Args:
+            cobranca_id: ID da cobrança
+            campos: Dicionário com campos a editar
+            user_id: ID do usuário
+            perfis: Lista de perfis do usuário
+
+        Returns:
+            Cobrança atualizada
+
+        Raises:
+            NotFoundError: Se cobrança não existe
+            ForbiddenError: Se usuário não tem permissão
+            ValidationError: Se status não permite edição
+        """
+        from fastapi import HTTPException
+        from .report_generator_v3 import ReportGeneratorV3
+        from ..faturas.extraction_schemas import FaturaExtraidaSchema
+        from .calculator import CobrancaCalculada
+
+        # 1. Buscar cobrança com relacionamentos
+        response = self.supabase.table("cobrancas").select(
+            """
+            *,
+            beneficiarios!inner(
+                id, nome, cpf, email, telefone, economia_acumulada,
+                usinas(id, nome)
+            ),
+            unidades_consumidoras(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, cidade, uf),
+            faturas(id, dados_extraidos)
+            """
+        ).eq("id", cobranca_id).single().execute()
+
+        if not response.data:
+            raise NotFoundError(f"Cobrança {cobranca_id} não encontrada")
+
+        cobranca = response.data
+
+        # 2. Verificar permissão
+        if not self._pode_gerenciar_cobranca(cobranca, user_id, perfis):
+            raise ForbiddenError("Usuário não tem permissão para editar esta cobrança")
+
+        # 3. Verificar status permite edição
+        status_atual = cobranca.get("status")
+        if status_atual in ["PAGA", "CANCELADA"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cobrança com status '{status_atual}' não pode ser editada"
+            )
+
+        # 4. Preparar dados para atualização
+        update_data = {}
+
+        # Campos monetários editáveis
+        campos_monetarios = [
+            "taxa_minima_valor",
+            "energia_excedente_valor",
+            "disponibilidade_valor",
+            "bandeiras_valor",
+            "iluminacao_publica_valor",
+            "servicos_valor"
+        ]
+
+        for campo in campos_monetarios:
+            if campo in campos and campos[campo] is not None:
+                update_data[campo] = float(campos[campo])
+
+        # Vencimento
+        if "vencimento" in campos and campos["vencimento"] is not None:
+            update_data["vencimento"] = str(campos["vencimento"])
+
+        # Observações
+        if "observacoes_internas" in campos and campos["observacoes_internas"] is not None:
+            update_data["observacoes_internas"] = campos["observacoes_internas"]
+
+        if not update_data:
+            logger.info(f"Nenhum campo para atualizar na cobrança {cobranca_id}")
+            return await self.buscar(cobranca_id, user_id, perfis)
+
+        # 5. Recalcular valor_total se algum campo monetário foi alterado
+        campos_monetarios_alterados = any(c in update_data for c in campos_monetarios)
+
+        if campos_monetarios_alterados:
+            # Obter valores atuais e mesclar com os novos
+            valor_energia_assinatura = float(cobranca.get("valor_energia_assinatura") or 0)
+            taxa_minima = float(update_data.get("taxa_minima_valor", cobranca.get("taxa_minima_valor") or 0))
+            energia_excedente = float(update_data.get("energia_excedente_valor", cobranca.get("energia_excedente_valor") or 0))
+            disponibilidade = float(update_data.get("disponibilidade_valor", cobranca.get("disponibilidade_valor") or 0))
+            bandeiras = float(update_data.get("bandeiras_valor", cobranca.get("bandeiras_valor") or 0))
+            iluminacao = float(update_data.get("iluminacao_publica_valor", cobranca.get("iluminacao_publica_valor") or 0))
+            servicos = float(update_data.get("servicos_valor", cobranca.get("servicos_valor") or 0))
+
+            # Recalcular total
+            modelo_gd = cobranca.get("tipo_modelo_gd", "GDI")
+            if modelo_gd == "GDII":
+                novo_total = valor_energia_assinatura + disponibilidade + bandeiras + iluminacao + servicos
+            else:
+                novo_total = valor_energia_assinatura + taxa_minima + energia_excedente + bandeiras + iluminacao + servicos
+
+            update_data["valor_total"] = novo_total
+            update_data["valor_com_assinatura"] = novo_total
+
+            logger.info(f"Recalculando valor_total da cobrança {cobranca_id}: R$ {novo_total:.2f}")
+
+        # 6. Marcar como editada manualmente
+        update_data["editado_manualmente"] = True
+        update_data["updated_at"] = "now()"
+
+        # 7. Atualizar no banco
+        self.supabase.table("cobrancas").update(update_data).eq("id", cobranca_id).execute()
+
+        # 8. Regenerar HTML do relatório
+        try:
+            # Buscar cobrança atualizada
+            cobranca_atualizada = self.supabase.table("cobrancas").select("*").eq("id", cobranca_id).single().execute()
+            cobranca_data = cobranca_atualizada.data
+
+            # Montar objeto CobrancaCalculada com dados atualizados
+            cobranca_calc = CobrancaCalculada()
+            cobranca_calc.modelo_gd = cobranca_data.get("tipo_modelo_gd", "GDI")
+            cobranca_calc.tipo_ligacao = cobranca_data.get("tipo_ligacao")
+            cobranca_calc.consumo_kwh = float(cobranca_data.get("consumo_kwh") or 0)
+            cobranca_calc.injetada_kwh = float(cobranca_data.get("injetada_kwh") or 0)
+            cobranca_calc.compensado_kwh = float(cobranca_data.get("compensado_kwh") or 0)
+            cobranca_calc.gap_kwh = float(cobranca_data.get("gap_kwh") or 0)
+            cobranca_calc.tarifa_base = Decimal(str(cobranca_data.get("tarifa_base") or 0))
+            cobranca_calc.tarifa_assinatura = Decimal(str(cobranca_data.get("tarifa_assinatura") or 0))
+            cobranca_calc.valor_energia_assinatura = Decimal(str(cobranca_data.get("valor_energia_assinatura") or 0))
+            cobranca_calc.taxa_minima_kwh = int(cobranca_data.get("taxa_minima_kwh") or 0)
+            cobranca_calc.taxa_minima_valor = Decimal(str(cobranca_data.get("taxa_minima_valor") or 0))
+            cobranca_calc.energia_excedente_kwh = int(cobranca_data.get("energia_excedente_kwh") or 0)
+            cobranca_calc.energia_excedente_valor = Decimal(str(cobranca_data.get("energia_excedente_valor") or 0))
+            cobranca_calc.disponibilidade_valor = Decimal(str(cobranca_data.get("disponibilidade_valor") or 0))
+            cobranca_calc.bandeiras_valor = Decimal(str(cobranca_data.get("bandeiras_valor") or 0))
+            cobranca_calc.iluminacao_publica_valor = Decimal(str(cobranca_data.get("iluminacao_publica_valor") or 0))
+            cobranca_calc.servicos_valor = Decimal(str(cobranca_data.get("servicos_valor") or 0))
+            cobranca_calc.valor_total = Decimal(str(cobranca_data.get("valor_total") or 0))
+            cobranca_calc.economia_mes = Decimal(str(cobranca_data.get("economia_mes") or 0))
+
+            # Campos de energia compensada
+            cobranca_calc.energia_compensada_kwh = float(cobranca_data.get("energia_compensada_kwh") or cobranca_calc.compensado_kwh)
+            cobranca_calc.energia_compensada_sem_desconto = Decimal(str(cobranca_data.get("energia_compensada_sem_desconto") or 0))
+            cobranca_calc.energia_compensada_com_desconto = Decimal(str(cobranca_data.get("energia_compensada_com_desconto") or 0))
+
+            # Vencimento
+            if cobranca_data.get("vencimento"):
+                from datetime import datetime
+                venc_str = cobranca_data.get("vencimento")
+                if isinstance(venc_str, str):
+                    cobranca_calc.vencimento = datetime.strptime(venc_str[:10], "%Y-%m-%d").date()
+                else:
+                    cobranca_calc.vencimento = venc_str
+
+            # Buscar dados da fatura para gerar HTML
+            fatura = cobranca.get("faturas")
+            dados_extraidos = None
+            if fatura and fatura.get("dados_extraidos"):
+                try:
+                    dados_extraidos = FaturaExtraidaSchema(**fatura["dados_extraidos"])
+                except Exception as e:
+                    logger.warning(f"Erro ao parsear dados_extraidos: {e}")
+
+            # Buscar UC e beneficiário
+            uc = cobranca.get("unidades_consumidoras") or {}
+            beneficiario = cobranca.get("beneficiarios") or {}
+
+            # Gerar novo HTML
+            report_generator = ReportGeneratorV3()
+            economia_acumulada = float(beneficiario.get("economia_acumulada") or 0)
+
+            novo_html = report_generator.gerar_html(
+                cobranca=cobranca_calc,
+                dados_fatura=dados_extraidos,
+                beneficiario={
+                    "nome": beneficiario.get("nome"),
+                    "endereco": uc.get("endereco"),
+                    "numero": uc.get("numero_imovel"),
+                    "cidade": uc.get("cidade")
+                },
+                qr_code_pix=cobranca_data.get("qr_code_pix_image"),
+                pix_copia_cola=cobranca_data.get("qr_code_pix"),
+                economia_acumulada=economia_acumulada
+            )
+
+            # Atualizar HTML no banco
+            self.supabase.table("cobrancas").update({
+                "html_relatorio": novo_html
+            }).eq("id", cobranca_id).execute()
+
+            logger.info(f"HTML do relatório regenerado para cobrança {cobranca_id}")
+
+        except Exception as e:
+            logger.error(f"Erro ao regenerar HTML da cobrança {cobranca_id}: {e}")
+            # Não falha a edição por erro no HTML
+
+        # 9. Retornar cobrança atualizada
+        return await self.buscar(cobranca_id, user_id, perfis)

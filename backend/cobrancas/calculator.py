@@ -39,6 +39,12 @@ class CobrancaCalculada:
         self.valor_energia_base: Decimal = Decimal("0")  # injetada × tarifa_base
         self.valor_energia_assinatura: Decimal = Decimal("0")  # injetada × tarifa_assinatura
 
+        # Energia compensada (para exibição da economia no relatório)
+        # É a energia que efetivamente recebe o desconto de 30%
+        self.energia_compensada_kwh: float = 0
+        self.energia_compensada_sem_desconto: Decimal = Decimal("0")  # energia_comp × tarifa_base
+        self.energia_compensada_com_desconto: Decimal = Decimal("0")  # energia_comp × tarifa_assinatura
+
         # Encargos GD I
         self.taxa_minima_kwh: int = 0
         self.taxa_minima_valor: Decimal = Decimal("0")
@@ -76,6 +82,9 @@ class CobrancaCalculada:
             "fio_b": float(self.fio_b),
             "valor_energia_base": float(self.valor_energia_base),
             "valor_energia_assinatura": float(self.valor_energia_assinatura),
+            "energia_compensada_kwh": self.energia_compensada_kwh,
+            "energia_compensada_sem_desconto": float(self.energia_compensada_sem_desconto),
+            "energia_compensada_com_desconto": float(self.energia_compensada_com_desconto),
             "taxa_minima_kwh": self.taxa_minima_kwh,
             "taxa_minima_valor": float(self.taxa_minima_valor),
             "energia_excedente_kwh": self.energia_excedente_kwh,
@@ -352,6 +361,12 @@ class CobrancaCalculator:
             energia_compensada = resultado.injetada_kwh
 
         energia_compensada = max(0, energia_compensada)  # Não pode ser negativo
+
+        # Armazenar valores de energia compensada para exibição no relatório
+        # É aqui que o desconto de 30% é aplicado
+        resultado.energia_compensada_kwh = energia_compensada
+        resultado.energia_compensada_sem_desconto = Decimal(str(energia_compensada)) * resultado.tarifa_base
+        resultado.energia_compensada_com_desconto = Decimal(str(energia_compensada)) * resultado.tarifa_assinatura
 
         # Economia = energia que usou crédito × diferença de tarifa (30% de desconto)
         resultado.economia_mes = Decimal(str(energia_compensada)) * (

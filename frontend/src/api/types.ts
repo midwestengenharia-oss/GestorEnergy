@@ -201,30 +201,95 @@ export interface Fatura {
 // Cobrancas
 // ========================
 
-export type CobrancaStatus = 'PENDENTE' | 'PAGA' | 'VENCIDA' | 'CANCELADA';
+export type CobrancaStatus = 'RASCUNHO' | 'PENDENTE' | 'EMITIDA' | 'PAGA' | 'VENCIDA' | 'CANCELADA' | 'PARCIAL';
 
 export interface Cobranca {
     id: number;
     beneficiario_id: number;
     fatura_id?: number;
+    usina_id?: number;
     mes: number;
     ano: number;
-    kwh_creditado: number;
-    tarifa_energisa: number;
-    desconto_aplicado: number;
-    valor_energia: number;
-    valor_piso: number;
-    valor_iluminacao: number;
-    valor_total: number;
+    referencia_formatada?: string;
+    tipo?: string;
+
+    // Métricas de energia (kWh)
+    consumo_kwh?: number;
+    energia_injetada_kwh?: number;
+    energia_compensada_kwh?: number;
+    gap_kwh?: number;
+
+    // Tarifas
+    tarifa_base?: number;
+    tarifa_assinatura?: number;
+    tarifa_energisa?: number;
+    desconto_aplicado?: number;
+    modelo_gd?: string;
+    tipo_ligacao?: string;
+    taxa_minima_kwh?: number;
+
+    // Valores monetários
+    energia_injetada_valor?: number;
+    energia_compensada_valor?: number;
+    taxa_minima_valor?: number;
+    energia_excedente_valor?: number;
+    disponibilidade_valor?: number;
+    bandeiras_valor?: number;
+    iluminacao_publica_valor?: number;
+    servicos_valor?: number;
+    valor_total?: number;
+
+    // Economia
+    economia_mes?: number;
+    economia_acumulada?: number;
+    energia_compensada_sem_desconto?: number;
+    energia_compensada_com_desconto?: number;
+
+    // Legados (compatibilidade)
+    kwh_creditado?: number;
+    valor_energia?: number;
+    valor_piso?: number;
+    valor_iluminacao?: number;
     valor_sem_desconto?: number;
     economia?: number;
+
+    // Vencimento e pagamento
     vencimento: string;
+    data_vencimento?: string;
+    data_emissao?: string;
     status: CobrancaStatus;
+    valor_pago?: number;
     pago_em?: string;
+    data_pagamento?: string;
     forma_pagamento?: string;
+
+    // PIX/Boleto
+    qr_code_pix?: string;
+    qr_code_pix_image?: string;
     codigo_barras?: string;
     pix_copia_cola?: string;
+    link_boleto?: string;
+
+    // Relatório e observações
+    html_relatorio?: string;
+    observacoes?: string;
+    observacoes_internas?: string;
+    editado_manualmente?: boolean;
+
+    // Timestamps
     criado_em?: string;
+    atualizado_em?: string;
+
+    // Relacionamentos
+    beneficiario?: {
+        id: number;
+        nome?: string;
+        cpf: string;
+        email?: string;
+        telefone?: string;
+        uc?: UnidadeConsumidora;
+    };
+    fatura?: Fatura;
 }
 
 // ========================

@@ -1253,7 +1253,7 @@ function FaturaAccordionItem({
                                                     <td className="py-2 text-slate-700 dark:text-slate-300">Consumo Faturado</td>
                                                     <td className="py-2 text-center">{fatura.consumo_api ? `${fatura.consumo_api} kWh` : 'N/A'}</td>
                                                     <td className="py-2 text-center">{(() => { const consumo = dados?.itens_fatura?.consumo_kwh?.quantidade || 0; const inj = calcularInjetadaOUC(dados?.itens_fatura) + calcularInjetadaMUC(dados?.itens_fatura); return `${Math.max(0, consumo - inj).toFixed(0)} kWh`; })()}</td>
-                                                    <td className="py-2 text-center">{renderStatusIndicador('INFO')}</td>
+                                                    <td className="py-2 text-center">{renderStatusIndicador(compararValores(fatura.consumo_api, (() => { const consumo = dados?.itens_fatura?.consumo_kwh?.quantidade || 0; const inj = calcularInjetadaOUC(dados?.itens_fatura) + calcularInjetadaMUC(dados?.itens_fatura); return Math.max(0, consumo - inj); })()))}</td>
                                                 </tr>
                                                 <tr className="border-b border-slate-100 dark:border-slate-800">
                                                     <td className="py-2 text-slate-700 dark:text-slate-300">Bandeira</td>

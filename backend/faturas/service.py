@@ -74,6 +74,37 @@ class FaturasService:
         """Formata UC para exibição"""
         return f"{cod_empresa}/{cdc}-{digito}"
 
+    def _parse_date_field(self, value) -> Optional[date]:
+        """Converte valores de data para date, ignorando formatos inválidos."""
+
+        if not value:
+            return None
+
+        if isinstance(value, date):
+            return value
+
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value[:10])
+            except ValueError:
+                logger.warning("Data em formato inválido na gestão de faturas: %s", value)
+                return None
+
+        logger.warning("Tipo de dado inesperado para data na gestão de faturas: %s", type(value))
+        return None
+
+    def _parse_decimal_field(self, value, default: str = "0") -> Decimal:
+        """Converte valores para Decimal de forma resiliente."""
+
+        if value is None:
+            return Decimal(default)
+
+        try:
+            return Decimal(str(value))
+        except Exception:
+            logger.warning("Valor numérico inválido na gestão de faturas: %s", value)
+            return Decimal(default)
+
     async def listar(
         self,
         filtros: Optional[FaturaFiltros] = None,
@@ -1223,30 +1254,16 @@ class FaturasService:
 
                 # Montar resposta da cobrança
                 cobranca_resp = None
-                if cobranca and cobranca.get("id") and cobranca.get("vencimento"):
-                    # Converter datas de string para date
-                    vencimento_raw = cobranca.get("vencimento")
-                    vencimento = None
-                    if vencimento_raw:
-                        if isinstance(vencimento_raw, str):
-                            vencimento = date.fromisoformat(vencimento_raw[:10])
-                        elif isinstance(vencimento_raw, date):
-                            vencimento = vencimento_raw
-
-                    pago_em_raw = cobranca.get("pago_em")
-                    pago_em = None
-                    if pago_em_raw:
-                        if isinstance(pago_em_raw, str):
-                            pago_em = date.fromisoformat(pago_em_raw[:10])
-                        elif isinstance(pago_em_raw, date):
-                            pago_em = pago_em_raw
+                if cobranca and cobranca.get("id"):
+                    vencimento = self._parse_date_field(cobranca.get("vencimento"))
+                    pago_em = self._parse_date_field(cobranca.get("pago_em"))
 
                     # Só criar resposta se vencimento foi convertido com sucesso
                     if vencimento:
                         cobranca_resp = CobrancaGestaoResponse(
                             id=cobranca["id"],
                             status=cobranca.get("status") or "RASCUNHO",
-                            valor_total=Decimal(str(cobranca["valor_total"])) if cobranca.get("valor_total") else Decimal("0"),
+                            valor_total=self._parse_decimal_field(cobranca.get("valor_total")),
                             vencimento=vencimento,
                             qr_code_pix=cobranca.get("qr_code_pix"),
                             qr_code_pix_image=cobranca.get("qr_code_pix_image"),
@@ -1262,7 +1279,7 @@ class FaturasService:
                     ano_referencia=ano_ref,
                     status_fluxo=status,
                     tem_pdf=f.get("pdf_path") is not None,
-                    valor_fatura=Decimal(str(f["valor_fatura"])) if f.get("valor_fatura") else None,
+                    valor_fatura=self._parse_decimal_field(f.get("valor_fatura")) if f.get("valor_fatura") is not None else None,
                     extracao_status=f.get("extracao_status"),
                     extracao_score=f.get("extracao_score"),
                     dados_extraidos=dados_extraidos if dados_extraidos else None,

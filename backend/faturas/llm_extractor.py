@@ -137,8 +137,7 @@ class OpenAIParser:
                         "content": prompt
                     }
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.1
+                response_format={"type": "json_object"}
             )
 
             # Extrair o JSON da resposta

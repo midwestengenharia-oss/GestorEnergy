@@ -1026,7 +1026,7 @@ class CobrancasService:
 
         # Buscar cobrança
         response = self.supabase.table("cobrancas").select(
-            "*, beneficiarios!inner(usina_id, usinas!inner(*), user_id, usuarios!inner(email))"
+            "*, beneficiarios!inner(usina_id, usinas!inner(*), usuario_id, usuarios(email))"
         ).eq("id", cobranca_id).execute()
 
         if not response.data or len(response.data) == 0:

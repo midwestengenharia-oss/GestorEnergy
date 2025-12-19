@@ -1081,9 +1081,10 @@ class FaturasService:
 
             # 1. Buscar beneficiários do gestor (para filtrar faturas)
             # Usa LEFT JOIN (sem !inner) para não excluir beneficiários sem UC ou usina
+            # Especifica FK explícita pois há duas relações: uc_id e uc_id_origem
             beneficiarios_query = self.db.table("beneficiarios").select(
                 "id, usuario_id, uc_id, usina_id, cpf, nome, email, telefone, status, "
-                "unidades_consumidoras(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, tipo_ligacao), "
+                "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, tipo_ligacao), "
                 "usinas(id, nome)"
             ).eq("status", "ATIVO")
 

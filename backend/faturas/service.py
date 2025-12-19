@@ -1088,6 +1088,11 @@ class FaturasService:
 
             uc_ids = list(beneficiarios_por_uc.keys())
 
+            # Validar se há UCs para buscar (evita SQL inválido com IN vazio)
+            if not uc_ids:
+                logger.info("Nenhuma UC encontrada para os beneficiários filtrados")
+                return GestaoFaturasResponse(faturas=[], totais=TotaisGestaoResponse())
+
             # 2. Buscar faturas das UCs (não seleciona pdf_base64 pois é muito pesado)
             faturas_query = self.db.table("faturas").select(
                 "id, uc_id, mes_referencia, ano_referencia, valor_fatura, "
@@ -1189,9 +1194,9 @@ class FaturasService:
 
                 # Validar dados obrigatórios do beneficiário
                 beneficiario_id = beneficiario.get("id")
-                beneficiario_cpf = beneficiario.get("cpf")
-                if not beneficiario_id or not beneficiario_cpf:
-                    logger.warning(f"Beneficiário sem id ou cpf, pulando fatura {fatura_id}")
+                beneficiario_cpf = beneficiario.get("cpf") or ""  # CPF pode ser vazio
+                if not beneficiario_id:
+                    logger.warning(f"Beneficiário sem id, pulando fatura {fatura_id}")
                     continue
 
                 # Validar usina_id

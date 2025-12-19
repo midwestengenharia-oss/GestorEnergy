@@ -209,13 +209,65 @@ export default function GestaoFaturas() {
                     )}
                 </div>
 
-                {/* Info */}
+                {/* Info Basica */}
                 <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
                     <p>Ref: {fatura.referencia_formatada}</p>
                     {fatura.valor_fatura && <p>Valor: {formatCurrency(fatura.valor_fatura)}</p>}
                     {fatura.cobranca && <p>Cobranca: {formatCurrency(fatura.cobranca.valor_total)}</p>}
-                    {fatura.extracao_score !== undefined && fatura.extracao_score !== null && (
-                        <div className="flex items-center gap-1">
+                </div>
+
+                {/* Dados Extraidos - Consumo e Energia */}
+                {fatura.dados_extraidos && (
+                    <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                            {fatura.dados_extraidos.consumo_kwh != null && (
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Consumo:</span>
+                                    <span className="font-medium text-slate-700 dark:text-slate-300">
+                                        {fatura.dados_extraidos.consumo_kwh} kWh
+                                    </span>
+                                </div>
+                            )}
+                            {(fatura.dados_extraidos.injetada_kwh != null || fatura.dados_extraidos.injetada_ouc_kwh != null) && (
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Injetada:</span>
+                                    <span className="font-medium text-green-600 dark:text-green-400">
+                                        {fatura.dados_extraidos.injetada_kwh ?? fatura.dados_extraidos.injetada_ouc_kwh} kWh
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Bandeira Tarifaria */}
+                        {(fatura.bandeira_tarifaria || fatura.dados_extraidos.bandeira_tarifaria) && (
+                            <div className="mt-1 flex items-center gap-1">
+                                <span className="text-xs text-slate-500">Bandeira:</span>
+                                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                                    (fatura.bandeira_tarifaria || fatura.dados_extraidos.bandeira_tarifaria)?.toUpperCase().includes('VERDE')
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                        : (fatura.bandeira_tarifaria || fatura.dados_extraidos.bandeira_tarifaria)?.toUpperCase().includes('AMARELA')
+                                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                }`}>
+                                    {(fatura.bandeira_tarifaria || fatura.dados_extraidos.bandeira_tarifaria)}
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Tipo Ligacao */}
+                        {fatura.tipo_ligacao && (
+                            <div className="mt-1 text-xs">
+                                <span className="text-slate-500">Tipo: </span>
+                                <span className="text-slate-700 dark:text-slate-300">{fatura.tipo_ligacao}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Score de Extracao */}
+                {fatura.extracao_score !== undefined && fatura.extracao_score !== null && (
+                    <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400">
                             <span>Score:</span>
                             <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                                 <div
@@ -225,8 +277,8 @@ export default function GestaoFaturas() {
                             </div>
                             <span>{fatura.extracao_score}%</span>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 {/* Acoes */}
                 <div className="flex flex-wrap gap-1 mt-3">

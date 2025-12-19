@@ -1150,8 +1150,20 @@ class FaturasService:
             if not faturas_raw:
                 return GestaoFaturasResponse(faturas=[], totais=TotaisGestaoResponse())
 
-            # 3. Buscar cobranças associadas
+            # 2.1. Verificar quais faturas têm pdf_base64 (sem carregar o conteúdo)
+            # Isso é necessário porque não incluímos pdf_base64 na query principal (muito pesado)
             fatura_ids = [f["id"] for f in faturas_raw]
+
+            # Query leve: apenas IDs das faturas que têm pdf_base64 preenchido
+            pdf_check_query = self.db.table("faturas").select("id").in_("id", fatura_ids).not_.is_("pdf_base64", "null")
+            pdf_check_result = pdf_check_query.execute()
+            faturas_com_pdf_base64 = {f["id"] for f in (pdf_check_result.data or [])}
+
+            # Adicionar flag tem_pdf_base64 em cada fatura
+            for f in faturas_raw:
+                f["_tem_pdf_base64"] = f["id"] in faturas_com_pdf_base64
+
+            # 3. Buscar cobranças associadas
             cobrancas_query = self.db.table("cobrancas").select(
                 "id, fatura_id, status, valor_total, vencimento, qr_code_pix, qr_code_pix_image, pago_em"
             ).in_("fatura_id", fatura_ids)
@@ -1275,6 +1287,9 @@ class FaturasService:
                             )
 
                     # Montar fatura
+                    # tem_pdf considera pdf_path OU _tem_pdf_base64 (flag calculada na query auxiliar)
+                    tem_pdf = f.get("pdf_path") is not None or f.get("_tem_pdf_base64", False)
+
                     fatura_gestao = FaturaGestaoResponse(
                         id=fatura_id,
                         uc_id=uc_id,
@@ -1282,7 +1297,7 @@ class FaturasService:
                         mes_referencia=mes_ref,
                         ano_referencia=ano_ref,
                         status_fluxo=status,
-                        tem_pdf=f.get("pdf_path") is not None,
+                        tem_pdf=tem_pdf,
                         valor_fatura=self._parse_decimal_field(f.get("valor_fatura")) if f.get("valor_fatura") is not None else None,
                         extracao_status=f.get("extracao_status"),
                         extracao_score=f.get("extracao_score"),
@@ -1321,7 +1336,8 @@ class FaturasService:
         6. COBRANCA_PAGA - Cobrança paga
         7. FATURA_QUITADA - Fatura marcada como paga
         """
-        tem_pdf = fatura.get("pdf_path") is not None or fatura.get("pdf_base64") is not None
+        # Verifica pdf_path ou a flag _tem_pdf_base64 (calculada na listar_gestao)
+        tem_pdf = fatura.get("pdf_path") is not None or fatura.get("_tem_pdf_base64", False)
         extracao_status = fatura.get("extracao_status")
         indicador_pagamento = fatura.get("indicador_pagamento")
 

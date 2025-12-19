@@ -1055,7 +1055,6 @@ class CobrancasService:
         update_response = self.supabase.table("cobrancas").update({
             "status": "EMITIDA",
             "vencimento_editavel": False,
-            "data_emissao": "now()",
             "updated_at": "now()"
         }).eq("id", cobranca_id).execute()
 

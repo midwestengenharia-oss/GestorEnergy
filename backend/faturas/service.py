@@ -1080,10 +1080,11 @@ class FaturasService:
             logger.info(f"listar_gestao: user_id={user_id}, perfis={perfis}, usina_id={usina_id}, mes={mes_referencia}, ano={ano_referencia}")
 
             # 1. Buscar beneficiários do gestor (para filtrar faturas)
+            # Usa LEFT JOIN (sem !inner) para não excluir beneficiários sem UC ou usina
             beneficiarios_query = self.db.table("beneficiarios").select(
                 "id, usuario_id, uc_id, usina_id, cpf, nome, email, telefone, status, "
-                "unidades_consumidoras!inner(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, tipo_ligacao), "
-                "usinas!inner(id, nome)"
+                "unidades_consumidoras(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, tipo_ligacao), "
+                "usinas(id, nome)"
             ).eq("status", "ATIVO")
 
             # Filtrar por permissões
@@ -1125,11 +1126,12 @@ class FaturasService:
                 return GestaoFaturasResponse(faturas=[], totais=TotaisGestaoResponse())
 
             # 2. Buscar faturas das UCs (não seleciona pdf_base64 pois é muito pesado)
+            # Usa LEFT JOIN (sem !inner) para não excluir faturas sem UC
             faturas_query = self.db.table("faturas").select(
                 "id, uc_id, mes_referencia, ano_referencia, valor_fatura, "
                 "pdf_path, extracao_status, extracao_score, dados_extraidos, dados_api, "
                 "bandeira_tarifaria, indicador_pagamento, "
-                "unidades_consumidoras!inner(id, cod_empresa, cdc, digito_verificador, tipo_ligacao)"
+                "unidades_consumidoras(id, cod_empresa, cdc, digito_verificador, tipo_ligacao)"
             ).in_("uc_id", uc_ids)
 
             # Filtros de período

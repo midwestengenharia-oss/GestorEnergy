@@ -6,11 +6,175 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     FileX, FileText, Zap, FileEdit, CreditCard, CheckCircle, Check,
     RefreshCw, LayoutGrid, List, Search, Filter, ChevronDown, ChevronRight,
-    Eye, Copy, Loader2, AlertCircle, RotateCcw, RefreshCcw
+    Eye, Copy, Loader2, AlertCircle, RotateCcw, RefreshCcw, User, BarChart3,
+    Receipt, TrendingUp, CheckCircle2, AlertTriangle, XCircle, Info
 } from 'lucide-react';
 import { faturasApi, FaturaGestao, TotaisGestao, StatusFluxo } from '../../api/faturas';
 import { usinasApi } from '../../api/usinas';
 import { cobrancasApi } from '../../api/cobrancas';
+
+// ========================
+// Tipos para dados extraidos
+// ========================
+
+interface EnergiaInjetadaItem {
+    descricao?: string;
+    tipo_gd?: string;
+    quantidade?: number;
+    preco_unit_com_tributos?: number;
+    valor?: number;
+    valor_total?: number;
+}
+
+interface LancamentoServico {
+    descricao?: string;
+    valor?: number;
+}
+
+interface DadosExtraidos {
+    codigo_cliente?: string;
+    ligacao?: string;
+    mes_ano_referencia?: string;
+    vencimento?: string;
+    total_a_pagar?: number;
+    leitura_anterior?: number;
+    leitura_atual?: number;
+    dias?: number;
+    consumo_kwh?: number;
+    injetada_kwh?: number;
+    injetada_ouc_kwh?: number;
+    injetada_muc_kwh?: number;
+    bandeira_tarifaria?: string;
+    itens_fatura?: {
+        consumo_kwh?: {
+            quantidade?: number;
+            preco_unit_com_tributos?: number;
+            valor?: number;
+            valor_total?: number;
+        };
+        'energia_injetada oUC'?: EnergiaInjetadaItem[];
+        'energia_injetada mUC'?: EnergiaInjetadaItem[];
+        energia_injetada_ouc?: EnergiaInjetadaItem[];
+        energia_injetada_muc?: EnergiaInjetadaItem[];
+        ajuste_lei_14300?: {
+            descricao?: string;
+            quantidade?: number;
+            preco_unit_com_tributos?: number;
+            valor?: number;
+        };
+        lancamentos_e_servicos?: LancamentoServico[];
+    };
+    totais?: {
+        adicionais_bandeira?: number;
+        bandeiras_detalhamento?: Array<{ cor?: string; valor?: number }>;
+        lancamentos_e_servicos?: number;
+        total_geral_fatura?: number;
+    };
+    quadro_atencao?: {
+        saldo_acumulado?: number;
+        a_expirar_proximo_ciclo?: number;
+    };
+}
+
+// ========================
+// Helpers de comparacao
+// ========================
+
+type ValidacaoStatus = 'OK' | 'DIFERENTE' | 'AUSENTE' | 'INFO';
+
+const compararValores = (v1: number | null | undefined, v2: number | null | undefined, tolerancia = 0.05): ValidacaoStatus => {
+    if (v1 == null) return 'AUSENTE';
+    if (v2 == null) return 'AUSENTE';
+    const diff = Math.abs(v1 - v2);
+    const percentDiff = v1 !== 0 ? diff / Math.abs(v1) : diff;
+    return percentDiff <= tolerancia ? 'OK' : 'DIFERENTE';
+};
+
+const compararStrings = (s1: string | null | undefined, s2: string | null | undefined): ValidacaoStatus => {
+    if (!s1 && !s2) return 'OK';
+    if (!s1 || !s2) return 'AUSENTE';
+    return s1.trim().toUpperCase() === s2.trim().toUpperCase() ? 'OK' : 'DIFERENTE';
+};
+
+const compararDatas = (d1: string | null | undefined, d2: string | null | undefined): ValidacaoStatus => {
+    if (!d1 && !d2) return 'OK';
+    if (!d1 || !d2) return 'AUSENTE';
+    const parseData = (d: string): string => {
+        if (d.includes('-')) return d.split('T')[0];
+        const partes = d.split('/');
+        if (partes.length === 3) return `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`;
+        return d;
+    };
+    return parseData(d1) === parseData(d2) ? 'OK' : 'DIFERENTE';
+};
+
+// ========================
+// Helpers de energia
+// ========================
+
+const getEnergiaInjetadaOUC = (itens: DadosExtraidos['itens_fatura']): EnergiaInjetadaItem[] => {
+    if (!itens) return [];
+    return itens['energia_injetada oUC'] || itens.energia_injetada_ouc || [];
+};
+
+const getEnergiaInjetadaMUC = (itens: DadosExtraidos['itens_fatura']): EnergiaInjetadaItem[] => {
+    if (!itens) return [];
+    return itens['energia_injetada mUC'] || itens.energia_injetada_muc || [];
+};
+
+const calcularInjetadaOUC = (itens: DadosExtraidos['itens_fatura']): number => {
+    return getEnergiaInjetadaOUC(itens).reduce((sum, item) => sum + Math.abs(item.quantidade || 0), 0);
+};
+
+const calcularInjetadaMUC = (itens: DadosExtraidos['itens_fatura']): number => {
+    return getEnergiaInjetadaMUC(itens).reduce((sum, item) => sum + Math.abs(item.quantidade || 0), 0);
+};
+
+const calcularValorInjetadaOUC = (itens: DadosExtraidos['itens_fatura']): number => {
+    return getEnergiaInjetadaOUC(itens).reduce((sum, item) => sum + Math.abs(item.valor || item.valor_total || 0), 0);
+};
+
+const calcularValorInjetadaMUC = (itens: DadosExtraidos['itens_fatura']): number => {
+    return getEnergiaInjetadaMUC(itens).reduce((sum, item) => sum + Math.abs(item.valor || item.valor_total || 0), 0);
+};
+
+const getLancamentosSemIluminacao = (itens: DadosExtraidos['itens_fatura']): LancamentoServico[] => {
+    if (!itens?.lancamentos_e_servicos) return [];
+    const ilumItem = itens.lancamentos_e_servicos.find(s => s.descricao?.toLowerCase().includes('ilum'));
+    const valorIlum = Number(ilumItem?.valor) || 0;
+    return itens.lancamentos_e_servicos.filter(s => {
+        const desc = s.descricao?.toLowerCase() || '';
+        const valorItem = Number(s.valor) || 0;
+        if (desc.includes('ilum')) return false;
+        if (desc.includes('bandeira') || desc.includes('b. verm') || desc.includes('b. amar')) return false;
+        if ((desc.includes('outros') || desc.includes('servi')) && valorIlum > 0 && Math.abs(valorItem - valorIlum) < 0.02) return false;
+        if (valorIlum > 0 && valorItem === valorIlum) return false;
+        return true;
+    });
+};
+
+const getValorIluminacaoPublica = (itens: DadosExtraidos['itens_fatura']): number => {
+    if (!itens?.lancamentos_e_servicos) return 0;
+    const ilum = itens.lancamentos_e_servicos.find(s => s.descricao?.toLowerCase().includes('ilum'));
+    return ilum?.valor || 0;
+};
+
+const getTaxaMinima = (tipoLigacao: string | undefined): number => {
+    switch (tipoLigacao?.toUpperCase()) {
+        case 'MONOFASICO': return 30;
+        case 'BIFASICO': return 50;
+        case 'TRIFASICO': return 100;
+        default: return 0;
+    }
+};
+
+// Icones e cores para status de validacao
+const statusValidacaoConfig: Record<ValidacaoStatus, { color: string; bgColor: string; icon: React.ElementType }> = {
+    OK: { color: 'text-green-600', bgColor: 'bg-green-50 dark:bg-green-900/20', icon: CheckCircle2 },
+    DIFERENTE: { color: 'text-yellow-600', bgColor: 'bg-yellow-50 dark:bg-yellow-900/20', icon: AlertTriangle },
+    AUSENTE: { color: 'text-red-600', bgColor: 'bg-red-50 dark:bg-red-900/20', icon: XCircle },
+    INFO: { color: 'text-blue-600', bgColor: 'bg-blue-50 dark:bg-blue-900/20', icon: Info }
+};
 
 // Configuracao dos status do fluxo
 const STATUS_CONFIG: Record<StatusFluxo, { label: string; cor: string; corBg: string; icon: React.ElementType }> = {
@@ -546,229 +710,514 @@ export default function GestaoFaturas() {
                         </div>
                     </td>
                 </tr>
-                {isExpanded && (
-                    <tr>
-                        <td colSpan={6} className="px-4 py-4 bg-slate-50 dark:bg-slate-800/50">
-                            <div className="space-y-4">
-                                {/* Secao 1: Beneficiario e UC (sempre visivel) */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                        <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Beneficiario</h4>
-                                        <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                                            <p><span className="text-slate-500">Nome:</span> {fatura.beneficiario?.nome || '-'}</p>
-                                            <p><span className="text-slate-500">CPF:</span> {fatura.beneficiario?.cpf || '-'}</p>
-                                            <p><span className="text-slate-500">Email:</span> {fatura.beneficiario?.email || '-'}</p>
-                                            <p><span className="text-slate-500">Usina:</span> {fatura.usina?.nome || '-'}</p>
-                                        </div>
-                                    </div>
-                                    <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                        <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Unidade Consumidora</h4>
-                                        <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                                            <p><span className="text-slate-500">UC:</span> {fatura.uc_formatada}</p>
-                                            <p><span className="text-slate-500">Referencia:</span> {fatura.referencia_formatada}</p>
-                                            <p><span className="text-slate-500">Tipo Ligacao:</span> {fatura.tipo_ligacao || '-'}</p>
-                                            <p><span className="text-slate-500">Tipo GD:</span> {fatura.tipo_gd || '-'}</p>
-                                            <p><span className="text-slate-500">PDF:</span> {fatura.tem_pdf ? <span className="text-green-600">Disponivel</span> : <span className="text-red-500">Aguardando</span>}</p>
-                                        </div>
-                                    </div>
-                                </div>
+                {isExpanded && (() => {
+                    const dados = fatura.dados_extraidos as DadosExtraidos | undefined;
+                    const dadosApi = fatura.dados_api as Record<string, any> | undefined;
 
-                                {/* Secao 2: Dados Extraidos (a partir de EXTRAIDA) */}
-                                {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                            <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Dados Extraidos</h4>
-                                            <div className="text-xs space-y-2">
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div>
-                                                        <span className="text-slate-500">Consumo:</span>
-                                                        <span className="ml-1 font-medium text-slate-900 dark:text-white">
-                                                            {fatura.dados_extraidos?.consumo_kwh ?? '-'} kWh
+                    // Helper para renderizar indicador de status
+                    const renderStatusIndicador = (status: ValidacaoStatus) => {
+                        const cfg = statusValidacaoConfig[status];
+                        const IconComp = cfg.icon;
+                        return <IconComp size={14} className={cfg.color} />;
+                    };
+
+                    // Calculos para as tabelas detalhadas
+                    const consumo = dados?.itens_fatura?.consumo_kwh || {};
+                    const consumoKwh = consumo.quantidade || dados?.consumo_kwh || 0;
+                    const consumoTarifa = consumo.preco_unit_com_tributos || 0.85;
+                    const consumoValor = consumo.valor || (consumoKwh * consumoTarifa);
+
+                    const injetadaOucKwh = calcularInjetadaOUC(dados?.itens_fatura) || dados?.injetada_ouc_kwh || 0;
+                    const injetadaMucKwh = calcularInjetadaMUC(dados?.itens_fatura) || dados?.injetada_muc_kwh || 0;
+                    const injetadaOucValor = calcularValorInjetadaOUC(dados?.itens_fatura);
+                    const injetadaMucValor = calcularValorInjetadaMUC(dados?.itens_fatura);
+                    const injetadaTotalKwh = injetadaOucKwh + injetadaMucKwh;
+                    const injetadaTotalValor = injetadaOucValor + injetadaMucValor;
+
+                    const ajuste = dados?.itens_fatura?.ajuste_lei_14300;
+                    const tipoLigacao = fatura.tipo_ligacao || dados?.ligacao;
+                    const taxaMinimaKwh = getTaxaMinima(tipoLigacao);
+                    const taxaMinimaValor = taxaMinimaKwh * consumoTarifa;
+
+                    const bandeirasDetalhamento = dados?.totais?.bandeiras_detalhamento || [];
+                    const bandeiras = bandeirasDetalhamento.length > 0
+                        ? bandeirasDetalhamento.reduce((sum, b) => sum + (b.valor || 0), 0)
+                        : (dados?.totais?.adicionais_bandeira || 0);
+
+                    const iluminacao = getValorIluminacaoPublica(dados?.itens_fatura);
+                    const outrosServicos = getLancamentosSemIluminacao(dados?.itens_fatura);
+                    const valorOutros = outrosServicos.reduce((s, item) => s + (item.valor || 0), 0);
+                    const totalFatura = dados?.totais?.total_geral_fatura || fatura.valor_fatura || 0;
+
+                    // Calculos para previa da cobranca
+                    const tarifaBase = consumoTarifa;
+                    const energiaSemDesconto = injetadaTotalKwh * tarifaBase;
+                    const energiaComDesconto = injetadaTotalKwh * tarifaBase * 0.70;
+                    const disponibilidade = ajuste?.valor || 0;
+                    const gapKwh = Math.max(0, consumoKwh - injetadaTotalKwh);
+                    const temConsumoNaoCompensado = gapKwh > 0;
+                    const bandeirasCobranca = (fatura.tipo_gd === 'GDI' || temConsumoNaoCompensado) ? bandeiras : 0;
+
+                    let totalCobranca = energiaComDesconto + iluminacao + valorOutros;
+                    if (fatura.tipo_gd === 'GDII') {
+                        totalCobranca += disponibilidade;
+                    } else {
+                        totalCobranca += taxaMinimaValor + bandeirasCobranca;
+                    }
+
+                    const economiaMes = energiaSemDesconto - energiaComDesconto;
+                    const saldoAcumulado = dados?.quadro_atencao?.saldo_acumulado || 0;
+                    const aExpirar = dados?.quadro_atencao?.a_expirar_proximo_ciclo || 0;
+
+                    return (
+                        <tr>
+                            <td colSpan={6} className="px-4 py-4 bg-slate-50 dark:bg-slate-800/50">
+                                <div className="space-y-4">
+                                    {/* ==================== SECAO 1: CLIENTE CONTRATANTE ==================== */}
+                                    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                        <div className="bg-slate-100 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                                            <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                <User size={16} />
+                                                Cliente Contratante
+                                            </h5>
+                                        </div>
+                                        <div className="p-4 bg-white dark:bg-slate-800">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">Nome</span>
+                                                    <span className="font-medium">{fatura.beneficiario?.nome || '-'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">CPF</span>
+                                                    <span className="font-medium">{fatura.beneficiario?.cpf || '-'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">Email</span>
+                                                    <span className="font-medium text-xs">{fatura.beneficiario?.email || '-'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">Telefone</span>
+                                                    <span className="font-medium">{fatura.beneficiario?.telefone || '-'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">UC</span>
+                                                    <span className="font-medium">{fatura.uc_formatada}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">Usina</span>
+                                                    <span className="font-medium">{fatura.usina?.nome || '-'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">Tipo GD</span>
+                                                    <span className={`font-medium ${fatura.tipo_gd === 'GDII' ? 'text-purple-600' : 'text-blue-600'}`}>
+                                                        {fatura.tipo_gd || '-'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">Tipo Ligacao</span>
+                                                    <span className="font-medium">{fatura.tipo_ligacao || '-'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ==================== SECAO 2: COMPARACAO API vs EXTRACAO ==================== */}
+                                    {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && (
+                                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                            <div className="bg-slate-100 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                                                <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                    <BarChart3 size={16} />
+                                                    Comparacao API vs Extracao
+                                                    {fatura.extracao_score !== undefined && (
+                                                        <span className={`ml-auto text-xs px-2 py-0.5 rounded ${
+                                                            fatura.extracao_score >= 80 ? 'bg-green-100 text-green-700' :
+                                                            fatura.extracao_score >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-red-100 text-red-700'
+                                                        }`}>
+                                                            Score: {fatura.extracao_score}%
                                                         </span>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-slate-500">Valor Fatura:</span>
-                                                        <span className="ml-1 font-medium text-slate-900 dark:text-white">
-                                                            {formatCurrency(fatura.valor_fatura)}
-                                                        </span>
+                                                    )}
+                                                </h5>
+                                            </div>
+                                            <div className="p-4 bg-white dark:bg-slate-800">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="border-b border-slate-200 dark:border-slate-700">
+                                                            <th className="text-left py-2 font-medium text-slate-600 dark:text-slate-400">Campo</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400">API (Energisa)</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400">Extracao (PDF)</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-16">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Valor Fatura</td>
+                                                            <td className="py-2 text-center">{formatCurrency(dadosApi?.valor_fatura || fatura.valor_fatura)}</td>
+                                                            <td className="py-2 text-center">{formatCurrency(dados?.totais?.total_geral_fatura || dados?.total_a_pagar)}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(fatura.valor_fatura, dados?.totais?.total_geral_fatura, 0.02))}</td>
+                                                        </tr>
+                                                        <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Consumo</td>
+                                                            <td className="py-2 text-center">{dadosApi?.consumo ? `${dadosApi.consumo} kWh` : '-'}</td>
+                                                            <td className="py-2 text-center">{consumoKwh ? `${consumoKwh} kWh` : '-'}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(dadosApi?.consumo, consumoKwh))}</td>
+                                                        </tr>
+                                                        <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Bandeira</td>
+                                                            <td className="py-2 text-center">
+                                                                {dadosApi?.bandeira_tarifaria ? (
+                                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                                        dadosApi.bandeira_tarifaria.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
+                                                                        dadosApi.bandeira_tarifaria.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
+                                                                        'bg-red-100 text-red-700'
+                                                                    }`}>{dadosApi.bandeira_tarifaria}</span>
+                                                                ) : '-'}
+                                                            </td>
+                                                            <td className="py-2 text-center">
+                                                                {(fatura.bandeira_tarifaria || dados?.bandeira_tarifaria) ? (
+                                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                                                        (fatura.bandeira_tarifaria || dados?.bandeira_tarifaria || '').toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
+                                                                        (fatura.bandeira_tarifaria || dados?.bandeira_tarifaria || '').toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
+                                                                        'bg-red-100 text-red-700'
+                                                                    }`}>{fatura.bandeira_tarifaria || dados?.bandeira_tarifaria}</span>
+                                                                ) : '-'}
+                                                            </td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararStrings(dadosApi?.bandeira_tarifaria, fatura.bandeira_tarifaria || dados?.bandeira_tarifaria))}</td>
+                                                        </tr>
+                                                        <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Leituras</td>
+                                                            <td className="py-2 text-center">{dadosApi?.leitura_anterior && dadosApi?.leitura_atual ? `${dadosApi.leitura_anterior} → ${dadosApi.leitura_atual}` : '-'}</td>
+                                                            <td className="py-2 text-center">{dados?.leitura_anterior && dados?.leitura_atual ? `${dados.leitura_anterior} → ${dados.leitura_atual}` : '-'}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(dadosApi?.leitura_atual, dados?.leitura_atual))}</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Vencimento</td>
+                                                            <td className="py-2 text-center">{dadosApi?.data_vencimento ? new Date(dadosApi.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                                                            <td className="py-2 text-center">{dados?.vencimento || '-'}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararDatas(dadosApi?.data_vencimento, dados?.vencimento))}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* ==================== SECAO 3: RESUMO DA FATURA ==================== */}
+                                    {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && dados && (
+                                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                            <div className="bg-slate-100 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+                                                <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                    <FileText size={16} />
+                                                    Resumo da Fatura (Composicao Original)
+                                                </h5>
+                                            </div>
+                                            <div className="p-4 bg-white dark:bg-slate-800">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="border-b border-slate-200 dark:border-slate-700">
+                                                            <th className="text-left py-2 font-medium text-slate-600 dark:text-slate-400">Item</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-20">kWh</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Tarifa</th>
+                                                            <th className="text-right py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Valor (R$)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Consumo</td>
+                                                            <td className="py-2 text-center">{consumoKwh.toFixed(0)}</td>
+                                                            <td className="py-2 text-center">{consumoTarifa.toFixed(4)}</td>
+                                                            <td className="py-2 text-right font-medium">{formatCurrency(consumoValor)}</td>
+                                                        </tr>
+                                                        {injetadaTotalKwh > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800 bg-red-50 dark:bg-red-900/10">
+                                                                <td className="py-2 text-red-700 dark:text-red-400">Creditos GD (oUC + mUC)</td>
+                                                                <td className="py-2 text-center text-red-600">-{injetadaTotalKwh.toFixed(0)}</td>
+                                                                <td className="py-2 text-center text-red-600">{consumoTarifa.toFixed(4)}</td>
+                                                                <td className="py-2 text-right font-medium text-red-600">-{formatCurrency(Math.abs(injetadaTotalValor))}</td>
+                                                            </tr>
+                                                        )}
+                                                        {fatura.tipo_gd === 'GDII' && ajuste && ajuste.valor ? (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Ajuste Lei 14.300/22</td>
+                                                                <td className="py-2 text-center">{ajuste.quantidade?.toFixed(0) || '-'}</td>
+                                                                <td className="py-2 text-center">{ajuste.preco_unit_com_tributos?.toFixed(4) || '-'}</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(ajuste.valor)}</td>
+                                                            </tr>
+                                                        ) : fatura.tipo_gd === 'GDI' ? (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Taxa Minima ({tipoLigacao || '-'})</td>
+                                                                <td className="py-2 text-center">{taxaMinimaKwh}</td>
+                                                                <td className="py-2 text-center">{consumoTarifa.toFixed(4)}</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(taxaMinimaValor)}</td>
+                                                            </tr>
+                                                        ) : null}
+                                                        {bandeirasDetalhamento.length > 0 ? (
+                                                            bandeirasDetalhamento.map((b, idx) => (
+                                                                <tr key={`band-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
+                                                                    <td className="py-2 text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                                        <span className={`w-2 h-2 rounded-full ${
+                                                                            b.cor?.toLowerCase() === 'verde' ? 'bg-green-500' :
+                                                                            b.cor?.toLowerCase() === 'amarela' ? 'bg-yellow-500' : 'bg-red-500'
+                                                                        }`}></span>
+                                                                        Bandeira {b.cor}
+                                                                    </td>
+                                                                    <td className="py-2 text-center">-</td>
+                                                                    <td className="py-2 text-center">-</td>
+                                                                    <td className="py-2 text-right font-medium">{formatCurrency(b.valor || 0)}</td>
+                                                                </tr>
+                                                            ))
+                                                        ) : bandeiras > 0 ? (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras Tarifarias</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(bandeiras)}</td>
+                                                            </tr>
+                                                        ) : null}
+                                                        {iluminacao > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Iluminacao Publica</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(iluminacao)}</td>
+                                                            </tr>
+                                                        )}
+                                                        {outrosServicos.map((item, idx) => (
+                                                            <tr key={`outros-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">{item.descricao || 'Outros'}</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(item.valor || 0)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        <tr className="bg-slate-100 dark:bg-slate-800 font-bold">
+                                                            <td className="py-2 text-slate-900 dark:text-white" colSpan={3}>TOTAL DA FATURA</td>
+                                                            <td className="py-2 text-right text-slate-900 dark:text-white">{formatCurrency(totalFatura)}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* ==================== SECAO 4: PREVIA DA COBRANCA ==================== */}
+                                    {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && dados && (
+                                        <div className="border-2 border-indigo-200 dark:border-indigo-800 rounded-lg overflow-hidden">
+                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 px-4 py-2 border-b border-indigo-200 dark:border-indigo-800">
+                                                <h5 className="text-sm font-medium text-indigo-700 dark:text-indigo-400 flex items-center gap-2">
+                                                    <Receipt size={16} />
+                                                    Previa da Cobranca (Com Desconto 30%)
+                                                </h5>
+                                            </div>
+                                            <div className="p-4 bg-white dark:bg-slate-800">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="border-b border-slate-200 dark:border-slate-700">
+                                                            <th className="text-left py-2 font-medium text-slate-600 dark:text-slate-400">Item</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-20">kWh</th>
+                                                            <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Tarifa</th>
+                                                            <th className="text-right py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Valor (R$)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr className="border-b border-slate-100 dark:border-slate-800 bg-green-50 dark:bg-green-900/10">
+                                                            <td className="py-2 text-green-700 dark:text-green-400">Energia GD (30% desc.)</td>
+                                                            <td className="py-2 text-center text-green-600">{injetadaTotalKwh.toFixed(0)}</td>
+                                                            <td className="py-2 text-center text-green-600">{(tarifaBase * 0.70).toFixed(4)}</td>
+                                                            <td className="py-2 text-right font-medium text-green-600">{formatCurrency(energiaComDesconto)}</td>
+                                                        </tr>
+                                                        {fatura.tipo_gd === 'GDII' && disponibilidade > 0 ? (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Disponibilidade (Lei 14.300)</td>
+                                                                <td className="py-2 text-center">{ajuste?.quantidade?.toFixed(0) || '-'}</td>
+                                                                <td className="py-2 text-center">{ajuste?.preco_unit_com_tributos?.toFixed(4) || '-'}</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(disponibilidade)}</td>
+                                                            </tr>
+                                                        ) : fatura.tipo_gd === 'GDI' ? (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Taxa Minima ({tipoLigacao || '-'})</td>
+                                                                <td className="py-2 text-center">{taxaMinimaKwh}</td>
+                                                                <td className="py-2 text-center">{tarifaBase.toFixed(4)}</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(taxaMinimaValor)}</td>
+                                                            </tr>
+                                                        ) : null}
+                                                        {bandeirasCobranca > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras Tarifarias</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(bandeirasCobranca)}</td>
+                                                            </tr>
+                                                        )}
+                                                        {iluminacao > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Iluminacao Publica</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(iluminacao)}</td>
+                                                            </tr>
+                                                        )}
+                                                        {outrosServicos.map((item, idx) => (
+                                                            <tr key={`outros-cob-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">{item.descricao || 'Outros'}</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right font-medium">{formatCurrency(item.valor || 0)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        <tr className="bg-indigo-100 dark:bg-indigo-900/30 font-bold">
+                                                            <td className="py-2 text-indigo-900 dark:text-indigo-200" colSpan={3}>TOTAL DA COBRANCA</td>
+                                                            <td className="py-2 text-right text-indigo-900 dark:text-indigo-200">{formatCurrency(totalCobranca)}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* ==================== SECAO 5: RESUMO GD (ECONOMIA) ==================== */}
+                                    {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && dados && (
+                                        <div className="border border-emerald-200 dark:border-emerald-800 rounded-lg overflow-hidden">
+                                            <div className="bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 border-b border-emerald-200 dark:border-emerald-800">
+                                                <h5 className="text-sm font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+                                                    <TrendingUp size={16} />
+                                                    Resumo GD (Economia)
+                                                </h5>
+                                            </div>
+                                            <div className="p-4 bg-white dark:bg-slate-800 space-y-4">
+                                                <div>
+                                                    <p className="text-xs text-slate-500 mb-2 font-medium">Economia do Mes (Energia Injetada)</p>
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        <div className="bg-slate-100 dark:bg-slate-700 rounded-lg p-3 text-center">
+                                                            <p className="text-xs text-slate-500 mb-1">Sem Assinatura</p>
+                                                            <p className="font-bold text-slate-700 dark:text-slate-300">{formatCurrency(energiaSemDesconto)}</p>
+                                                        </div>
+                                                        <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-3 text-center">
+                                                            <p className="text-xs text-green-600 mb-1">Com Assinatura (30% desc.)</p>
+                                                            <p className="font-bold text-green-700 dark:text-green-400">{formatCurrency(energiaComDesconto)}</p>
+                                                        </div>
+                                                        <div className="bg-emerald-100 dark:bg-emerald-900/30 rounded-lg p-3 text-center">
+                                                            <p className="text-xs text-emerald-600 mb-1">Economia</p>
+                                                            <p className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center justify-center gap-1">
+                                                                {formatCurrency(economiaMes)}
+                                                                <CheckCircle size={14} className="text-emerald-500" />
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                {(fatura.dados_extraidos?.injetada_kwh || fatura.dados_extraidos?.injetada_ouc_kwh) && (
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <div>
-                                                            <span className="text-slate-500">Injetada oUC:</span>
-                                                            <span className="ml-1 font-medium text-green-600">
-                                                                {fatura.dados_extraidos?.injetada_ouc_kwh ?? fatura.dados_extraidos?.injetada_kwh ?? '-'} kWh
-                                                            </span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-slate-500">Injetada mUC:</span>
-                                                            <span className="ml-1 font-medium text-green-600">
-                                                                {fatura.dados_extraidos?.injetada_muc_kwh ?? '-'} kWh
-                                                            </span>
+                                                {(saldoAcumulado > 0 || aExpirar > 0) && (
+                                                    <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+                                                        <p className="text-xs text-slate-500 mb-2 font-medium">Informacoes de Credito</p>
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+                                                                <span className="text-sm text-slate-600 dark:text-slate-400">Saldo Acumulado:</span>
+                                                                <span className="font-medium text-slate-900 dark:text-white">{saldoAcumulado.toLocaleString('pt-BR')} kWh</span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
+                                                                <span className="text-sm text-orange-600 dark:text-orange-400">A Expirar:</span>
+                                                                <span className="font-medium text-orange-700 dark:text-orange-300">{aExpirar.toLocaleString('pt-BR')} kWh</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )}
-                                                <div className="flex items-center gap-4">
-                                                    <div>
-                                                        <span className="text-slate-500">Bandeira:</span>
-                                                        <span className={`ml-1 px-2 py-0.5 rounded text-xs font-medium ${
-                                                            (fatura.bandeira_tarifaria || fatura.dados_extraidos?.bandeira_tarifaria)?.toUpperCase().includes('VERDE')
-                                                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                                                : (fatura.bandeira_tarifaria || fatura.dados_extraidos?.bandeira_tarifaria)?.toUpperCase().includes('AMARELA')
-                                                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                                        }`}>
-                                                            {fatura.bandeira_tarifaria || fatura.dados_extraidos?.bandeira_tarifaria || '-'}
-                                                        </span>
-                                                    </div>
-                                                    {fatura.extracao_score !== undefined && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-slate-500">Score:</span>
-                                                            <div className="w-20 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                                <div
-                                                                    className={`h-full ${fatura.extracao_score >= 80 ? 'bg-green-500' : fatura.extracao_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                                                                    style={{ width: `${fatura.extracao_score}%` }}
-                                                                />
-                                                            </div>
-                                                            <span className="font-medium">{fatura.extracao_score}%</span>
-                                                        </div>
-                                                    )}
-                                                </div>
                                             </div>
                                         </div>
+                                    )}
 
-                                        {/* Comparacao API vs PDF */}
-                                        {fatura.dados_api && (
-                                            <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                                <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Comparacao API vs PDF</h4>
-                                                <div className="text-xs space-y-1">
-                                                    <div className="grid grid-cols-3 gap-1 font-medium text-slate-500 border-b pb-1">
-                                                        <span>Campo</span>
-                                                        <span>API</span>
-                                                        <span>PDF</span>
-                                                    </div>
-                                                    <div className="grid grid-cols-3 gap-1">
-                                                        <span className="text-slate-500">Consumo</span>
-                                                        <span>{fatura.dados_api?.consumo ?? '-'}</span>
-                                                        <span>{fatura.dados_extraidos?.consumo_kwh ?? '-'}</span>
-                                                    </div>
-                                                    <div className="grid grid-cols-3 gap-1">
-                                                        <span className="text-slate-500">Valor</span>
-                                                        <span>{formatCurrency(fatura.dados_api?.valor_fatura)}</span>
-                                                        <span>{formatCurrency(fatura.valor_fatura)}</span>
-                                                    </div>
-                                                    {fatura.dados_api?.leitura_anterior && (
-                                                        <div className="grid grid-cols-3 gap-1">
-                                                            <span className="text-slate-500">Leit. Anterior</span>
-                                                            <span>{fatura.dados_api?.leitura_anterior ?? '-'}</span>
-                                                            <span>-</span>
-                                                        </div>
-                                                    )}
-                                                    {fatura.dados_api?.leitura_atual && (
-                                                        <div className="grid grid-cols-3 gap-1">
-                                                            <span className="text-slate-500">Leit. Atual</span>
-                                                            <span>{fatura.dados_api?.leitura_atual ?? '-'}</span>
-                                                            <span>-</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Secao 3: Cobranca (a partir de COBRANCA_RASCUNHO) */}
-                                {['COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && fatura.cobranca && (
-                                    <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                        <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Cobranca</h4>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                                            <div>
-                                                <span className="text-slate-500">Status:</span>
-                                                <span className={`ml-1 px-2 py-0.5 rounded font-medium ${
-                                                    fatura.cobranca.status === 'PAGA' ? 'bg-green-100 text-green-700' :
-                                                    fatura.cobranca.status === 'EMITIDA' ? 'bg-orange-100 text-orange-700' :
-                                                    'bg-purple-100 text-purple-700'
-                                                }`}>
-                                                    {fatura.cobranca.status}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="text-slate-500">Valor:</span>
-                                                <span className="ml-1 font-medium text-slate-900 dark:text-white">
-                                                    {formatCurrency(fatura.cobranca.valor_total)}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="text-slate-500">Vencimento:</span>
-                                                <span className="ml-1 font-medium text-slate-900 dark:text-white">
-                                                    {new Date(fatura.cobranca.vencimento).toLocaleDateString('pt-BR')}
-                                                </span>
-                                            </div>
-                                            {fatura.cobranca.pago_em && (
+                                    {/* ==================== SECAO 6: COBRANCA EXISTENTE ==================== */}
+                                    {['COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && fatura.cobranca && (
+                                        <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+                                            <h5 className="text-sm font-medium text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                                                <CreditCard size={16} />
+                                                Cobranca #{fatura.cobranca.id}
+                                            </h5>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                                 <div>
-                                                    <span className="text-slate-500">Pago em:</span>
-                                                    <span className="ml-1 font-medium text-green-600">
-                                                        {new Date(fatura.cobranca.pago_em).toLocaleDateString('pt-BR')}
+                                                    <span className="text-slate-500 block text-xs">Status</span>
+                                                    <span className={`font-medium px-2 py-0.5 rounded inline-block mt-1 ${
+                                                        fatura.cobranca.status === 'PAGA' ? 'bg-green-100 text-green-700' :
+                                                        fatura.cobranca.status === 'EMITIDA' ? 'bg-orange-100 text-orange-700' :
+                                                        'bg-purple-100 text-purple-700'
+                                                    }`}>
+                                                        {fatura.cobranca.status}
                                                     </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">Valor Total</span>
+                                                    <span className="font-bold text-lg text-slate-900 dark:text-white">{formatCurrency(fatura.cobranca.valor_total)}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500 block text-xs">Vencimento</span>
+                                                    <span className="font-medium">{new Date(fatura.cobranca.vencimento).toLocaleDateString('pt-BR')}</span>
+                                                </div>
+                                                {fatura.cobranca.pago_em && (
+                                                    <div>
+                                                        <span className="text-slate-500 block text-xs">Pago em</span>
+                                                        <span className="font-medium text-green-600">{new Date(fatura.cobranca.pago_em).toLocaleDateString('pt-BR')}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {fatura.cobranca.qr_code_pix && (
+                                                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                                    <button
+                                                        onClick={() => handleCopiarPix(fatura.cobranca!.qr_code_pix!)}
+                                                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2"
+                                                    >
+                                                        <Copy size={16} />
+                                                        Copiar Codigo PIX
+                                                    </button>
                                                 </div>
                                             )}
                                         </div>
-                                        {fatura.cobranca.qr_code_pix && (
-                                            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-                                                <button
-                                                    onClick={() => handleCopiarPix(fatura.cobranca!.qr_code_pix!)}
-                                                    className="text-xs px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1"
-                                                >
-                                                    <Copy size={12} />
-                                                    Copiar Codigo PIX
-                                                </button>
-                                            </div>
+                                    )}
+
+                                    {/* ==================== ACOES ==================== */}
+                                    <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                        {['PDF_RECEBIDO', 'EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
+                                            <button
+                                                onClick={() => handleRefazer(fatura.id)}
+                                                disabled={isLoading}
+                                                className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                                                Refazer
+                                            </button>
+                                        )}
+                                        {['EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
+                                            <button
+                                                onClick={() => handleReprocessar(fatura.id)}
+                                                disabled={isLoading}
+                                                className="px-4 py-2 border border-amber-300 dark:border-amber-600 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
+                                                Reprocessar
+                                            </button>
+                                        )}
+                                        {fatura.status_fluxo === 'EXTRAIDA' && fatura.beneficiario && (
+                                            <button
+                                                onClick={() => handleGerarCobranca(fatura)}
+                                                disabled={isLoading}
+                                                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
+                                                Gerar Cobranca
+                                            </button>
+                                        )}
+                                        {fatura.cobranca && (
+                                            <button
+                                                onClick={() => handleVerRelatorio(fatura.cobranca!.id)}
+                                                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2"
+                                            >
+                                                <Eye size={16} />
+                                                Ver Relatorio
+                                            </button>
                                         )}
                                     </div>
-                                )}
-
-                                {/* Secao 4: Acoes Expandidas */}
-                                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                                    {/* Refazer - disponivel em PDF_RECEBIDO, EXTRAIDA, COBRANCA_RASCUNHO */}
-                                    {['PDF_RECEBIDO', 'EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
-                                        <button
-                                            onClick={() => handleRefazer(fatura.id)}
-                                            disabled={isLoading}
-                                            className="text-xs px-3 py-1.5 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 flex items-center gap-1"
-                                        >
-                                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
-                                            Refazer
-                                        </button>
-                                    )}
-
-                                    {/* Reprocessar - disponivel em EXTRAIDA, COBRANCA_RASCUNHO */}
-                                    {['EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
-                                        <button
-                                            onClick={() => handleReprocessar(fatura.id)}
-                                            disabled={isLoading}
-                                            className="text-xs px-3 py-1.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded hover:bg-amber-200 dark:hover:bg-amber-900/50 disabled:opacity-50 flex items-center gap-1"
-                                        >
-                                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
-                                            Reprocessar Extracao
-                                        </button>
-                                    )}
-
-                                    {/* Ver Relatorio - quando tem cobranca */}
-                                    {fatura.cobranca && (
-                                        <button
-                                            onClick={() => handleVerRelatorio(fatura.cobranca!.id)}
-                                            className="text-xs px-3 py-1.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 flex items-center gap-1"
-                                        >
-                                            <Eye size={12} />
-                                            Ver Relatorio
-                                        </button>
-                                    )}
                                 </div>
-                            </div>
-                        </td>
-                    </tr>
-                )}
+                            </td>
+                        </tr>
+                    );
+                })()}
             </React.Fragment>
         );
     };

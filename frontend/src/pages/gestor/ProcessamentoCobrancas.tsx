@@ -1622,11 +1622,11 @@ function FaturaAccordionItem({
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
                                                             <span className="text-sm text-slate-600 dark:text-slate-400">Saldo Acumulado:</span>
-                                                            <span className="font-medium text-slate-900 dark:text-white">{formatarMoeda(saldoAcumulado)}</span>
+                                                            <span className="font-medium text-slate-900 dark:text-white">{saldoAcumulado.toLocaleString('pt-BR')} kWh</span>
                                                         </div>
                                                         <div className="flex items-center justify-between bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
                                                             <span className="text-sm text-orange-600 dark:text-orange-400">A Expirar (prox. ciclo):</span>
-                                                            <span className="font-medium text-orange-700 dark:text-orange-300">{formatarMoeda(aExpirar)}</span>
+                                                            <span className="font-medium text-orange-700 dark:text-orange-300">{aExpirar.toLocaleString('pt-BR')} kWh</span>
                                                         </div>
                                                     </div>
                                                 </div>

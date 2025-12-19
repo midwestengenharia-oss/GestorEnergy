@@ -1120,9 +1120,9 @@ class CobrancasService:
                 usina_id = usina.get("id")
 
                 # Verificar se gestor tem acesso a esta usina
-                check_response = self.supabase.table("usinas_gestores").select(
+                check_response = self.supabase.table("gestores_usina").select(
                     "id"
-                ).eq("usina_id", usina_id).eq("usuario_id", user_id).execute()
+                ).eq("usina_id", usina_id).eq("gestor_id", user_id).eq("ativo", True).execute()
 
                 return len(check_response.data) > 0
             except Exception as e:

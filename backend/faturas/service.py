@@ -1232,6 +1232,23 @@ class FaturasService:
                     dados_extraidos = f.get("dados_extraidos") or {}
                     if isinstance(dados_extraidos, dict):
                         tipo_gd = dados_extraidos.get("tipo_gd") or dados_extraidos.get("modelo_gd")
+                        # Se não encontrou no nível raiz, buscar nos itens de energia injetada
+                        if not tipo_gd:
+                            itens = dados_extraidos.get("itens_fatura") or {}
+                            for key in ["energia_injetada oUC", "energia_injetada_ouc", "energia_injetada mUC", "energia_injetada_muc"]:
+                                items_list = itens.get(key) or []
+                                for item in items_list:
+                                    if isinstance(item, dict) and item.get("tipo_gd") in ["GDI", "GDII"]:
+                                        tipo_gd = item.get("tipo_gd")
+                                        break
+                                if tipo_gd:
+                                    break
+                        # Se ainda não encontrou, verificar ajuste_lei_14300 (indica GDII)
+                        if not tipo_gd:
+                            itens = dados_extraidos.get("itens_fatura") or {}
+                            ajuste = itens.get("ajuste_lei_14300")
+                            if ajuste and (ajuste.get("valor") or ajuste.get("quantidade")):
+                                tipo_gd = "GDII"
 
                     # Busca via busca textual
                     if busca:

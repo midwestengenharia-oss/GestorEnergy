@@ -959,6 +959,14 @@ export default function GestaoFaturas() {
                                                                 <td className="py-2 text-right font-medium text-red-600">-{formatCurrency(Math.abs(injetadaTotalValor))}</td>
                                                             </tr>
                                                         )}
+                                                        {gapKwh > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800 bg-orange-50 dark:bg-orange-900/10">
+                                                                <td className="py-2 text-orange-700 dark:text-orange-400">Energia Excedente (nao compensada)</td>
+                                                                <td className="py-2 text-center text-orange-600">{gapKwh.toFixed(0)}</td>
+                                                                <td className="py-2 text-center text-orange-600">{consumoTarifa.toFixed(4)}</td>
+                                                                <td className="py-2 text-right font-medium text-orange-600">{formatCurrency(gapKwh * consumoTarifa)}</td>
+                                                            </tr>
+                                                        )}
                                                         {fatura.tipo_gd === 'GDII' && ajuste && ajuste.valor ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Ajuste Lei 14.300/22</td>

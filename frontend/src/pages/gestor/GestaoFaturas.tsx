@@ -418,7 +418,11 @@ export default function GestaoFaturas() {
         return (
             <div
                 key={fatura.id}
-                className="bg-white dark:bg-slate-800 rounded-lg p-3 shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition"
+                className="bg-white dark:bg-slate-800 rounded-lg p-3 shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition cursor-pointer"
+                onClick={() => {
+                    setViewMode('lista');
+                    setExpandedId(fatura.id);
+                }}
             >
                 {/* Cabecalho */}
                 <div className="flex items-start justify-between mb-2">

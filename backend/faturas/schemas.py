@@ -299,10 +299,20 @@ class FaturaGestaoResponse(BaseModel):
     dados_extraidos: Optional[dict] = None
     dados_api: Optional[dict] = None
 
+    # Dados da API (para comparacao)
+    consumo: Optional[int] = None
+    leitura_atual: Optional[int] = None
+    leitura_anterior: Optional[int] = None
+    data_vencimento: Optional[date] = None
+    quantidade_dias: Optional[int] = None
+
     # Dados GD
     tipo_gd: Optional[str] = None  # GDI ou GDII
     tipo_ligacao: Optional[str] = None
     bandeira_tarifaria: Optional[str] = None
+
+    # Endereco da UC
+    endereco_uc: Optional[str] = None
 
     # Relacionamentos
     beneficiario: Optional[BeneficiarioGestaoResponse] = None

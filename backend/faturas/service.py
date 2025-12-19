@@ -1130,9 +1130,10 @@ class FaturasService:
             # Usa LEFT JOIN (sem !inner) para não excluir faturas sem UC
             faturas_query = self.db.table("faturas").select(
                 "id, uc_id, mes_referencia, ano_referencia, valor_fatura, "
+                "consumo, leitura_atual, leitura_anterior, data_vencimento, quantidade_dias, "
                 "pdf_path, extracao_status, extracao_score, dados_extraidos, dados_api, "
                 "bandeira_tarifaria, indicador_pagamento, "
-                "unidades_consumidoras(id, cod_empresa, cdc, digito_verificador, tipo_ligacao)"
+                "unidades_consumidoras(id, cod_empresa, cdc, digito_verificador, tipo_ligacao, endereco, numero_imovel)"
             ).in_("uc_id", uc_ids)
 
             # Filtros de período
@@ -1290,6 +1291,13 @@ class FaturasService:
                     # tem_pdf considera pdf_path OU _tem_pdf_base64 (flag calculada na query auxiliar)
                     tem_pdf = f.get("pdf_path") is not None or f.get("_tem_pdf_base64", False)
 
+                    # Montar endereço da UC
+                    endereco_uc = None
+                    if uc:
+                        endereco = uc.get("endereco") or ""
+                        numero = uc.get("numero_imovel") or ""
+                        endereco_uc = f"{endereco}, {numero}".strip(", ") if endereco or numero else None
+
                     fatura_gestao = FaturaGestaoResponse(
                         id=fatura_id,
                         uc_id=uc_id,
@@ -1303,9 +1311,15 @@ class FaturasService:
                         extracao_score=f.get("extracao_score"),
                         dados_extraidos=dados_extraidos if dados_extraidos else None,
                         dados_api=f.get("dados_api"),
+                        consumo=f.get("consumo"),
+                        leitura_atual=f.get("leitura_atual"),
+                        leitura_anterior=f.get("leitura_anterior"),
+                        data_vencimento=self._parse_date_field(f.get("data_vencimento")),
+                        quantidade_dias=f.get("quantidade_dias"),
                         tipo_gd=tipo_gd,
                         tipo_ligacao=uc.get("tipo_ligacao") if uc else None,
                         bandeira_tarifaria=f.get("bandeira_tarifaria"),
+                        endereco_uc=endereco_uc,
                         beneficiario=beneficiario_resp,
                         usina=usina_resp,
                         cobranca=cobranca_resp

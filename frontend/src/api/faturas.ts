@@ -249,9 +249,19 @@ export interface FaturaGestao {
     extracao_score?: number;
     dados_extraidos?: any;
     dados_api?: any;
+    // Dados da API (para comparacao)
+    consumo?: number;
+    leitura_atual?: number;
+    leitura_anterior?: number;
+    data_vencimento?: string;
+    quantidade_dias?: number;
+    // Dados GD
     tipo_gd?: string;
     tipo_ligacao?: string;
     bandeira_tarifaria?: string;
+    // Endereco da UC
+    endereco_uc?: string;
+    // Relacionamentos
     beneficiario?: BeneficiarioGestao;
     usina?: UsinaGestao;
     cobranca?: CobrancaGestao;

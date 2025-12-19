@@ -714,6 +714,13 @@ export default function GestaoFaturas() {
                     const dados = fatura.dados_extraidos as DadosExtraidos | undefined;
                     const dadosApi = fatura.dados_api as Record<string, any> | undefined;
 
+                    // Dados da API - priorizar campos diretos da fatura, fallback para dados_api
+                    const consumoApi = fatura.consumo ?? dadosApi?.consumo;
+                    const leituraAtualApi = fatura.leitura_atual ?? dadosApi?.leitura_atual;
+                    const leituraAnteriorApi = fatura.leitura_anterior ?? dadosApi?.leitura_anterior;
+                    const dataVencimentoApi = fatura.data_vencimento ?? dadosApi?.data_vencimento;
+                    const bandeiraApi = fatura.bandeira_tarifaria ?? dadosApi?.bandeira_tarifaria;
+
                     // Helper para renderizar indicador de status
                     const renderStatusIndicador = (status: ValidacaoStatus) => {
                         const cfg = statusValidacaoConfig[status];
@@ -818,6 +825,12 @@ export default function GestaoFaturas() {
                                                     <span className="font-medium">{fatura.tipo_ligacao || '-'}</span>
                                                 </div>
                                             </div>
+                                            {fatura.endereco_uc && (
+                                                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                                                    <span className="text-slate-500 text-xs">Endereco da UC: </span>
+                                                    <span className="text-sm font-medium">{fatura.endereco_uc}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -858,43 +871,43 @@ export default function GestaoFaturas() {
                                                         </tr>
                                                         <tr className="border-b border-slate-100 dark:border-slate-800">
                                                             <td className="py-2 text-slate-700 dark:text-slate-300">Consumo</td>
-                                                            <td className="py-2 text-center">{dadosApi?.consumo ? `${dadosApi.consumo} kWh` : '-'}</td>
+                                                            <td className="py-2 text-center">{consumoApi ? `${consumoApi} kWh` : '-'}</td>
                                                             <td className="py-2 text-center">{consumoKwh ? `${consumoKwh} kWh` : '-'}</td>
-                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(dadosApi?.consumo, consumoKwh))}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(consumoApi, consumoKwh))}</td>
                                                         </tr>
                                                         <tr className="border-b border-slate-100 dark:border-slate-800">
                                                             <td className="py-2 text-slate-700 dark:text-slate-300">Bandeira</td>
                                                             <td className="py-2 text-center">
-                                                                {dadosApi?.bandeira_tarifaria ? (
+                                                                {bandeiraApi ? (
                                                                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                                        dadosApi.bandeira_tarifaria.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
-                                                                        dadosApi.bandeira_tarifaria.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
+                                                                        bandeiraApi.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
+                                                                        bandeiraApi.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
                                                                         'bg-red-100 text-red-700'
-                                                                    }`}>{dadosApi.bandeira_tarifaria}</span>
+                                                                    }`}>{bandeiraApi}</span>
                                                                 ) : '-'}
                                                             </td>
                                                             <td className="py-2 text-center">
-                                                                {(fatura.bandeira_tarifaria || dados?.bandeira_tarifaria) ? (
+                                                                {dados?.bandeira_tarifaria ? (
                                                                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                                        (fatura.bandeira_tarifaria || dados?.bandeira_tarifaria || '').toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
-                                                                        (fatura.bandeira_tarifaria || dados?.bandeira_tarifaria || '').toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
+                                                                        dados.bandeira_tarifaria.toLowerCase().includes('verde') ? 'bg-green-100 text-green-700' :
+                                                                        dados.bandeira_tarifaria.toLowerCase().includes('amarela') ? 'bg-yellow-100 text-yellow-700' :
                                                                         'bg-red-100 text-red-700'
-                                                                    }`}>{fatura.bandeira_tarifaria || dados?.bandeira_tarifaria}</span>
+                                                                    }`}>{dados.bandeira_tarifaria}</span>
                                                                 ) : '-'}
                                                             </td>
-                                                            <td className="py-2 text-center">{renderStatusIndicador(compararStrings(dadosApi?.bandeira_tarifaria, fatura.bandeira_tarifaria || dados?.bandeira_tarifaria))}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararStrings(bandeiraApi, dados?.bandeira_tarifaria))}</td>
                                                         </tr>
                                                         <tr className="border-b border-slate-100 dark:border-slate-800">
                                                             <td className="py-2 text-slate-700 dark:text-slate-300">Leituras</td>
-                                                            <td className="py-2 text-center">{dadosApi?.leitura_anterior && dadosApi?.leitura_atual ? `${dadosApi.leitura_anterior} → ${dadosApi.leitura_atual}` : '-'}</td>
+                                                            <td className="py-2 text-center">{leituraAnteriorApi && leituraAtualApi ? `${leituraAnteriorApi} → ${leituraAtualApi}` : '-'}</td>
                                                             <td className="py-2 text-center">{dados?.leitura_anterior && dados?.leitura_atual ? `${dados.leitura_anterior} → ${dados.leitura_atual}` : '-'}</td>
-                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(dadosApi?.leitura_atual, dados?.leitura_atual))}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(leituraAtualApi, dados?.leitura_atual))}</td>
                                                         </tr>
                                                         <tr>
                                                             <td className="py-2 text-slate-700 dark:text-slate-300">Vencimento</td>
-                                                            <td className="py-2 text-center">{dadosApi?.data_vencimento ? new Date(dadosApi.data_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                                                            <td className="py-2 text-center">{dataVencimentoApi ? new Date(dataVencimentoApi + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
                                                             <td className="py-2 text-center">{dados?.vencimento || '-'}</td>
-                                                            <td className="py-2 text-center">{renderStatusIndicador(compararDatas(dadosApi?.data_vencimento, dados?.vencimento))}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararDatas(dataVencimentoApi, dados?.vencimento))}</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>

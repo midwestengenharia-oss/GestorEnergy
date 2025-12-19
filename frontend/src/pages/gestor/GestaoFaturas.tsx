@@ -870,10 +870,16 @@ export default function GestaoFaturas() {
                                                             <td className="py-2 text-center">{renderStatusIndicador(compararValores(fatura.valor_fatura, dados?.totais?.total_geral_fatura, 0.02))}</td>
                                                         </tr>
                                                         <tr className="border-b border-slate-100 dark:border-slate-800">
-                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Consumo</td>
-                                                            <td className="py-2 text-center">{consumoApi ? `${consumoApi} kWh` : '-'}</td>
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Consumo Bruto</td>
+                                                            <td className="py-2 text-center">{leituraAtualApi && leituraAnteriorApi ? `${leituraAtualApi - leituraAnteriorApi} kWh` : '-'}</td>
                                                             <td className="py-2 text-center">{consumoKwh ? `${consumoKwh} kWh` : '-'}</td>
-                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(consumoApi, consumoKwh))}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(leituraAtualApi && leituraAnteriorApi ? leituraAtualApi - leituraAnteriorApi : null, consumoKwh))}</td>
+                                                        </tr>
+                                                        <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                            <td className="py-2 text-slate-700 dark:text-slate-300">Consumo Faturado</td>
+                                                            <td className="py-2 text-center">{consumoApi ? `${consumoApi} kWh` : '-'}</td>
+                                                            <td className="py-2 text-center">{`${Math.max(0, consumoKwh - injetadaTotalKwh).toFixed(0)} kWh`}</td>
+                                                            <td className="py-2 text-center">{renderStatusIndicador(compararValores(consumoApi, Math.max(0, consumoKwh - injetadaTotalKwh)))}</td>
                                                         </tr>
                                                         <tr className="border-b border-slate-100 dark:border-slate-800">
                                                             <td className="py-2 text-slate-700 dark:text-slate-300">Bandeira</td>

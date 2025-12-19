@@ -1,0 +1,3 @@
+# Deploy trigger - force redeploy
+# Last update: 2025-12-18T20:15:00
+# Changes: Removed temperature parameter from gpt-5-mini API call

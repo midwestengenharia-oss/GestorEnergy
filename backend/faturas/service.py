@@ -1198,14 +1198,31 @@ class FaturasService:
                 # Montar resposta da cobrança
                 cobranca_resp = None
                 if cobranca:
+                    # Converter datas de string para date
+                    vencimento_raw = cobranca.get("vencimento")
+                    vencimento = None
+                    if vencimento_raw:
+                        if isinstance(vencimento_raw, str):
+                            vencimento = date.fromisoformat(vencimento_raw[:10])
+                        elif isinstance(vencimento_raw, date):
+                            vencimento = vencimento_raw
+
+                    pago_em_raw = cobranca.get("pago_em")
+                    pago_em = None
+                    if pago_em_raw:
+                        if isinstance(pago_em_raw, str):
+                            pago_em = date.fromisoformat(pago_em_raw[:10])
+                        elif isinstance(pago_em_raw, date):
+                            pago_em = pago_em_raw
+
                     cobranca_resp = CobrancaGestaoResponse(
                         id=cobranca["id"],
                         status=cobranca["status"],
                         valor_total=Decimal(str(cobranca["valor_total"])) if cobranca.get("valor_total") else Decimal("0"),
-                        vencimento=cobranca.get("vencimento"),
+                        vencimento=vencimento,
                         qr_code_pix=cobranca.get("qr_code_pix"),
                         qr_code_pix_image=cobranca.get("qr_code_pix_image"),
-                        pago_em=cobranca.get("pago_em")
+                        pago_em=pago_em
                     )
 
                 # Montar fatura

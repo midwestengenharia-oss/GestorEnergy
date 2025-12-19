@@ -2,11 +2,11 @@
  * Gestao de Faturas - Pagina unificada com Kanban e Lista
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     FileX, FileText, Zap, FileEdit, CreditCard, CheckCircle, Check,
     RefreshCw, LayoutGrid, List, Search, Filter, ChevronDown, ChevronRight,
-    Eye, Copy, Loader2, AlertCircle
+    Eye, Copy, Loader2, AlertCircle, RotateCcw, RefreshCcw
 } from 'lucide-react';
 import { faturasApi, FaturaGestao, TotaisGestao, StatusFluxo } from '../../api/faturas';
 import { usinasApi } from '../../api/usinas';
@@ -57,6 +57,18 @@ export default function GestaoFaturas() {
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [loadingAction, setLoadingAction] = useState<number | null>(null);
     const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+    const [selectedStatus, setSelectedStatus] = useState<StatusFluxo | null>(null);
+
+    // Refs para colunas do Kanban (scroll)
+    const kanbanRefs = useRef<Record<StatusFluxo, HTMLDivElement | null>>({
+        AGUARDANDO_PDF: null,
+        PDF_RECEBIDO: null,
+        EXTRAIDA: null,
+        COBRANCA_RASCUNHO: null,
+        COBRANCA_EMITIDA: null,
+        COBRANCA_PAGA: null,
+        FATURA_QUITADA: null,
+    });
 
     // Filtros
     const [filtroUsina, setFiltroUsina] = useState<number | ''>('');
@@ -183,6 +195,56 @@ export default function GestaoFaturas() {
             alert(err.response?.data?.detail || 'Erro ao carregar relatorio');
         }
     };
+
+    const handleRefazer = async (faturaId: number) => {
+        if (!confirm('Tem certeza que deseja refazer esta fatura? Isso ira resetar a fatura e excluir a cobranca associada.')) {
+            return;
+        }
+        setLoadingAction(faturaId);
+        try {
+            await faturasApi.refazer(faturaId);
+            await carregarFaturas();
+        } catch (err: any) {
+            alert(err.response?.data?.detail || 'Erro ao refazer fatura');
+        } finally {
+            setLoadingAction(null);
+        }
+    };
+
+    const handleReprocessar = async (faturaId: number) => {
+        if (!confirm('Deseja reprocessar a extracao dos dados desta fatura?')) {
+            return;
+        }
+        setLoadingAction(faturaId);
+        try {
+            await faturasApi.reprocessarExtracao(faturaId);
+            await carregarFaturas();
+        } catch (err: any) {
+            alert(err.response?.data?.detail || 'Erro ao reprocessar extracao');
+        } finally {
+            setLoadingAction(null);
+        }
+    };
+
+    // Handler para clique nos cards de status
+    const handleStatusClick = (status: StatusFluxo) => {
+        if (selectedStatus === status) {
+            // Se clicar no mesmo, desseleciona
+            setSelectedStatus(null);
+        } else {
+            setSelectedStatus(status);
+            // Se em Kanban, faz scroll para a coluna
+            if (viewMode === 'kanban' && kanbanRefs.current[status]) {
+                kanbanRefs.current[status]?.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+            }
+        }
+    };
+
+    // Faturas filtradas por status selecionado (para Lista)
+    const faturasFiltradas = React.useMemo(() => {
+        if (!selectedStatus) return faturas;
+        return faturas.filter(f => f.status_fluxo === selectedStatus);
+    }, [faturas, selectedStatus]);
 
     // Renderizar card do Kanban
     const renderKanbanCard = (fatura: FaturaGestao) => {
@@ -350,9 +412,14 @@ export default function GestaoFaturas() {
     const renderKanbanColumn = (status: StatusFluxo, faturasList: FaturaGestao[], count: number) => {
         const config = STATUS_CONFIG[status];
         const Icon = config.icon;
+        const isSelected = selectedStatus === status;
 
         return (
-            <div key={status} className="flex-shrink-0 w-72">
+            <div
+                key={status}
+                ref={(el) => { kanbanRefs.current[status] = el; }}
+                className={`flex-shrink-0 w-72 transition-all ${isSelected ? 'ring-2 ring-blue-500 rounded-lg' : ''}`}
+            >
                 {/* Header */}
                 <div className={`${config.corBg} rounded-t-lg px-3 py-2 flex items-center gap-2`}>
                     <Icon size={16} className={config.cor} />
@@ -482,55 +549,220 @@ export default function GestaoFaturas() {
                 {isExpanded && (
                     <tr>
                         <td colSpan={6} className="px-4 py-4 bg-slate-50 dark:bg-slate-800/50">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {/* Beneficiario */}
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                    <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Beneficiario</h4>
-                                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                                        <p>Nome: {fatura.beneficiario?.nome || '-'}</p>
-                                        <p>CPF: {fatura.beneficiario?.cpf || '-'}</p>
-                                        <p>Email: {fatura.beneficiario?.email || '-'}</p>
-                                        <p>Usina: {fatura.usina?.nome || '-'}</p>
+                            <div className="space-y-4">
+                                {/* Secao 1: Beneficiario e UC (sempre visivel) */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                        <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Beneficiario</h4>
+                                        <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                                            <p><span className="text-slate-500">Nome:</span> {fatura.beneficiario?.nome || '-'}</p>
+                                            <p><span className="text-slate-500">CPF:</span> {fatura.beneficiario?.cpf || '-'}</p>
+                                            <p><span className="text-slate-500">Email:</span> {fatura.beneficiario?.email || '-'}</p>
+                                            <p><span className="text-slate-500">Usina:</span> {fatura.usina?.nome || '-'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                        <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Unidade Consumidora</h4>
+                                        <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                                            <p><span className="text-slate-500">UC:</span> {fatura.uc_formatada}</p>
+                                            <p><span className="text-slate-500">Referencia:</span> {fatura.referencia_formatada}</p>
+                                            <p><span className="text-slate-500">Tipo Ligacao:</span> {fatura.tipo_ligacao || '-'}</p>
+                                            <p><span className="text-slate-500">Tipo GD:</span> {fatura.tipo_gd || '-'}</p>
+                                            <p><span className="text-slate-500">PDF:</span> {fatura.tem_pdf ? <span className="text-green-600">Disponivel</span> : <span className="text-red-500">Aguardando</span>}</p>
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Fatura */}
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                    <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Fatura</h4>
-                                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                                        <p>Valor: {formatCurrency(fatura.valor_fatura)}</p>
-                                        <p>Tipo GD: {fatura.tipo_gd || '-'}</p>
-                                        <p>Ligacao: {fatura.tipo_ligacao || '-'}</p>
-                                        <p>Bandeira: {fatura.bandeira_tarifaria || '-'}</p>
-                                        {fatura.extracao_score !== undefined && (
-                                            <p>Score extracao: {fatura.extracao_score}%</p>
+                                {/* Secao 2: Dados Extraidos (a partir de EXTRAIDA) */}
+                                {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                            <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Dados Extraidos</h4>
+                                            <div className="text-xs space-y-2">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <span className="text-slate-500">Consumo:</span>
+                                                        <span className="ml-1 font-medium text-slate-900 dark:text-white">
+                                                            {fatura.dados_extraidos?.consumo_kwh ?? '-'} kWh
+                                                        </span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-slate-500">Valor Fatura:</span>
+                                                        <span className="ml-1 font-medium text-slate-900 dark:text-white">
+                                                            {formatCurrency(fatura.valor_fatura)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {(fatura.dados_extraidos?.injetada_kwh || fatura.dados_extraidos?.injetada_ouc_kwh) && (
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <span className="text-slate-500">Injetada oUC:</span>
+                                                            <span className="ml-1 font-medium text-green-600">
+                                                                {fatura.dados_extraidos?.injetada_ouc_kwh ?? fatura.dados_extraidos?.injetada_kwh ?? '-'} kWh
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-slate-500">Injetada mUC:</span>
+                                                            <span className="ml-1 font-medium text-green-600">
+                                                                {fatura.dados_extraidos?.injetada_muc_kwh ?? '-'} kWh
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-4">
+                                                    <div>
+                                                        <span className="text-slate-500">Bandeira:</span>
+                                                        <span className={`ml-1 px-2 py-0.5 rounded text-xs font-medium ${
+                                                            (fatura.bandeira_tarifaria || fatura.dados_extraidos?.bandeira_tarifaria)?.toUpperCase().includes('VERDE')
+                                                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                                                : (fatura.bandeira_tarifaria || fatura.dados_extraidos?.bandeira_tarifaria)?.toUpperCase().includes('AMARELA')
+                                                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                        }`}>
+                                                            {fatura.bandeira_tarifaria || fatura.dados_extraidos?.bandeira_tarifaria || '-'}
+                                                        </span>
+                                                    </div>
+                                                    {fatura.extracao_score !== undefined && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-slate-500">Score:</span>
+                                                            <div className="w-20 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                                <div
+                                                                    className={`h-full ${fatura.extracao_score >= 80 ? 'bg-green-500' : fatura.extracao_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                                                    style={{ width: `${fatura.extracao_score}%` }}
+                                                                />
+                                                            </div>
+                                                            <span className="font-medium">{fatura.extracao_score}%</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Comparacao API vs PDF */}
+                                        {fatura.dados_api && (
+                                            <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                                <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Comparacao API vs PDF</h4>
+                                                <div className="text-xs space-y-1">
+                                                    <div className="grid grid-cols-3 gap-1 font-medium text-slate-500 border-b pb-1">
+                                                        <span>Campo</span>
+                                                        <span>API</span>
+                                                        <span>PDF</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-1">
+                                                        <span className="text-slate-500">Consumo</span>
+                                                        <span>{fatura.dados_api?.consumo ?? '-'}</span>
+                                                        <span>{fatura.dados_extraidos?.consumo_kwh ?? '-'}</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-1">
+                                                        <span className="text-slate-500">Valor</span>
+                                                        <span>{formatCurrency(fatura.dados_api?.valor_fatura)}</span>
+                                                        <span>{formatCurrency(fatura.valor_fatura)}</span>
+                                                    </div>
+                                                    {fatura.dados_api?.leitura_anterior && (
+                                                        <div className="grid grid-cols-3 gap-1">
+                                                            <span className="text-slate-500">Leit. Anterior</span>
+                                                            <span>{fatura.dados_api?.leitura_anterior ?? '-'}</span>
+                                                            <span>-</span>
+                                                        </div>
+                                                    )}
+                                                    {fatura.dados_api?.leitura_atual && (
+                                                        <div className="grid grid-cols-3 gap-1">
+                                                            <span className="text-slate-500">Leit. Atual</span>
+                                                            <span>{fatura.dados_api?.leitura_atual ?? '-'}</span>
+                                                            <span>-</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
-                                </div>
+                                )}
 
-                                {/* Cobranca */}
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-                                    <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Cobranca</h4>
-                                    {fatura.cobranca ? (
-                                        <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                                            <p>Status: {fatura.cobranca.status}</p>
-                                            <p>Valor: {formatCurrency(fatura.cobranca.valor_total)}</p>
-                                            <p>Vencimento: {new Date(fatura.cobranca.vencimento).toLocaleDateString('pt-BR')}</p>
+                                {/* Secao 3: Cobranca (a partir de COBRANCA_RASCUNHO) */}
+                                {['COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && fatura.cobranca && (
+                                    <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                                        <h4 className="text-sm font-medium text-slate-900 dark:text-white mb-2">Cobranca</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                                            <div>
+                                                <span className="text-slate-500">Status:</span>
+                                                <span className={`ml-1 px-2 py-0.5 rounded font-medium ${
+                                                    fatura.cobranca.status === 'PAGA' ? 'bg-green-100 text-green-700' :
+                                                    fatura.cobranca.status === 'EMITIDA' ? 'bg-orange-100 text-orange-700' :
+                                                    'bg-purple-100 text-purple-700'
+                                                }`}>
+                                                    {fatura.cobranca.status}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span className="text-slate-500">Valor:</span>
+                                                <span className="ml-1 font-medium text-slate-900 dark:text-white">
+                                                    {formatCurrency(fatura.cobranca.valor_total)}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span className="text-slate-500">Vencimento:</span>
+                                                <span className="ml-1 font-medium text-slate-900 dark:text-white">
+                                                    {new Date(fatura.cobranca.vencimento).toLocaleDateString('pt-BR')}
+                                                </span>
+                                            </div>
                                             {fatura.cobranca.pago_em && (
-                                                <p>Pago em: {new Date(fatura.cobranca.pago_em).toLocaleDateString('pt-BR')}</p>
-                                            )}
-                                            {fatura.cobranca.qr_code_pix && (
-                                                <button
-                                                    onClick={() => handleCopiarPix(fatura.cobranca!.qr_code_pix!)}
-                                                    className="mt-2 w-full text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center justify-center gap-1"
-                                                >
-                                                    <Copy size={12} />
-                                                    Copiar PIX
-                                                </button>
+                                                <div>
+                                                    <span className="text-slate-500">Pago em:</span>
+                                                    <span className="ml-1 font-medium text-green-600">
+                                                        {new Date(fatura.cobranca.pago_em).toLocaleDateString('pt-BR')}
+                                                    </span>
+                                                </div>
                                             )}
                                         </div>
-                                    ) : (
-                                        <p className="text-xs text-slate-400">Sem cobranca gerada</p>
+                                        {fatura.cobranca.qr_code_pix && (
+                                            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                                                <button
+                                                    onClick={() => handleCopiarPix(fatura.cobranca!.qr_code_pix!)}
+                                                    className="text-xs px-3 py-1.5 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1"
+                                                >
+                                                    <Copy size={12} />
+                                                    Copiar Codigo PIX
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Secao 4: Acoes Expandidas */}
+                                <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                    {/* Refazer - disponivel em PDF_RECEBIDO, EXTRAIDA, COBRANCA_RASCUNHO */}
+                                    {['PDF_RECEBIDO', 'EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
+                                        <button
+                                            onClick={() => handleRefazer(fatura.id)}
+                                            disabled={isLoading}
+                                            className="text-xs px-3 py-1.5 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 flex items-center gap-1"
+                                        >
+                                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                                            Refazer
+                                        </button>
+                                    )}
+
+                                    {/* Reprocessar - disponivel em EXTRAIDA, COBRANCA_RASCUNHO */}
+                                    {['EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
+                                        <button
+                                            onClick={() => handleReprocessar(fatura.id)}
+                                            disabled={isLoading}
+                                            className="text-xs px-3 py-1.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded hover:bg-amber-200 dark:hover:bg-amber-900/50 disabled:opacity-50 flex items-center gap-1"
+                                        >
+                                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
+                                            Reprocessar Extracao
+                                        </button>
+                                    )}
+
+                                    {/* Ver Relatorio - quando tem cobranca */}
+                                    {fatura.cobranca && (
+                                        <button
+                                            onClick={() => handleVerRelatorio(fatura.cobranca!.id)}
+                                            className="text-xs px-3 py-1.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 flex items-center gap-1"
+                                        >
+                                            <Eye size={12} />
+                                            Ver Relatorio
+                                        </button>
                                     )}
                                 </div>
                             </div>
@@ -556,14 +788,14 @@ export default function GestaoFaturas() {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                    {faturas.length === 0 ? (
+                    {faturasFiltradas.length === 0 ? (
                         <tr>
                             <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                                Nenhuma fatura encontrada
+                                {selectedStatus ? `Nenhuma fatura em "${STATUS_CONFIG[selectedStatus].label}"` : 'Nenhuma fatura encontrada'}
                             </td>
                         </tr>
                     ) : (
-                        faturas.map(renderListaRow)
+                        faturasFiltradas.map(renderListaRow)
                     )}
                 </tbody>
             </table>
@@ -687,7 +919,7 @@ export default function GestaoFaturas() {
                 </div>
             </div>
 
-            {/* Cards de Estatisticas */}
+            {/* Cards de Estatisticas - Clicaveis */}
             {totais && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
                     {(Object.keys(STATUS_CONFIG) as StatusFluxo[]).map(status => {
@@ -701,11 +933,17 @@ export default function GestaoFaturas() {
                             status === 'COBRANCA_EMITIDA' ? 'cobranca_emitida' :
                             status === 'COBRANCA_PAGA' ? 'cobranca_paga' : 'fatura_quitada'
                         ];
+                        const isSelected = selectedStatus === status;
 
                         return (
                             <div
                                 key={status}
-                                className={`${config.corBg} rounded-lg p-3 border border-slate-200 dark:border-slate-700`}
+                                onClick={() => handleStatusClick(status)}
+                                className={`${config.corBg} rounded-lg p-3 border-2 cursor-pointer transition-all hover:shadow-md ${
+                                    isSelected
+                                        ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-800'
+                                        : 'border-slate-200 dark:border-slate-700'
+                                }`}
                             >
                                 <div className="flex items-center gap-2">
                                     <Icon size={16} className={config.cor} />
@@ -715,6 +953,19 @@ export default function GestaoFaturas() {
                             </div>
                         );
                     })}
+                </div>
+            )}
+
+            {/* Indicador de filtro ativo */}
+            {selectedStatus && (
+                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                    <span>Filtrando por: <strong className="text-slate-900 dark:text-white">{STATUS_CONFIG[selectedStatus].label}</strong></span>
+                    <button
+                        onClick={() => setSelectedStatus(null)}
+                        className="text-blue-500 hover:text-blue-700 underline"
+                    >
+                        Limpar filtro
+                    </button>
                 </div>
             )}
 

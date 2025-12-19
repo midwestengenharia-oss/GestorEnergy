@@ -766,10 +766,11 @@ export default function GestaoFaturas() {
                     const energiaComDesconto = injetadaTotalKwh * tarifaBase * 0.70;
                     const disponibilidade = ajuste?.valor || 0;
                     const gapKwh = Math.max(0, consumoKwh - injetadaTotalKwh);
+                    const energiaExcedenteValor = gapKwh * tarifaBase;
                     const temConsumoNaoCompensado = gapKwh > 0;
                     const bandeirasCobranca = (fatura.tipo_gd === 'GDI' || temConsumoNaoCompensado) ? bandeiras : 0;
 
-                    let totalCobranca = energiaComDesconto + iluminacao + valorOutros;
+                    let totalCobranca = energiaComDesconto + energiaExcedenteValor + iluminacao + valorOutros;
                     if (fatura.tipo_gd === 'GDII') {
                         totalCobranca += disponibilidade;
                     } else {
@@ -959,14 +960,6 @@ export default function GestaoFaturas() {
                                                                 <td className="py-2 text-right font-medium text-red-600">-{formatCurrency(Math.abs(injetadaTotalValor))}</td>
                                                             </tr>
                                                         )}
-                                                        {gapKwh > 0 && (
-                                                            <tr className="border-b border-slate-100 dark:border-slate-800 bg-orange-50 dark:bg-orange-900/10">
-                                                                <td className="py-2 text-orange-700 dark:text-orange-400">Energia Excedente (nao compensada)</td>
-                                                                <td className="py-2 text-center text-orange-600">{gapKwh.toFixed(0)}</td>
-                                                                <td className="py-2 text-center text-orange-600">{consumoTarifa.toFixed(4)}</td>
-                                                                <td className="py-2 text-right font-medium text-orange-600">{formatCurrency(gapKwh * consumoTarifa)}</td>
-                                                            </tr>
-                                                        )}
                                                         {fatura.tipo_gd === 'GDII' && ajuste && ajuste.valor ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Ajuste Lei 14.300/22</td>
@@ -1057,6 +1050,14 @@ export default function GestaoFaturas() {
                                                             <td className="py-2 text-center text-green-600">{(tarifaBase * 0.70).toFixed(4)}</td>
                                                             <td className="py-2 text-right font-medium text-green-600">{formatCurrency(energiaComDesconto)}</td>
                                                         </tr>
+                                                        {gapKwh > 0 && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800 bg-orange-50 dark:bg-orange-900/10">
+                                                                <td className="py-2 text-orange-700 dark:text-orange-400">Energia Excedente (nao compensada)</td>
+                                                                <td className="py-2 text-center text-orange-600">{gapKwh.toFixed(0)}</td>
+                                                                <td className="py-2 text-center text-orange-600">{tarifaBase.toFixed(4)}</td>
+                                                                <td className="py-2 text-right font-medium text-orange-600">{formatCurrency(energiaExcedenteValor)}</td>
+                                                            </tr>
+                                                        )}
                                                         {fatura.tipo_gd === 'GDII' && disponibilidade > 0 ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Disponibilidade (Lei 14.300)</td>

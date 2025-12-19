@@ -21,6 +21,7 @@ from backend.faturas.schemas import (
     MessageResponse,
     DadosExtraidosUpdate,
     DadosExtraidosEditadosResponse,
+    GestaoFaturasResponse,
 )
 from backend.faturas.extraction_schemas import FaturaExtraidaSchema
 from backend.faturas.service import faturas_service
@@ -676,6 +677,52 @@ async def listar_faturas_kanban(
             "relatorio_gerado": len(relatorio_gerado)
         }
     }
+
+
+@router.get(
+    "/gestao",
+    response_model=GestaoFaturasResponse,
+    summary="Gestão unificada de faturas",
+    description="Retorna faturas com status unificado do fluxo completo (fatura → cobrança → pagamento)"
+)
+async def listar_gestao_faturas(
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    usina_id: Optional[int] = Query(None, description="Filtrar por usina"),
+    beneficiario_id: Optional[int] = Query(None, description="Filtrar por beneficiário"),
+    mes_referencia: Optional[int] = Query(None, ge=1, le=12, description="Mês de referência"),
+    ano_referencia: Optional[int] = Query(None, ge=2000, le=2100, description="Ano de referência"),
+    busca: Optional[str] = Query(None, description="Buscar por nome ou UC"),
+    status_fluxo: Optional[str] = Query(None, description="Filtrar por status (separados por vírgula)"),
+):
+    """
+    Endpoint unificado para gestão de faturas e cobranças.
+
+    Retorna faturas com status calculado do fluxo completo:
+    - AGUARDANDO_PDF: Fatura sem PDF
+    - PDF_RECEBIDO: PDF disponível, aguarda extração
+    - EXTRAIDA: Dados extraídos, pronta para cobrança
+    - COBRANCA_RASCUNHO: Cobrança gerada em rascunho
+    - COBRANCA_EMITIDA: Cobrança aprovada com PIX
+    - COBRANCA_PAGA: Pagamento confirmado
+    - FATURA_QUITADA: Ciclo completo
+
+    Inclui totalizadores por status para exibição em cards/kanban.
+    """
+    # Converter status_fluxo de string para lista
+    status_list = None
+    if status_fluxo:
+        status_list = [s.strip().upper() for s in status_fluxo.split(",")]
+
+    return await faturas_service.listar_gestao(
+        user_id=str(current_user.id),
+        perfis=current_user.perfis,
+        usina_id=usina_id,
+        beneficiario_id=beneficiario_id,
+        mes_referencia=mes_referencia,
+        ano_referencia=ano_referencia,
+        busca=busca,
+        status_fluxo=status_list
+    )
 
 
 @router.get(

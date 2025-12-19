@@ -156,6 +156,10 @@ export const faturasApi = {
     // Kanban de faturas
     kanban: (params?: { usina_id?: number; mes_referencia?: number; ano_referencia?: number; busca?: string }) =>
         api.get<KanbanResponse>('/faturas/kanban', { params }),
+
+    // Gestão unificada de faturas
+    gestao: (params?: GestaoFaturasParams) =>
+        api.get<GestaoFaturasResponse>('/faturas/gestao', { params }),
 };
 
 // Tipos para o Kanban
@@ -196,6 +200,85 @@ export interface KanbanResponse {
         extraida: number;
         relatorio_gerado: number;
     };
+}
+
+// Tipos para Gestão Unificada de Faturas
+export type StatusFluxo =
+    | 'AGUARDANDO_PDF'
+    | 'PDF_RECEBIDO'
+    | 'EXTRAIDA'
+    | 'COBRANCA_RASCUNHO'
+    | 'COBRANCA_EMITIDA'
+    | 'COBRANCA_PAGA'
+    | 'FATURA_QUITADA';
+
+export interface BeneficiarioGestao {
+    id: number;
+    nome?: string;
+    cpf: string;
+    email?: string;
+    telefone?: string;
+}
+
+export interface UsinaGestao {
+    id: number;
+    nome?: string;
+}
+
+export interface CobrancaGestao {
+    id: number;
+    status: string;
+    valor_total: number;
+    vencimento: string;
+    qr_code_pix?: string;
+    qr_code_pix_image?: string;
+    pago_em?: string;
+}
+
+export interface FaturaGestao {
+    id: number;
+    uc_id: number;
+    uc_formatada: string;
+    mes_referencia: number;
+    ano_referencia: number;
+    referencia_formatada?: string;
+    status_fluxo: StatusFluxo;
+    tem_pdf: boolean;
+    valor_fatura?: number;
+    extracao_status?: string;
+    extracao_score?: number;
+    dados_extraidos?: any;
+    dados_api?: any;
+    tipo_gd?: string;
+    tipo_ligacao?: string;
+    bandeira_tarifaria?: string;
+    beneficiario?: BeneficiarioGestao;
+    usina?: UsinaGestao;
+    cobranca?: CobrancaGestao;
+}
+
+export interface TotaisGestao {
+    aguardando_pdf: number;
+    pdf_recebido: number;
+    extraida: number;
+    cobranca_rascunho: number;
+    cobranca_emitida: number;
+    cobranca_paga: number;
+    fatura_quitada: number;
+}
+
+export interface GestaoFaturasResponse {
+    faturas: FaturaGestao[];
+    totais: TotaisGestao;
+}
+
+export interface GestaoFaturasParams {
+    usina_id?: number;
+    beneficiario_id?: number;
+    mes_referencia?: number;
+    ano_referencia?: number;
+    busca?: string;
+    status_fluxo?: string;
 }
 
 /**

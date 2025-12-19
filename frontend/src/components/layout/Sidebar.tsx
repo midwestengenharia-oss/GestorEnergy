@@ -99,7 +99,6 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
             items: [
                 { label: 'Leads', path: '/app/gestor/leads', icon: Target },
                 { label: 'Kanban Leads', path: '/app/gestor/kanban-leads', icon: Kanban },
-                { label: 'Kanban Faturas', path: '/app/gestor/kanban', icon: Kanban },
             ],
         },
         {
@@ -115,7 +114,7 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
         {
             title: 'Financeiro',
             items: [
-                { label: 'Processar Faturas', path: '/app/gestor/processar-cobrancas', icon: FileText },
+                { label: 'Gestão de Faturas', path: '/app/gestor/gestao-faturas', icon: Kanban },
                 { label: 'Cobranças', path: '/app/gestor/cobrancas', icon: Wallet },
                 { label: 'Financeiro', path: '/app/gestor/financeiro', icon: DollarSign },
                 { label: 'Contratos', path: '/app/gestor/contratos', icon: FileSignature },

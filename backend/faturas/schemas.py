@@ -235,6 +235,107 @@ class DadosExtraidosEditadosResponse(BaseModel):
 
 
 # ========================
+# Gestão Unificada de Faturas
+# ========================
+
+class BeneficiarioGestaoResponse(BaseModel):
+    """Beneficiário resumido para gestão"""
+    id: int
+    nome: Optional[str] = None
+    cpf: str
+    email: Optional[str] = None
+    telefone: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UsinaGestaoResponse(BaseModel):
+    """Usina resumida para gestão"""
+    id: int
+    nome: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CobrancaGestaoResponse(BaseModel):
+    """Cobrança resumida para gestão"""
+    id: int
+    status: str
+    valor_total: Decimal
+    vencimento: date
+    qr_code_pix: Optional[str] = None
+    qr_code_pix_image: Optional[str] = None
+    pago_em: Optional[date] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FaturaGestaoResponse(BaseModel):
+    """
+    Fatura com status unificado para gestão.
+    Inclui dados de beneficiário, usina e cobrança.
+    """
+    # Identificação
+    id: int
+    uc_id: int
+    uc_formatada: str
+
+    # Referência
+    mes_referencia: int
+    ano_referencia: int
+    referencia_formatada: Optional[str] = None
+
+    # Status unificado do fluxo
+    status_fluxo: str  # AGUARDANDO_PDF, PDF_RECEBIDO, EXTRAIDA, COBRANCA_RASCUNHO, COBRANCA_EMITIDA, COBRANCA_PAGA, FATURA_QUITADA
+
+    # Fatura
+    tem_pdf: bool = False
+    valor_fatura: Optional[Decimal] = None
+    extracao_status: Optional[str] = None
+    extracao_score: Optional[int] = None
+    dados_extraidos: Optional[dict] = None
+    dados_api: Optional[dict] = None
+
+    # Dados GD
+    tipo_gd: Optional[str] = None  # GDI ou GDII
+    tipo_ligacao: Optional[str] = None
+    bandeira_tarifaria: Optional[str] = None
+
+    # Relacionamentos
+    beneficiario: Optional[BeneficiarioGestaoResponse] = None
+    usina: Optional[UsinaGestaoResponse] = None
+    cobranca: Optional[CobrancaGestaoResponse] = None
+
+    class Config:
+        from_attributes = True
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.referencia_formatada:
+            self.referencia_formatada = f"{self.mes_referencia:02d}/{self.ano_referencia}"
+
+
+class TotaisGestaoResponse(BaseModel):
+    """Totais por status do fluxo"""
+    aguardando_pdf: int = 0
+    pdf_recebido: int = 0
+    extraida: int = 0
+    cobranca_rascunho: int = 0
+    cobranca_emitida: int = 0
+    cobranca_paga: int = 0
+    fatura_quitada: int = 0
+
+
+class GestaoFaturasResponse(BaseModel):
+    """Resposta do endpoint de gestão de faturas"""
+    faturas: List[FaturaGestaoResponse]
+    totais: TotaisGestaoResponse
+
+
+# ========================
 # Respostas genéricas
 # ========================
 

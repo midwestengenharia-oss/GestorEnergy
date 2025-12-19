@@ -1127,7 +1127,15 @@ class FaturasService:
             totais = TotaisGestaoResponse()
 
             for f in faturas_raw:
-                uc_id = f["uc_id"]
+                # Validar campos obrigatórios da fatura
+                fatura_id = f.get("id")
+                uc_id = f.get("uc_id")
+                mes_ref = f.get("mes_referencia")
+                ano_ref = f.get("ano_referencia")
+                if not fatura_id or not uc_id or not mes_ref or not ano_ref:
+                    logger.warning(f"Fatura com campos obrigatórios faltando: id={fatura_id}, uc={uc_id}")
+                    continue
+
                 beneficiario = beneficiarios_por_uc.get(uc_id)
                 if not beneficiario:
                     continue
@@ -1141,7 +1149,7 @@ class FaturasService:
                 )
 
                 # Buscar cobrança
-                cobranca = cobrancas_por_fatura.get(f["id"])
+                cobranca = cobrancas_por_fatura.get(fatura_id)
 
                 # Calcular status do fluxo
                 status = self._calcular_status_fluxo(f, cobranca)
@@ -1179,25 +1187,38 @@ class FaturasService:
                     if busca_lower not in nome and busca_lower not in uc_formatada.lower():
                         continue
 
+                # Validar dados obrigatórios do beneficiário
+                beneficiario_id = beneficiario.get("id")
+                beneficiario_cpf = beneficiario.get("cpf")
+                if not beneficiario_id or not beneficiario_cpf:
+                    logger.warning(f"Beneficiário sem id ou cpf, pulando fatura {fatura_id}")
+                    continue
+
+                # Validar usina_id
+                usina_data = beneficiario.get("usinas") or {}
+                usina_id_val = usina_data.get("id") or beneficiario.get("usina_id")
+                if not usina_id_val:
+                    logger.warning(f"Beneficiário {beneficiario_id} sem usina_id, pulando fatura {fatura_id}")
+                    continue
+
                 # Montar resposta do beneficiário
                 beneficiario_resp = BeneficiarioGestaoResponse(
-                    id=beneficiario["id"],
+                    id=beneficiario_id,
                     nome=beneficiario.get("nome"),
-                    cpf=beneficiario["cpf"],
+                    cpf=beneficiario_cpf,
                     email=beneficiario.get("email"),
                     telefone=beneficiario.get("telefone")
                 )
 
                 # Montar resposta da usina
-                usina_data = beneficiario.get("usinas", {})
                 usina_resp = UsinaGestaoResponse(
-                    id=usina_data.get("id") or beneficiario.get("usina_id"),
+                    id=usina_id_val,
                     nome=usina_data.get("nome")
                 )
 
                 # Montar resposta da cobrança
                 cobranca_resp = None
-                if cobranca:
+                if cobranca and cobranca.get("id") and cobranca.get("vencimento"):
                     # Converter datas de string para date
                     vencimento_raw = cobranca.get("vencimento")
                     vencimento = None
@@ -1215,23 +1236,25 @@ class FaturasService:
                         elif isinstance(pago_em_raw, date):
                             pago_em = pago_em_raw
 
-                    cobranca_resp = CobrancaGestaoResponse(
-                        id=cobranca["id"],
-                        status=cobranca["status"],
-                        valor_total=Decimal(str(cobranca["valor_total"])) if cobranca.get("valor_total") else Decimal("0"),
-                        vencimento=vencimento,
-                        qr_code_pix=cobranca.get("qr_code_pix"),
-                        qr_code_pix_image=cobranca.get("qr_code_pix_image"),
-                        pago_em=pago_em
-                    )
+                    # Só criar resposta se vencimento foi convertido com sucesso
+                    if vencimento:
+                        cobranca_resp = CobrancaGestaoResponse(
+                            id=cobranca["id"],
+                            status=cobranca.get("status") or "RASCUNHO",
+                            valor_total=Decimal(str(cobranca["valor_total"])) if cobranca.get("valor_total") else Decimal("0"),
+                            vencimento=vencimento,
+                            qr_code_pix=cobranca.get("qr_code_pix"),
+                            qr_code_pix_image=cobranca.get("qr_code_pix_image"),
+                            pago_em=pago_em
+                        )
 
                 # Montar fatura
                 fatura_gestao = FaturaGestaoResponse(
-                    id=f["id"],
+                    id=fatura_id,
                     uc_id=uc_id,
                     uc_formatada=uc_formatada,
-                    mes_referencia=f["mes_referencia"],
-                    ano_referencia=f["ano_referencia"],
+                    mes_referencia=mes_ref,
+                    ano_referencia=ano_ref,
                     status_fluxo=status,
                     tem_pdf=f.get("pdf_path") is not None,
                     valor_fatura=Decimal(str(f["valor_fatura"])) if f.get("valor_fatura") else None,

@@ -11,12 +11,13 @@ from enum import Enum
 
 class StatusCobranca(str, Enum):
     """Status possíveis de uma cobrança"""
-    PENDENTE = "PENDENTE"
-    EMITIDA = "EMITIDA"
-    PAGA = "PAGA"
-    VENCIDA = "VENCIDA"
-    CANCELADA = "CANCELADA"
-    PARCIAL = "PARCIAL"
+    RASCUNHO = "RASCUNHO"      # Cobrança gerada, aguardando aprovação
+    PENDENTE = "PENDENTE"      # Legacy - manter para compatibilidade
+    EMITIDA = "EMITIDA"        # Cobrança aprovada, PIX gerado
+    PAGA = "PAGA"              # Pagamento confirmado
+    VENCIDA = "VENCIDA"        # Passou do vencimento sem pagamento
+    CANCELADA = "CANCELADA"    # Cancelada manualmente
+    PARCIAL = "PARCIAL"        # Pagamento parcial recebido
 
 
 class TipoCobranca(str, Enum):

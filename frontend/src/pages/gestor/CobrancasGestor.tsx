@@ -29,7 +29,9 @@ import {
     Eye,
     X,
     MoreVertical,
-    FileInput
+    FileInput,
+    Send,
+    FileEdit
 } from 'lucide-react';
 
 export function CobrancasGestor() {
@@ -173,6 +175,22 @@ export function CobrancasGestor() {
             fetchCobrancas();
         } catch (err: any) {
             alert(err.response?.data?.detail || 'Erro ao cancelar cobrança');
+        }
+    };
+
+    // Aprovar/Emitir cobrança em rascunho
+    const [aprovandoId, setAprovandoId] = useState<number | null>(null);
+
+    const handleAprovar = async (cobrancaId: number, enviarEmail: boolean = false) => {
+        try {
+            setAprovandoId(cobrancaId);
+            await cobrancasApi.aprovar(cobrancaId, enviarEmail);
+            fetchCobrancas();
+            alert('Cobrança emitida com sucesso!');
+        } catch (err: any) {
+            alert(err.response?.data?.detail || 'Erro ao emitir cobrança');
+        } finally {
+            setAprovandoId(null);
         }
     };
 
@@ -341,7 +359,8 @@ export function CobrancasGestor() {
                         className="px-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white"
                     >
                         <option value="todos">Todos os Status</option>
-                        <option value="PENDENTE">Pendentes</option>
+                        <option value="RASCUNHO">Rascunho</option>
+                        <option value="EMITIDA">Emitidas</option>
                         <option value="PAGA">Pagas</option>
                         <option value="VENCIDA">Vencidas</option>
                         <option value="CANCELADA">Canceladas</option>
@@ -465,10 +484,12 @@ export function CobrancasGestor() {
                                     const isCancelada = cobranca.status === 'CANCELADA' || cobranca.status === 'cancelada';
                                     const isEmitida = cobranca.status === 'EMITIDA' || cobranca.status === 'emitida';
                                     const isParcial = cobranca.status === 'PARCIAL' || cobranca.status === 'parcial';
+                                    const isRascunho = cobranca.status === 'RASCUNHO' || cobranca.status === 'rascunho';
                                     const isExpanded = expandedId === cobranca.id;
                                     const isEditing = editandoId === cobranca.id;
+                                    const isAprovando = aprovandoId === cobranca.id;
                                     // Pode editar se nao estiver PAGA ou CANCELADA
-                                    const podeEditar = isPendente || isEmitida || isParcial;
+                                    const podeEditar = isPendente || isEmitida || isParcial || isRascunho;
 
                                     return (
                                         <React.Fragment key={cobranca.id}>
@@ -517,18 +538,42 @@ export function CobrancasGestor() {
                                                         ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                                                         : vencida
                                                         ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                                                        : isPendente || isEmitida
+                                                        : isRascunho
+                                                        ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400'
+                                                        : isEmitida
+                                                        ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400'
+                                                        : isPendente
                                                         ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                                                         : isParcial
                                                         ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
                                                         : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                                                 }`}>
-                                                    {isPago ? <CheckCircle size={12} /> : (isPendente || isEmitida || isParcial) ? <Clock size={12} /> : <XCircle size={12} />}
+                                                    {isPago ? <CheckCircle size={12} /> : isRascunho ? <FileEdit size={12} /> : (isPendente || isEmitida || isParcial) ? <Clock size={12} /> : <XCircle size={12} />}
                                                     {cobranca.status}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                                 <div className="flex items-center justify-end gap-2">
+                                                    {/* Botão Emitir para RASCUNHO */}
+                                                    {isRascunho && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleAprovar(cobranca.id, false)}
+                                                                disabled={isAprovando}
+                                                                className="px-3 py-1 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition flex items-center gap-1"
+                                                            >
+                                                                {isAprovando ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                                                                Emitir
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleCancelar(cobranca)}
+                                                                className="px-3 py-1 text-sm bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition"
+                                                            >
+                                                                Cancelar
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {/* Botões para PENDENTE/EMITIDA */}
                                                     {(isPendente || isEmitida) && (
                                                         <>
                                                             <button

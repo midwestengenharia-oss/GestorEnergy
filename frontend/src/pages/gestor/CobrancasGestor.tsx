@@ -27,7 +27,9 @@ import {
     Edit3,
     Save,
     Eye,
-    X
+    X,
+    MoreVertical,
+    FileInput
 } from 'lucide-react';
 
 export function CobrancasGestor() {
@@ -52,9 +54,12 @@ export function CobrancasGestor() {
     const [modalGerarLote, setModalGerarLote] = useState(false);
     const [gerandoLote, setGerandoLote] = useState(false);
 
-    // Modal Pagamento
-    const [cobrancaPagamento, setCobrancaPagamento] = useState<Cobranca | null>(null);
-    const [registrandoPagamento, setRegistrandoPagamento] = useState(false);
+    // Modal Baixa Manual (pagamento fora do PIX)
+    const [cobrancaBaixaManual, setCobrancaBaixaManual] = useState<Cobranca | null>(null);
+    const [registrandoBaixaManual, setRegistrandoBaixaManual] = useState(false);
+
+    // Menu de acoes secundarias
+    const [menuAbertoId, setMenuAbertoId] = useState<number | null>(null);
 
     // Expansão e Edição
     const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -132,17 +137,18 @@ export function CobrancasGestor() {
         }
     };
 
-    const handleRegistrarPagamento = async (cobrancaId: number, dataPagamento: string, valorPago: number) => {
+    const handleBaixaManual = async (cobrancaId: number, dataPagamento: string, valorPago: number) => {
         try {
-            setRegistrandoPagamento(true);
+            setRegistrandoBaixaManual(true);
             await cobrancasApi.registrarPagamento(cobrancaId, dataPagamento, valorPago);
-            setCobrancaPagamento(null);
+            setCobrancaBaixaManual(null);
+            setMenuAbertoId(null);
             fetchCobrancas();
-            alert('Pagamento registrado com sucesso!');
+            alert('Baixa manual registrada com sucesso!');
         } catch (err: any) {
-            alert(err.response?.data?.detail || 'Erro ao registrar pagamento');
+            alert(err.response?.data?.detail || 'Erro ao registrar baixa manual');
         } finally {
-            setRegistrandoPagamento(false);
+            setRegistrandoBaixaManual(false);
         }
     };
 
@@ -512,17 +518,34 @@ export function CobrancasGestor() {
                                                     {(isPendente || isEmitida) && (
                                                         <>
                                                             <button
-                                                                onClick={() => setCobrancaPagamento(cobranca)}
-                                                                className="px-3 py-1 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
-                                                            >
-                                                                Pagar
-                                                            </button>
-                                                            <button
                                                                 onClick={() => handleCancelar(cobranca)}
                                                                 className="px-3 py-1 text-sm bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition"
                                                             >
                                                                 Cancelar
                                                             </button>
+                                                            {/* Menu de acoes secundarias */}
+                                                            <div className="relative">
+                                                                <button
+                                                                    onClick={() => setMenuAbertoId(menuAbertoId === cobranca.id ? null : cobranca.id)}
+                                                                    className="p-1.5 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+                                                                >
+                                                                    <MoreVertical size={18} />
+                                                                </button>
+                                                                {menuAbertoId === cobranca.id && (
+                                                                    <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10">
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setCobrancaBaixaManual(cobranca);
+                                                                                setMenuAbertoId(null);
+                                                                            }}
+                                                                            className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                                                                        >
+                                                                            <FileInput size={16} />
+                                                                            Baixa Manual
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </>
                                                     )}
                                                 </div>
@@ -891,16 +914,17 @@ export function CobrancasGestor() {
                 </div>
             )}
 
-            {/* Modal Registrar Pagamento */}
-            {cobrancaPagamento && (
+            {/* Modal Baixa Manual */}
+            {cobrancaBaixaManual && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-md">
                         <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                                Registrar Pagamento
+                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                <FileInput size={20} />
+                                Baixa Manual
                             </h2>
                             <button
-                                onClick={() => setCobrancaPagamento(null)}
+                                onClick={() => setCobrancaBaixaManual(null)}
                                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-2xl"
                             >
                                 ×
@@ -912,18 +936,26 @@ export function CobrancasGestor() {
                                 const formData = new FormData(e.currentTarget);
                                 const dataPagamento = formData.get('data_pagamento') as string;
                                 const valorPago = Number(formData.get('valor_pago'));
-                                handleRegistrarPagamento(cobrancaPagamento.id, dataPagamento, valorPago);
+                                handleBaixaManual(cobrancaBaixaManual.id, dataPagamento, valorPago);
                             }}
                             className="p-4 space-y-4"
                         >
-                            <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
-                                <p className="text-sm text-slate-500 dark:text-slate-400">Beneficiário</p>
-                                <p className="font-medium text-slate-900 dark:text-white">
-                                    {cobrancaPagamento.beneficiario?.nome || 'Beneficiário'}
+                            {/* Aviso explicativo */}
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                                <p className="text-sm text-amber-800 dark:text-amber-200">
+                                    <strong>Atencao:</strong> Use esta opcao apenas para pagamentos realizados fora do PIX
+                                    (transferencia bancaria, dinheiro, etc). Pagamentos via PIX sao detectados automaticamente.
                                 </p>
-                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Valor da Cobrança</p>
+                            </div>
+
+                            <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4">
+                                <p className="text-sm text-slate-500 dark:text-slate-400">Beneficiario</p>
+                                <p className="font-medium text-slate-900 dark:text-white">
+                                    {cobrancaBaixaManual.beneficiario?.nome || 'Beneficiario'}
+                                </p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Valor da Cobranca</p>
                                 <p className="text-xl font-bold text-slate-900 dark:text-white">
-                                    {formatCurrency(cobrancaPagamento.valor_total)}
+                                    {formatCurrency(cobrancaBaixaManual.valor_total)}
                                 </p>
                             </div>
                             <div>
@@ -946,7 +978,7 @@ export function CobrancasGestor() {
                                     type="number"
                                     name="valor_pago"
                                     step="0.01"
-                                    defaultValue={cobrancaPagamento.valor_total}
+                                    defaultValue={cobrancaBaixaManual.valor_total}
                                     required
                                     className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-white"
                                 />
@@ -954,18 +986,18 @@ export function CobrancasGestor() {
                             <div className="flex gap-3 pt-4">
                                 <button
                                     type="button"
-                                    onClick={() => setCobrancaPagamento(null)}
+                                    onClick={() => setCobrancaBaixaManual(null)}
                                     className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={registrandoPagamento}
-                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50"
+                                    disabled={registrandoBaixaManual}
+                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition disabled:opacity-50"
                                 >
-                                    {registrandoPagamento && <Loader2 size={18} className="animate-spin" />}
-                                    Confirmar Pagamento
+                                    {registrandoBaixaManual && <Loader2 size={18} className="animate-spin" />}
+                                    Confirmar Baixa
                                 </button>
                             </div>
                         </form>

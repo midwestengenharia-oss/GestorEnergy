@@ -133,6 +133,44 @@ class CobrancaResponse(BaseModel):
     ano: int  # Coluna real do banco
     referencia_formatada: Optional[str] = None
 
+    # Modelo GD e tipo de ligação
+    tipo_modelo_gd: Optional[str] = None
+    tipo_ligacao: Optional[str] = None
+
+    # Métricas de energia (kWh)
+    consumo_kwh: Optional[int] = None
+    injetada_kwh: Optional[int] = None
+    compensado_kwh: Optional[int] = None
+    gap_kwh: Optional[int] = None
+
+    # Tarifas
+    tarifa_base: Optional[Decimal] = None
+    tarifa_assinatura: Optional[Decimal] = None
+    fio_b_valor: Optional[Decimal] = None
+
+    # Valores energia
+    valor_energia_base: Optional[Decimal] = None
+    valor_energia_assinatura: Optional[Decimal] = None
+
+    # GD I - Taxa mínima e energia excedente
+    taxa_minima_kwh: Optional[int] = None
+    taxa_minima_valor: Optional[Decimal] = None
+    energia_excedente_kwh: Optional[int] = None
+    energia_excedente_valor: Optional[Decimal] = None
+
+    # GD II - Disponibilidade
+    disponibilidade_valor: Optional[Decimal] = None
+
+    # Extras
+    bandeiras_valor: Optional[Decimal] = None
+    iluminacao_publica_valor: Optional[Decimal] = None
+    servicos_valor: Optional[Decimal] = None
+
+    # Totais
+    valor_sem_assinatura: Optional[Decimal] = None
+    valor_com_assinatura: Optional[Decimal] = None
+    economia_mes: Optional[Decimal] = None
+
     # Valores - campos legados opcionais
     valor_energia_injetada: Optional[Decimal] = None
     desconto_percentual: Optional[Decimal] = None
@@ -160,6 +198,7 @@ class CobrancaResponse(BaseModel):
 
     # Observações
     observacoes: Optional[str] = None
+    observacoes_internas: Optional[str] = None
 
     # Timestamps
     criado_em: Optional[datetime] = None

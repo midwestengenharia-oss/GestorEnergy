@@ -1126,7 +1126,7 @@ export default function GestaoFaturas() {
                                                     Cobranca #{fatura.cobranca.id}
                                                 </h5>
                                                 <button
-                                                    onClick={() => navigate('/app/gestor/cobrancas')}
+                                                    onClick={() => navigate(`/app/gestor/cobrancas?cobranca=${fatura.cobranca!.id}`)}
                                                     className="text-xs px-3 py-1.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 flex items-center gap-1.5"
                                                 >
                                                     <ExternalLink size={14} />

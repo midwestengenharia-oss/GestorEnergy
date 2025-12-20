@@ -35,6 +35,7 @@ import {
 export function CobrancasGestor() {
     const [searchParams, setSearchParams] = useSearchParams();
     const usinaIdParam = searchParams.get('usina');
+    const cobrancaIdParam = searchParams.get('cobranca');
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -75,6 +76,17 @@ export function CobrancasGestor() {
     useEffect(() => {
         fetchCobrancas();
     }, [usinaFiltro, statusFiltro, mesFiltro, anoFiltro, page]);
+
+    // Expandir cobranca automaticamente se o parametro estiver presente na URL
+    useEffect(() => {
+        if (cobrancaIdParam && cobrancas.length > 0) {
+            const id = Number(cobrancaIdParam);
+            const cobrancaEncontrada = cobrancas.find(c => c.id === id);
+            if (cobrancaEncontrada) {
+                setExpandedId(id);
+            }
+        }
+    }, [cobrancaIdParam, cobrancas]);
 
     const fetchUsinas = async () => {
         try {
@@ -618,8 +630,8 @@ export function CobrancasGestor() {
                                                                 <h4 className="font-medium text-slate-900 dark:text-white mb-3">Métricas de Energia</h4>
                                                                 <div className="space-y-2 text-sm">
                                                                     <p><span className="text-slate-500">Consumo:</span> <span className="text-slate-900 dark:text-white">{cobranca.consumo_kwh || 0} kWh</span></p>
-                                                                    <p><span className="text-slate-500">Injetada:</span> <span className="text-slate-900 dark:text-white">{cobranca.energia_injetada_kwh || 0} kWh</span></p>
-                                                                    <p><span className="text-slate-500">Compensada:</span> <span className="text-slate-900 dark:text-white">{cobranca.energia_compensada_kwh || 0} kWh</span></p>
+                                                                    <p><span className="text-slate-500">Injetada:</span> <span className="text-slate-900 dark:text-white">{cobranca.injetada_kwh || 0} kWh</span></p>
+                                                                    <p><span className="text-slate-500">Compensada:</span> <span className="text-slate-900 dark:text-white">{cobranca.compensado_kwh || 0} kWh</span></p>
                                                                     <p><span className="text-slate-500">Gap:</span> <span className="text-slate-900 dark:text-white">{cobranca.gap_kwh || 0} kWh</span></p>
                                                                     <p><span className="text-slate-500">Tarifa Base:</span> <span className="text-slate-900 dark:text-white">R$ {(cobranca.tarifa_base || 0).toFixed(6)}/kWh</span></p>
                                                                 </div>

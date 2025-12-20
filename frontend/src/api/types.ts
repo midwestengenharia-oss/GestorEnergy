@@ -201,7 +201,7 @@ export interface Fatura {
 // Cobrancas
 // ========================
 
-export type CobrancaStatus = 'RASCUNHO' | 'PENDENTE' | 'EMITIDA' | 'PAGA' | 'VENCIDA' | 'CANCELADA' | 'PARCIAL';
+export type CobrancaStatus = 'PENDENTE' | 'EMITIDA' | 'PAGA' | 'VENCIDA' | 'CANCELADA' | 'PARCIAL';
 
 export interface Cobranca {
     id: number;
@@ -215,17 +215,22 @@ export interface Cobranca {
 
     // Métricas de energia (kWh)
     consumo_kwh?: number;
-    energia_injetada_kwh?: number;
-    energia_compensada_kwh?: number;
+    injetada_kwh?: number;  // Nome correto do backend
+    energia_injetada_kwh?: number;  // Alias para compatibilidade
+    compensado_kwh?: number;  // Nome correto do backend
+    energia_compensada_kwh?: number;  // Alias para compatibilidade
     gap_kwh?: number;
+
+    // Modelo GD
+    tipo_modelo_gd?: string;  // GD_I ou GD_II
+    modelo_gd?: string;  // Alias legado
+    tipo_ligacao?: string;
 
     // Tarifas
     tarifa_base?: number;
     tarifa_assinatura?: number;
     tarifa_energisa?: number;
     desconto_aplicado?: number;
-    modelo_gd?: string;
-    tipo_ligacao?: string;
     taxa_minima_kwh?: number;
 
     // Valores monetários

@@ -247,12 +247,29 @@ export default function GestaoFaturas() {
     // Edicao da previa da cobranca (antes de emitir)
     const [editandoPreviaId, setEditandoPreviaId] = useState<number | null>(null);
     const [previaEditada, setPreviaEditada] = useState<{
+        // Métricas de energia (kWh)
+        consumo_kwh?: number;
+        injetada_kwh?: number;
+        compensado_kwh?: number;
+        gap_kwh?: number;
+        // Tarifas
+        tarifa_base?: number;
+        tarifa_assinatura?: number;
+        // GD I - Taxa mínima e energia excedente
+        taxa_minima_kwh?: number;
         taxa_minima_valor?: number;
+        energia_excedente_kwh?: number;
         energia_excedente_valor?: number;
+        // GD II - Disponibilidade
         disponibilidade_valor?: number;
+        // Extras
         bandeiras_valor?: number;
         iluminacao_publica_valor?: number;
         servicos_valor?: number;
+        // Vencimento
+        vencimento?: string;
+        // Observações
+        observacoes_internas?: string;
     }>({});
     const [salvandoPrevia, setSalvandoPrevia] = useState(false);
 
@@ -365,14 +382,32 @@ export default function GestaoFaturas() {
     // Funcoes para editar a previa da cobranca (antes de emitir)
     const iniciarEdicaoPrevia = (fatura: FaturaGestao) => {
         if (!fatura.cobranca) return;
+        const c = fatura.cobranca;
         setEditandoPreviaId(fatura.id);
         setPreviaEditada({
-            taxa_minima_valor: fatura.cobranca.taxa_minima_valor || 0,
-            energia_excedente_valor: fatura.cobranca.energia_excedente_valor || 0,
-            disponibilidade_valor: fatura.cobranca.disponibilidade_valor || 0,
-            bandeiras_valor: fatura.cobranca.bandeiras_valor || 0,
-            iluminacao_publica_valor: fatura.cobranca.iluminacao_publica_valor || 0,
-            servicos_valor: fatura.cobranca.servicos_valor || 0,
+            // Métricas de energia (kWh)
+            consumo_kwh: c.consumo_kwh ?? 0,
+            injetada_kwh: c.injetada_kwh ?? 0,
+            compensado_kwh: c.compensado_kwh ?? 0,
+            gap_kwh: c.gap_kwh ?? 0,
+            // Tarifas
+            tarifa_base: c.tarifa_base ?? 0,
+            tarifa_assinatura: c.tarifa_assinatura ?? 0,
+            // GD I - Taxa mínima e energia excedente
+            taxa_minima_kwh: c.taxa_minima_kwh ?? 0,
+            taxa_minima_valor: c.taxa_minima_valor ?? 0,
+            energia_excedente_kwh: c.energia_excedente_kwh ?? 0,
+            energia_excedente_valor: c.energia_excedente_valor ?? 0,
+            // GD II - Disponibilidade
+            disponibilidade_valor: c.disponibilidade_valor ?? 0,
+            // Extras
+            bandeiras_valor: c.bandeiras_valor ?? 0,
+            iluminacao_publica_valor: c.iluminacao_publica_valor ?? 0,
+            servicos_valor: c.servicos_valor ?? 0,
+            // Vencimento
+            vencimento: c.vencimento || c.data_vencimento || '',
+            // Observações
+            observacoes_internas: c.observacoes_internas || '',
         });
     };
 
@@ -396,7 +431,7 @@ export default function GestaoFaturas() {
         }
     };
 
-    const atualizarCampoPrevia = (campo: keyof typeof previaEditada, valor: number) => {
+    const atualizarCampoPrevia = (campo: keyof typeof previaEditada, valor: number | string) => {
         setPreviaEditada(prev => ({ ...prev, [campo]: valor }));
     };
 
@@ -1096,7 +1131,121 @@ export default function GestaoFaturas() {
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="p-4 bg-white dark:bg-slate-800">
+                                            <div className="p-4 bg-white dark:bg-slate-800 space-y-4">
+                                                {/* Campos editaveis extras quando em modo edicao */}
+                                                {isEditando && (
+                                                    <div className="border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 bg-indigo-50/50 dark:bg-indigo-900/10">
+                                                        <h6 className="text-sm font-medium text-indigo-700 dark:text-indigo-400 mb-4 flex items-center gap-2">
+                                                            <Zap size={14} />
+                                                            Métricas de Energia e Tarifas
+                                                        </h6>
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Consumo (kWh)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="1"
+                                                                    value={previaEditada.consumo_kwh ?? 0}
+                                                                    onChange={(e) => atualizarCampoPrevia('consumo_kwh', parseInt(e.target.value) || 0)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Injetada (kWh)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="1"
+                                                                    value={previaEditada.injetada_kwh ?? 0}
+                                                                    onChange={(e) => atualizarCampoPrevia('injetada_kwh', parseInt(e.target.value) || 0)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Compensada (kWh)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="1"
+                                                                    value={previaEditada.compensado_kwh ?? 0}
+                                                                    onChange={(e) => atualizarCampoPrevia('compensado_kwh', parseInt(e.target.value) || 0)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Gap (kWh)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="1"
+                                                                    value={previaEditada.gap_kwh ?? 0}
+                                                                    onChange={(e) => atualizarCampoPrevia('gap_kwh', parseInt(e.target.value) || 0)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Tarifa Base (R$/kWh)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.000001"
+                                                                    value={previaEditada.tarifa_base ?? 0}
+                                                                    onChange={(e) => atualizarCampoPrevia('tarifa_base', parseFloat(e.target.value) || 0)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Tarifa Assinatura (R$/kWh)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.000001"
+                                                                    value={previaEditada.tarifa_assinatura ?? 0}
+                                                                    onChange={(e) => atualizarCampoPrevia('tarifa_assinatura', parseFloat(e.target.value) || 0)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Taxa Mínima (kWh)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="1"
+                                                                    value={previaEditada.taxa_minima_kwh ?? 0}
+                                                                    onChange={(e) => atualizarCampoPrevia('taxa_minima_kwh', parseInt(e.target.value) || 0)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Energia Excedente (kWh)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="1"
+                                                                    value={previaEditada.energia_excedente_kwh ?? 0}
+                                                                    onChange={(e) => atualizarCampoPrevia('energia_excedente_kwh', parseInt(e.target.value) || 0)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Vencimento</label>
+                                                                <input
+                                                                    type="date"
+                                                                    value={previaEditada.vencimento || ''}
+                                                                    onChange={(e) => atualizarCampoPrevia('vencimento', e.target.value)}
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-slate-500 mb-1">Observações Internas</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={previaEditada.observacoes_internas || ''}
+                                                                    onChange={(e) => atualizarCampoPrevia('observacoes_internas', e.target.value)}
+                                                                    placeholder="Notas para controle interno..."
+                                                                    className="w-full px-2 py-1.5 border rounded text-sm dark:bg-slate-800 dark:border-slate-600"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Tabela de valores da cobranca */}
                                                 <table className="w-full text-sm">
                                                     <thead>
                                                         <tr className="border-b border-slate-200 dark:border-slate-700">
@@ -1109,8 +1258,8 @@ export default function GestaoFaturas() {
                                                     <tbody>
                                                         <tr className="border-b border-slate-100 dark:border-slate-800 bg-green-50 dark:bg-green-900/10">
                                                             <td className="py-2 text-green-700 dark:text-green-400">Energia GD (30% desc.)</td>
-                                                            <td className="py-2 text-center text-green-600">{injetadaTotalKwh.toFixed(0)}</td>
-                                                            <td className="py-2 text-center text-green-600">{(tarifaBase * 0.70).toFixed(6)}</td>
+                                                            <td className="py-2 text-center text-green-600">{isEditando ? (previaEditada.injetada_kwh ?? injetadaTotalKwh).toFixed(0) : injetadaTotalKwh.toFixed(0)}</td>
+                                                            <td className="py-2 text-center text-green-600">{(Number(isEditando ? previaEditada.tarifa_base ?? tarifaBase : tarifaBase) * 0.70).toFixed(6)}</td>
                                                             <td className="py-2 text-right font-medium text-green-600">{formatCurrency(energiaComDesconto)}</td>
                                                         </tr>
                                                         {(gapKwh > 0 || valorExcedente > 0) && (

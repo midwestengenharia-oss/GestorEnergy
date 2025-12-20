@@ -35,6 +35,7 @@ import {
 export function CobrancasGestor() {
     const [searchParams, setSearchParams] = useSearchParams();
     const usinaIdParam = searchParams.get('usina');
+    const cobrancaIdParam = searchParams.get('cobranca');
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -75,6 +76,17 @@ export function CobrancasGestor() {
     useEffect(() => {
         fetchCobrancas();
     }, [usinaFiltro, statusFiltro, mesFiltro, anoFiltro, page]);
+
+    // Expandir cobranca automaticamente se o parametro estiver presente na URL
+    useEffect(() => {
+        if (cobrancaIdParam && cobrancas.length > 0) {
+            const id = Number(cobrancaIdParam);
+            const cobrancaEncontrada = cobrancas.find(c => c.id === id);
+            if (cobrancaEncontrada) {
+                setExpandedId(id);
+            }
+        }
+    }, [cobrancaIdParam, cobrancas]);
 
     const fetchUsinas = async () => {
         try {
@@ -247,9 +259,9 @@ export function CobrancasGestor() {
     const stats = {
         total: cobrancas.length,
         pendentes: cobrancas.filter(c => c.status === 'PENDENTE' || c.status === 'pendente').length,
-        pagas: cobrancas.filter(c => c.status === 'PAGO' || c.status === 'pago').length,
+        pagas: cobrancas.filter(c => c.status === 'PAGA' || c.status === 'paga').length,
         valorPendente: cobrancas.filter(c => c.status === 'PENDENTE' || c.status === 'pendente').reduce((acc, c) => acc + (c.valor_total || 0), 0),
-        valorRecebido: cobrancas.filter(c => c.status === 'PAGO' || c.status === 'pago').reduce((acc, c) => acc + (c.valor_total || 0), 0)
+        valorRecebido: cobrancas.filter(c => c.status === 'PAGA' || c.status === 'paga').reduce((acc, c) => acc + (c.valor_total || 0), 0)
     };
 
     return (
@@ -330,7 +342,7 @@ export function CobrancasGestor() {
                     >
                         <option value="todos">Todos os Status</option>
                         <option value="PENDENTE">Pendentes</option>
-                        <option value="PAGO">Pagas</option>
+                        <option value="PAGA">Pagas</option>
                         <option value="VENCIDA">Vencidas</option>
                         <option value="CANCELADA">Canceladas</option>
                     </select>
@@ -445,16 +457,18 @@ export function CobrancasGestor() {
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                                 {cobrancas.map((cobranca) => {
-                                    const vencida = new Date(cobranca.data_vencimento) < new Date() &&
-                                                   (cobranca.status === 'PENDENTE' || cobranca.status === 'pendente');
-                                    const isPago = cobranca.status === 'PAGO' || cobranca.status === 'pago';
+                                    const vencida = cobranca.status === 'VENCIDA' || cobranca.status === 'vencida' ||
+                                                   (new Date(cobranca.data_vencimento) < new Date() &&
+                                                   (cobranca.status === 'PENDENTE' || cobranca.status === 'pendente'));
+                                    const isPago = cobranca.status === 'PAGA' || cobranca.status === 'paga';
                                     const isPendente = cobranca.status === 'PENDENTE' || cobranca.status === 'pendente';
                                     const isCancelada = cobranca.status === 'CANCELADA' || cobranca.status === 'cancelada';
                                     const isEmitida = cobranca.status === 'EMITIDA' || cobranca.status === 'emitida';
-                                    const isRascunho = cobranca.status === 'RASCUNHO' || cobranca.status === 'rascunho';
+                                    const isParcial = cobranca.status === 'PARCIAL' || cobranca.status === 'parcial';
                                     const isExpanded = expandedId === cobranca.id;
                                     const isEditing = editandoId === cobranca.id;
-                                    const podeEditar = isRascunho || isEmitida || isPendente;
+                                    // Pode editar se nao estiver PAGA ou CANCELADA
+                                    const podeEditar = isPendente || isEmitida || isParcial;
 
                                     return (
                                         <React.Fragment key={cobranca.id}>
@@ -505,11 +519,11 @@ export function CobrancasGestor() {
                                                         ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                                                         : isPendente || isEmitida
                                                         ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                                                        : isRascunho
+                                                        : isParcial
                                                         ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
                                                         : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                                                 }`}>
-                                                    {isPago ? <CheckCircle size={12} /> : (isPendente || isEmitida || isRascunho) ? <Clock size={12} /> : <XCircle size={12} />}
+                                                    {isPago ? <CheckCircle size={12} /> : (isPendente || isEmitida || isParcial) ? <Clock size={12} /> : <XCircle size={12} />}
                                                     {cobranca.status}
                                                 </span>
                                             </td>
@@ -616,8 +630,8 @@ export function CobrancasGestor() {
                                                                 <h4 className="font-medium text-slate-900 dark:text-white mb-3">Métricas de Energia</h4>
                                                                 <div className="space-y-2 text-sm">
                                                                     <p><span className="text-slate-500">Consumo:</span> <span className="text-slate-900 dark:text-white">{cobranca.consumo_kwh || 0} kWh</span></p>
-                                                                    <p><span className="text-slate-500">Injetada:</span> <span className="text-slate-900 dark:text-white">{cobranca.energia_injetada_kwh || 0} kWh</span></p>
-                                                                    <p><span className="text-slate-500">Compensada:</span> <span className="text-slate-900 dark:text-white">{cobranca.energia_compensada_kwh || 0} kWh</span></p>
+                                                                    <p><span className="text-slate-500">Injetada:</span> <span className="text-slate-900 dark:text-white">{cobranca.injetada_kwh || 0} kWh</span></p>
+                                                                    <p><span className="text-slate-500">Compensada:</span> <span className="text-slate-900 dark:text-white">{cobranca.compensado_kwh || 0} kWh</span></p>
                                                                     <p><span className="text-slate-500">Gap:</span> <span className="text-slate-900 dark:text-white">{cobranca.gap_kwh || 0} kWh</span></p>
                                                                     <p><span className="text-slate-500">Tarifa Base:</span> <span className="text-slate-900 dark:text-white">R$ {(cobranca.tarifa_base || 0).toFixed(6)}/kWh</span></p>
                                                                 </div>

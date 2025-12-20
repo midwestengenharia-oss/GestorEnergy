@@ -81,8 +81,8 @@ export const cobrancasApi = {
         api.put<Cobranca>(`/cobrancas/${id}`, data),
 
     // Cancelar cobrança
-    cancelar: (id: number, motivo?: string) =>
-        api.post(`/cobrancas/${id}/cancelar`, { motivo }),
+    cancelar: (id: number, motivo: string) =>
+        api.post(`/cobrancas/${id}/cancelar`, null, { params: { motivo } }),
 
     // Registrar pagamento
     registrarPagamento: (id: number, dataPagamento?: string, valorPago?: number) =>

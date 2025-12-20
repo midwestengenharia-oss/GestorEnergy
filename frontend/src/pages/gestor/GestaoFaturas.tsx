@@ -8,7 +8,8 @@ import {
     FileX, FileText, Zap, FileEdit, CreditCard, CheckCircle, Check,
     RefreshCw, LayoutGrid, List, Search, Filter, ChevronDown, ChevronRight,
     Eye, Copy, Loader2, AlertCircle, RotateCcw, RefreshCcw, User, BarChart3,
-    Receipt, TrendingUp, CheckCircle2, AlertTriangle, XCircle, Info, ExternalLink
+    Receipt, TrendingUp, CheckCircle2, AlertTriangle, XCircle, Info, ExternalLink,
+    Pencil, Save, X
 } from 'lucide-react';
 import { faturasApi, FaturaGestao, TotaisGestao, StatusFluxo } from '../../api/faturas';
 import { usinasApi } from '../../api/usinas';
@@ -243,6 +244,18 @@ export default function GestaoFaturas() {
     const [filtroAno, setFiltroAno] = useState<number>(new Date().getFullYear());
     const [filtroBusca, setFiltroBusca] = useState('');
 
+    // Edicao da previa da cobranca (antes de emitir)
+    const [editandoPreviaId, setEditandoPreviaId] = useState<number | null>(null);
+    const [previaEditada, setPreviaEditada] = useState<{
+        taxa_minima_valor?: number;
+        energia_excedente_valor?: number;
+        disponibilidade_valor?: number;
+        bandeiras_valor?: number;
+        iluminacao_publica_valor?: number;
+        servicos_valor?: number;
+    }>({});
+    const [salvandoPrevia, setSalvandoPrevia] = useState(false);
+
     // Anos disponiveis (ultimos 3 + atual + proximo)
     const anosDisponiveis = Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - 2 + i);
 
@@ -347,6 +360,44 @@ export default function GestaoFaturas() {
         } finally {
             setLoadingAction(null);
         }
+    };
+
+    // Funcoes para editar a previa da cobranca (antes de emitir)
+    const iniciarEdicaoPrevia = (fatura: FaturaGestao) => {
+        if (!fatura.cobranca) return;
+        setEditandoPreviaId(fatura.id);
+        setPreviaEditada({
+            taxa_minima_valor: fatura.cobranca.taxa_minima_valor || 0,
+            energia_excedente_valor: fatura.cobranca.energia_excedente_valor || 0,
+            disponibilidade_valor: fatura.cobranca.disponibilidade_valor || 0,
+            bandeiras_valor: fatura.cobranca.bandeiras_valor || 0,
+            iluminacao_publica_valor: fatura.cobranca.iluminacao_publica_valor || 0,
+            servicos_valor: fatura.cobranca.servicos_valor || 0,
+        });
+    };
+
+    const cancelarEdicaoPrevia = () => {
+        setEditandoPreviaId(null);
+        setPreviaEditada({});
+    };
+
+    const salvarEdicaoPrevia = async (cobrancaId: number) => {
+        setSalvandoPrevia(true);
+        try {
+            await cobrancasApi.editarCampos(cobrancaId, previaEditada);
+            await carregarFaturas();
+            setEditandoPreviaId(null);
+            setPreviaEditada({});
+            alert('Valores atualizados com sucesso!');
+        } catch (err: any) {
+            alert(err.response?.data?.detail || 'Erro ao salvar alteracoes');
+        } finally {
+            setSalvandoPrevia(false);
+        }
+    };
+
+    const atualizarCampoPrevia = (campo: keyof typeof previaEditada, valor: number) => {
+        setPreviaEditada(prev => ({ ...prev, [campo]: valor }));
     };
 
     const handleCopiarPix = (pix: string) => {
@@ -986,13 +1037,64 @@ export default function GestaoFaturas() {
                                     )}
 
                                     {/* ==================== SECAO 4: PREVIA DA COBRANCA ==================== */}
-                                    {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && dados && (
+                                    {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && dados && (() => {
+                                        const isRascunho = fatura.status_fluxo === 'COBRANCA_RASCUNHO';
+                                        const isEditando = editandoPreviaId === fatura.id;
+                                        const cobranca = fatura.cobranca;
+
+                                        // Valores para exibicao (usa editados se em modo edicao, senao usa da cobranca ou calculados)
+                                        const valorTaxaMinima = isEditando ? (previaEditada.taxa_minima_valor ?? 0) : (cobranca?.taxa_minima_valor ?? taxaMinimaValor);
+                                        const valorExcedente = isEditando ? (previaEditada.energia_excedente_valor ?? 0) : (cobranca?.energia_excedente_valor ?? energiaExcedenteValor);
+                                        const valorDisponibilidade = isEditando ? (previaEditada.disponibilidade_valor ?? 0) : (cobranca?.disponibilidade_valor ?? disponibilidade);
+                                        const valorBandeiras = isEditando ? (previaEditada.bandeiras_valor ?? 0) : (cobranca?.bandeiras_valor ?? bandeirasCobranca);
+                                        const valorIluminacao = isEditando ? (previaEditada.iluminacao_publica_valor ?? 0) : (cobranca?.iluminacao_publica_valor ?? iluminacao);
+                                        const valorServicos = isEditando ? (previaEditada.servicos_valor ?? 0) : (cobranca?.servicos_valor ?? 0);
+
+                                        // Total calculado
+                                        const totalEditado = energiaComDesconto + valorExcedente + valorDisponibilidade + valorTaxaMinima + valorBandeiras + valorIluminacao + valorServicos;
+
+                                        return (
                                         <div className="border-2 border-indigo-200 dark:border-indigo-800 rounded-lg overflow-hidden">
-                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 px-4 py-2 border-b border-indigo-200 dark:border-indigo-800">
+                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 px-4 py-2 border-b border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
                                                 <h5 className="text-sm font-medium text-indigo-700 dark:text-indigo-400 flex items-center gap-2">
                                                     <Receipt size={16} />
                                                     Previa da Cobranca (Com Desconto 30%)
+                                                    {isRascunho && !isEditando && (
+                                                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">Rascunho - Editavel</span>
+                                                    )}
                                                 </h5>
+                                                {isRascunho && cobranca && (
+                                                    <div className="flex items-center gap-2">
+                                                        {isEditando ? (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => salvarEdicaoPrevia(cobranca.id)}
+                                                                    disabled={salvandoPrevia}
+                                                                    className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:opacity-50"
+                                                                >
+                                                                    {salvandoPrevia ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                                                                    Salvar
+                                                                </button>
+                                                                <button
+                                                                    onClick={cancelarEdicaoPrevia}
+                                                                    disabled={salvandoPrevia}
+                                                                    className="flex items-center gap-1 px-3 py-1 bg-slate-400 text-white rounded text-xs hover:bg-slate-500"
+                                                                >
+                                                                    <X size={12} />
+                                                                    Cancelar
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => iniciarEdicaoPrevia(fatura)}
+                                                                className="flex items-center gap-1 px-3 py-1 bg-indigo-500 text-white rounded text-xs hover:bg-indigo-600"
+                                                            >
+                                                                <Pencil size={12} />
+                                                                Editar Valores
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="p-4 bg-white dark:bg-slate-800">
                                                 <table className="w-full text-sm">
@@ -1001,7 +1103,7 @@ export default function GestaoFaturas() {
                                                             <th className="text-left py-2 font-medium text-slate-600 dark:text-slate-400">Item</th>
                                                             <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-20">kWh</th>
                                                             <th className="text-center py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Tarifa</th>
-                                                            <th className="text-right py-2 font-medium text-slate-600 dark:text-slate-400 w-28">Valor (R$)</th>
+                                                            <th className="text-right py-2 font-medium text-slate-600 dark:text-slate-400 w-32">Valor (R$)</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -1011,46 +1113,106 @@ export default function GestaoFaturas() {
                                                             <td className="py-2 text-center text-green-600">{(tarifaBase * 0.70).toFixed(6)}</td>
                                                             <td className="py-2 text-right font-medium text-green-600">{formatCurrency(energiaComDesconto)}</td>
                                                         </tr>
-                                                        {gapKwh > 0 && (
+                                                        {(gapKwh > 0 || valorExcedente > 0) && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800 bg-orange-50 dark:bg-orange-900/10">
                                                                 <td className="py-2 text-orange-700 dark:text-orange-400">Energia Excedente (nao compensada)</td>
                                                                 <td className="py-2 text-center text-orange-600">{gapKwh.toFixed(0)}</td>
                                                                 <td className="py-2 text-center text-orange-600">{tarifaBase.toFixed(6)}</td>
-                                                                <td className="py-2 text-right font-medium text-orange-600">{formatCurrency(energiaExcedenteValor)}</td>
+                                                                <td className="py-2 text-right">
+                                                                    {isEditando ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            value={previaEditada.energia_excedente_valor ?? 0}
+                                                                            onChange={(e) => atualizarCampoPrevia('energia_excedente_valor', parseFloat(e.target.value) || 0)}
+                                                                            className="w-24 px-2 py-1 text-right border rounded text-sm"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="font-medium text-orange-600">{formatCurrency(valorExcedente)}</span>
+                                                                    )}
+                                                                </td>
                                                             </tr>
                                                         )}
-                                                        {fatura.tipo_gd === 'GDII' && disponibilidade > 0 ? (
+                                                        {fatura.tipo_gd === 'GDII' && (valorDisponibilidade > 0 || disponibilidade > 0) ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Disponibilidade (Lei 14.300)</td>
                                                                 <td className="py-2 text-center">{ajuste?.quantidade?.toFixed(0) || '-'}</td>
                                                                 <td className="py-2 text-center">{ajuste?.preco_unit_com_tributos?.toFixed(6) || '-'}</td>
-                                                                <td className="py-2 text-right font-medium">{formatCurrency(disponibilidade)}</td>
+                                                                <td className="py-2 text-right">
+                                                                    {isEditando ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            value={previaEditada.disponibilidade_valor ?? 0}
+                                                                            onChange={(e) => atualizarCampoPrevia('disponibilidade_valor', parseFloat(e.target.value) || 0)}
+                                                                            className="w-24 px-2 py-1 text-right border rounded text-sm"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="font-medium">{formatCurrency(valorDisponibilidade)}</span>
+                                                                    )}
+                                                                </td>
                                                             </tr>
                                                         ) : fatura.tipo_gd === 'GDI' ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Taxa Minima ({tipoLigacao || '-'})</td>
                                                                 <td className="py-2 text-center">{taxaMinimaKwh}</td>
                                                                 <td className="py-2 text-center">{tarifaBase.toFixed(6)}</td>
-                                                                <td className="py-2 text-right font-medium">{formatCurrency(taxaMinimaValor)}</td>
+                                                                <td className="py-2 text-right">
+                                                                    {isEditando ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            value={previaEditada.taxa_minima_valor ?? 0}
+                                                                            onChange={(e) => atualizarCampoPrevia('taxa_minima_valor', parseFloat(e.target.value) || 0)}
+                                                                            className="w-24 px-2 py-1 text-right border rounded text-sm"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="font-medium">{formatCurrency(valorTaxaMinima)}</span>
+                                                                    )}
+                                                                </td>
                                                             </tr>
                                                         ) : null}
-                                                        {bandeirasCobranca > 0 && (
+                                                        {(bandeirasCobranca > 0 || valorBandeiras > 0) && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Bandeiras Tarifarias</td>
                                                                 <td className="py-2 text-center">-</td>
                                                                 <td className="py-2 text-center">-</td>
-                                                                <td className="py-2 text-right font-medium">{formatCurrency(bandeirasCobranca)}</td>
+                                                                <td className="py-2 text-right">
+                                                                    {isEditando ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            value={previaEditada.bandeiras_valor ?? 0}
+                                                                            onChange={(e) => atualizarCampoPrevia('bandeiras_valor', parseFloat(e.target.value) || 0)}
+                                                                            className="w-24 px-2 py-1 text-right border rounded text-sm"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="font-medium">{formatCurrency(valorBandeiras)}</span>
+                                                                    )}
+                                                                </td>
                                                             </tr>
                                                         )}
-                                                        {iluminacao > 0 && (
+                                                        {(iluminacao > 0 || valorIluminacao > 0) && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Iluminacao Publica</td>
                                                                 <td className="py-2 text-center">-</td>
                                                                 <td className="py-2 text-center">-</td>
-                                                                <td className="py-2 text-right font-medium">{formatCurrency(iluminacao)}</td>
+                                                                <td className="py-2 text-right">
+                                                                    {isEditando ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            value={previaEditada.iluminacao_publica_valor ?? 0}
+                                                                            onChange={(e) => atualizarCampoPrevia('iluminacao_publica_valor', parseFloat(e.target.value) || 0)}
+                                                                            className="w-24 px-2 py-1 text-right border rounded text-sm"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="font-medium">{formatCurrency(valorIluminacao)}</span>
+                                                                    )}
+                                                                </td>
                                                             </tr>
                                                         )}
-                                                        {outrosServicos.map((item, idx) => (
+                                                        {outrosServicos.length > 0 && !isEditando && outrosServicos.map((item, idx) => (
                                                             <tr key={`outros-cob-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">{item.descricao || 'Outros'}</td>
                                                                 <td className="py-2 text-center">-</td>
@@ -1058,15 +1220,38 @@ export default function GestaoFaturas() {
                                                                 <td className="py-2 text-right font-medium">{formatCurrency(item.valor || 0)}</td>
                                                             </tr>
                                                         ))}
+                                                        {(isEditando || valorServicos > 0) && (
+                                                            <tr className="border-b border-slate-100 dark:border-slate-800">
+                                                                <td className="py-2 text-slate-700 dark:text-slate-300">Servicos Adicionais</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-center">-</td>
+                                                                <td className="py-2 text-right">
+                                                                    {isEditando ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            value={previaEditada.servicos_valor ?? 0}
+                                                                            onChange={(e) => atualizarCampoPrevia('servicos_valor', parseFloat(e.target.value) || 0)}
+                                                                            className="w-24 px-2 py-1 text-right border rounded text-sm"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="font-medium">{formatCurrency(valorServicos)}</span>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        )}
                                                         <tr className="bg-indigo-100 dark:bg-indigo-900/30 font-bold">
                                                             <td className="py-2 text-indigo-900 dark:text-indigo-200" colSpan={3}>TOTAL DA COBRANCA</td>
-                                                            <td className="py-2 text-right text-indigo-900 dark:text-indigo-200">{formatCurrency(totalCobranca)}</td>
+                                                            <td className="py-2 text-right text-indigo-900 dark:text-indigo-200">
+                                                                {formatCurrency(isEditando ? totalEditado : (cobranca?.valor_total ?? totalCobranca))}
+                                                            </td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
                                             </div>
                                         </div>
-                                    )}
+                                    );
+                                    })()}
 
                                     {/* ==================== SECAO 5: RESUMO GD (ECONOMIA) ==================== */}
                                     {['EXTRAIDA', 'COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && dados && (

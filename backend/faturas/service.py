@@ -1380,19 +1380,22 @@ class FaturasService:
         if cobranca:
             status_cobranca = (cobranca.get("status") or "").upper()
 
-            if status_cobranca == "PAGA":
+            # Cobrança cancelada = ignora, trata como se não existisse
+            if status_cobranca == "CANCELADA":
+                pass  # Vai cair no fluxo "sem cobrança" abaixo
+            elif status_cobranca == "PAGA":
                 return "COBRANCA_PAGA"
             elif status_cobranca == "EMITIDA":
                 return "COBRANCA_EMITIDA"
             elif status_cobranca == "RASCUNHO":
                 return "COBRANCA_RASCUNHO"
-            # Outros status (PENDENTE, CANCELADA, etc) - trata como emitida se tiver PIX
+            # Outros status (PENDENTE, VENCIDA, PARCIAL) - trata como emitida se tiver PIX
             elif cobranca.get("qr_code_pix"):
                 return "COBRANCA_EMITIDA"
             else:
                 return "COBRANCA_RASCUNHO"
 
-        # Sem cobrança - verificar estado da fatura
+        # Sem cobrança (ou cobrança cancelada) - verificar estado da fatura
         if not tem_pdf:
             return "AGUARDANDO_PDF"
 

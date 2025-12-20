@@ -1459,13 +1459,29 @@ export default function GestaoFaturas() {
                                                     <CreditCard size={16} />
                                                     Cobranca #{fatura.cobranca.id}
                                                 </h5>
-                                                <button
-                                                    onClick={() => navigate(`/app/gestor/cobrancas?cobranca=${fatura.cobranca!.id}`)}
-                                                    className="text-xs px-3 py-1.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 flex items-center gap-1.5"
-                                                >
-                                                    <ExternalLink size={14} />
-                                                    Gerenciar Cobranca
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    {fatura.status_fluxo === 'COBRANCA_RASCUNHO' && (
+                                                        <button
+                                                            onClick={() => handleAprovar(fatura.cobranca!.id)}
+                                                            disabled={loadingAction === fatura.cobranca!.id || editandoPreviaId === fatura.id}
+                                                            className="text-xs px-4 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 flex items-center gap-1.5 font-medium"
+                                                        >
+                                                            {loadingAction === fatura.cobranca!.id ? (
+                                                                <Loader2 size={14} className="animate-spin" />
+                                                            ) : (
+                                                                <Check size={14} />
+                                                            )}
+                                                            Emitir Cobranca
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => navigate(`/app/gestor/cobrancas?cobranca=${fatura.cobranca!.id}`)}
+                                                        className="text-xs px-3 py-1.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 flex items-center gap-1.5"
+                                                    >
+                                                        <ExternalLink size={14} />
+                                                        Gerenciar Cobranca
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                                 <div>

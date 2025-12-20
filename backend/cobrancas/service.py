@@ -1239,20 +1239,48 @@ class CobrancasService:
                 detail=f"Cobrança com status '{status_atual}' não pode ser editada"
             )
 
-        # 4. Preparar dados para atualização
+        # 4. Lista completa de campos editáveis
+        campos_kwh = ["consumo_kwh", "injetada_kwh", "compensado_kwh", "gap_kwh", "taxa_minima_kwh", "energia_excedente_kwh"]
+        campos_tarifas = ["tarifa_base", "tarifa_assinatura"]
+        campos_valores = [
+            "valor_energia_base", "valor_energia_assinatura",
+            "taxa_minima_valor", "energia_excedente_valor",
+            "disponibilidade_valor", "bandeiras_valor",
+            "iluminacao_publica_valor", "servicos_valor"
+        ]
+        todos_campos_editaveis = campos_kwh + campos_tarifas + campos_valores + ["vencimento", "observacoes_internas"]
+
+        # 5. Salvar valores originais antes de editar (para permitir reversão)
+        valores_originais = cobranca.get("valores_originais") or {}
+        novos_originais = {}
+
+        for campo in todos_campos_editaveis:
+            if campo in campos and campos[campo] is not None:
+                # Se nunca foi editado antes, salvar valor original
+                if campo not in valores_originais:
+                    valor_atual = cobranca.get(campo)
+                    if valor_atual is not None:
+                        novos_originais[campo] = valor_atual
+
+        # Mesclar com valores originais existentes
+        if novos_originais:
+            valores_originais = {**valores_originais, **novos_originais}
+
+        # 6. Preparar dados para atualização
         update_data = {}
 
-        # Campos monetários editáveis
-        campos_monetarios = [
-            "taxa_minima_valor",
-            "energia_excedente_valor",
-            "disponibilidade_valor",
-            "bandeiras_valor",
-            "iluminacao_publica_valor",
-            "servicos_valor"
-        ]
+        # Campos kWh (inteiros)
+        for campo in campos_kwh:
+            if campo in campos and campos[campo] is not None:
+                update_data[campo] = int(campos[campo])
 
-        for campo in campos_monetarios:
+        # Campos de tarifas (decimais)
+        for campo in campos_tarifas:
+            if campo in campos and campos[campo] is not None:
+                update_data[campo] = float(campos[campo])
+
+        # Campos monetários (decimais)
+        for campo in campos_valores:
             if campo in campos and campos[campo] is not None:
                 update_data[campo] = float(campos[campo])
 
@@ -1263,6 +1291,10 @@ class CobrancasService:
         # Observações
         if "observacoes_internas" in campos and campos["observacoes_internas"] is not None:
             update_data["observacoes_internas"] = campos["observacoes_internas"]
+
+        # Salvar valores originais se houver novos
+        if novos_originais:
+            update_data["valores_originais"] = valores_originais
 
         if not update_data:
             logger.info(f"Nenhum campo para atualizar na cobrança {cobranca_id}")
@@ -1384,4 +1416,92 @@ class CobrancasService:
             # Não falha a edição por erro no HTML
 
         # 9. Retornar cobrança atualizada
+        return await self.buscar(cobranca_id, user_id, perfis)
+
+    async def reverter_campos_cobranca(
+        self,
+        cobranca_id: int,
+        campos: list[str] | None,
+        user_id: str,
+        perfis: list[str]
+    ) -> dict:
+        """
+        Reverte campos editados para seus valores originais.
+
+        Args:
+            cobranca_id: ID da cobrança
+            campos: Lista de campos a reverter. Se None ou vazio, reverte todos.
+            user_id: ID do usuário
+            perfis: Lista de perfis do usuário
+
+        Returns:
+            Cobrança atualizada
+        """
+        from fastapi import HTTPException
+
+        # 1. Buscar cobrança
+        response = self.supabase.table("cobrancas").select("*").eq("id", cobranca_id).single().execute()
+
+        if not response.data:
+            raise NotFoundError(f"Cobrança {cobranca_id} não encontrada")
+
+        cobranca = response.data
+
+        # 2. Verificar permissão
+        if not self._pode_gerenciar_cobranca(cobranca, user_id, perfis):
+            raise ForbiddenError("Usuário não tem permissão para editar esta cobrança")
+
+        # 3. Verificar status permite edição
+        status_atual = cobranca.get("status")
+        if status_atual in ["PAGA", "CANCELADA"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cobrança com status '{status_atual}' não pode ser editada"
+            )
+
+        # 4. Obter valores originais
+        valores_originais = cobranca.get("valores_originais") or {}
+
+        if not valores_originais:
+            raise HTTPException(
+                status_code=400,
+                detail="Nenhum campo foi editado anteriormente. Nada a reverter."
+            )
+
+        # 5. Determinar campos a reverter
+        campos_a_reverter = campos if campos else list(valores_originais.keys())
+
+        # 6. Preparar atualização
+        update_data = {}
+        novos_valores_originais = dict(valores_originais)
+
+        for campo in campos_a_reverter:
+            if campo in valores_originais:
+                # Reverter para valor original
+                update_data[campo] = valores_originais[campo]
+                # Remover do registro de valores originais
+                del novos_valores_originais[campo]
+
+        if not update_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Nenhum dos campos especificados foi editado anteriormente."
+            )
+
+        # Atualizar valores_originais (remover os revertidos)
+        if novos_valores_originais:
+            update_data["valores_originais"] = novos_valores_originais
+        else:
+            # Todos os campos foram revertidos - limpar o campo
+            update_data["valores_originais"] = None
+            update_data["editado_manualmente"] = False
+
+        update_data["updated_at"] = "now()"
+
+        # 7. Atualizar no banco
+        self.supabase.table("cobrancas").update(update_data).eq("id", cobranca_id).execute()
+
+        logger.info(f"Campos revertidos na cobrança {cobranca_id}: {list(update_data.keys())}")
+
+        # 8. Retornar cobrança atualizada
         return await self.buscar(cobranca_id, user_id, perfis)

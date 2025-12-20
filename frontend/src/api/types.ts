@@ -279,7 +279,10 @@ export interface Cobranca {
     html_relatorio?: string;
     observacoes?: string;
     observacoes_internas?: string;
+
+    // Edição manual
     editado_manualmente?: boolean;
+    valores_originais?: Record<string, any>;  // JSONB com valores originais antes da edição
 
     // Timestamps
     criado_em?: string;

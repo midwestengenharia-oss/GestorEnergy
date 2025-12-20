@@ -14,6 +14,7 @@ from .schemas import (
     CobrancaPagamentoRequest,
     CobrancaGerarLoteRequest,
     CamposEditaveisCobranca,
+    ReversaoCamposRequest,
     CobrancaResponse,
     CobrancaListResponse,
     EstatisticasCobrancaResponse,
@@ -439,6 +440,37 @@ async def editar_campos_cobranca(
     resultado = await service.editar_campos_cobranca(
         cobranca_id=cobranca_id,
         campos=campos.model_dump(exclude_unset=True),
+        user_id=current_user.id,
+        perfis=current_user.perfis
+    )
+    return resultado
+
+
+@router.post(
+    "/{cobranca_id}/reverter-campos",
+    response_model=CobrancaResponse,
+    summary="Reverter campos editados",
+    description="Reverte campos editados para seus valores originais",
+    dependencies=[Depends(require_perfil("superadmin", "proprietario", "gestor"))]
+)
+async def reverter_campos_cobranca(
+    cobranca_id: int,
+    data: ReversaoCamposRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)] = None,
+):
+    """
+    Reverte campos editados de uma cobrança para seus valores originais.
+
+    Args:
+        cobranca_id: ID da cobrança
+        data: Lista de campos a reverter. Se vazio, reverte todos.
+
+    Returns:
+        Cobrança atualizada com valores originais restaurados
+    """
+    resultado = await service.reverter_campos_cobranca(
+        cobranca_id=cobranca_id,
+        campos=data.campos,
         user_id=current_user.id,
         perfis=current_user.perfis
     )

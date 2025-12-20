@@ -76,11 +76,32 @@ class CamposEditaveisCobranca(BaseModel):
     """
     Campos que podem ser editados manualmente em uma cobrança.
     Usado para ajustes manuais pelo gestor.
+    Todos os campos são opcionais - apenas os fornecidos serão atualizados.
     """
-    # Valores monetários editáveis
+    # Métricas de energia (kWh)
+    consumo_kwh: Optional[int] = Field(None, ge=0, description="Consumo em kWh")
+    injetada_kwh: Optional[int] = Field(None, ge=0, description="Energia injetada em kWh")
+    compensado_kwh: Optional[int] = Field(None, ge=0, description="Energia compensada em kWh")
+    gap_kwh: Optional[int] = Field(None, ge=0, description="Gap (consumo - compensado) em kWh")
+
+    # Tarifas
+    tarifa_base: Optional[Decimal] = Field(None, ge=0, description="Tarifa base R$/kWh")
+    tarifa_assinatura: Optional[Decimal] = Field(None, ge=0, description="Tarifa com assinatura R$/kWh")
+
+    # Valores de energia
+    valor_energia_base: Optional[Decimal] = Field(None, ge=0, description="Valor energia base R$")
+    valor_energia_assinatura: Optional[Decimal] = Field(None, ge=0, description="Valor energia assinatura R$")
+
+    # GD I - Taxa mínima e energia excedente
+    taxa_minima_kwh: Optional[int] = Field(None, ge=0, description="Taxa mínima em kWh")
     taxa_minima_valor: Optional[Decimal] = Field(None, ge=0, description="Valor da taxa mínima em R$")
+    energia_excedente_kwh: Optional[int] = Field(None, ge=0, description="Energia excedente em kWh")
     energia_excedente_valor: Optional[Decimal] = Field(None, ge=0, description="Valor da energia excedente em R$")
+
+    # GD II - Disponibilidade
     disponibilidade_valor: Optional[Decimal] = Field(None, ge=0, description="Valor da disponibilidade GD2 em R$")
+
+    # Extras
     bandeiras_valor: Optional[Decimal] = Field(None, ge=0, description="Valor das bandeiras tarifárias em R$")
     iluminacao_publica_valor: Optional[Decimal] = Field(None, ge=0, description="Valor da iluminação pública em R$")
     servicos_valor: Optional[Decimal] = Field(None, ge=0, description="Valor de serviços adicionais em R$")
@@ -90,6 +111,11 @@ class CamposEditaveisCobranca(BaseModel):
 
     # Observações
     observacoes_internas: Optional[str] = Field(None, max_length=1000, description="Observações internas do gestor")
+
+
+class ReversaoCamposRequest(BaseModel):
+    """Request para reverter campos editados para valores originais"""
+    campos: Optional[List[str]] = Field(None, description="Lista de campos a reverter. Se vazio, reverte todos.")
 
 
 # ========================
@@ -199,6 +225,10 @@ class CobrancaResponse(BaseModel):
     # Observações
     observacoes: Optional[str] = None
     observacoes_internas: Optional[str] = None
+
+    # Edição manual
+    editado_manualmente: Optional[bool] = None
+    valores_originais: Optional[dict] = None  # JSONB com valores originais antes da edição
 
     # Timestamps
     criado_em: Optional[datetime] = None

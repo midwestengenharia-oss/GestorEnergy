@@ -160,18 +160,49 @@ export const cobrancasApi = {
     // Editar campos específicos da cobrança
     editarCampos: (id: number, campos: CamposEditaveisCobranca) =>
         api.put<Cobranca>(`/cobrancas/${id}/editar-campos`, campos),
+
+    // Reverter campos editados para valores originais
+    reverterCampos: (id: number, campos?: string[]) =>
+        api.post<Cobranca>(`/cobrancas/${id}/reverter-campos`, { campos }),
 };
 
 // Interface para campos editáveis da cobrança
 export interface CamposEditaveisCobranca {
+    // Métricas de energia (kWh)
+    consumo_kwh?: number;
+    injetada_kwh?: number;
+    compensado_kwh?: number;
+    gap_kwh?: number;
+
+    // Tarifas
+    tarifa_base?: number;
+    tarifa_assinatura?: number;
+
+    // Valores de energia
+    valor_energia_base?: number;
+    valor_energia_assinatura?: number;
+
+    // GD I - Taxa mínima e energia excedente
+    taxa_minima_kwh?: number;
     taxa_minima_valor?: number;
+    energia_excedente_kwh?: number;
     energia_excedente_valor?: number;
+
+    // GD II - Disponibilidade
     disponibilidade_valor?: number;
+
+    // Extras
     bandeiras_valor?: number;
     iluminacao_publica_valor?: number;
     servicos_valor?: number;
+
+    // Vencimento e observações
     vencimento?: string;
     observacoes_internas?: string;
+}
+
+export interface ReversaoCamposRequest {
+    campos?: string[];  // Lista de campos a reverter. Se vazio, reverte todos.
 }
 
 export default cobrancasApi;

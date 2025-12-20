@@ -1054,8 +1054,7 @@ class CobrancasService:
         # Atualizar para EMITIDA
         update_response = self.supabase.table("cobrancas").update({
             "status": "EMITIDA",
-            "vencimento_editavel": False,
-            "updated_at": "now()"
+            "vencimento_editavel": False
         }).eq("id", cobranca_id).execute()
 
         logger.info(f"Cobrança {cobranca_id} aprovada e emitida")

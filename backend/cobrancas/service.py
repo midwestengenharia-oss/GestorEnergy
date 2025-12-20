@@ -991,8 +991,7 @@ class CobrancasService:
 
         # Atualizar vencimento
         update_response = self.supabase.table("cobrancas").update({
-            "vencimento": nova_data.isoformat(),
-            "updated_at": "now()"
+            "vencimento": nova_data.isoformat()
         }).eq("id", cobranca_id).execute()
 
         logger.info(f"Vencimento da cobrança {cobranca_id} atualizado para {nova_data}")
@@ -1296,7 +1295,6 @@ class CobrancasService:
 
         # 6. Marcar como editada manualmente
         update_data["editado_manualmente"] = True
-        update_data["updated_at"] = "now()"
 
         # 7. Atualizar no banco
         self.supabase.table("cobrancas").update(update_data).eq("id", cobranca_id).execute()

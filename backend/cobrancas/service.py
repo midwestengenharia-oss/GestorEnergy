@@ -211,7 +211,7 @@ class CobrancasService:
         """Busca cobrança por ID"""
 
         result = self.supabase.table("cobrancas").select(
-            "*, beneficiarios(id, nome, cpf, email, telefone, usina_id), faturas(id, mes_referencia, ano_referencia, valor_fatura, consumo)"
+            "*, beneficiarios(id, nome, cpf, email, telefone, usina_id), faturas!cobrancas_fatura_id_fkey(id, mes_referencia, ano_referencia, valor_fatura, consumo)"
         ).eq("id", cobranca_id).single().execute()
 
         if not result.data:
@@ -1218,7 +1218,7 @@ class CobrancasService:
                 usinas(id, nome)
             ),
             unidades_consumidoras(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, cidade, uf),
-            faturas(id, dados_extraidos)
+            faturas!cobrancas_fatura_id_fkey(id, dados_extraidos)
             """
         ).eq("id", cobranca_id).single().execute()
 

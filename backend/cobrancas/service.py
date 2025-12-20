@@ -266,7 +266,7 @@ class CobrancasService:
             "valor_final": float(valor_final),
             "data_vencimento": str(data["data_vencimento"]),
             "status": StatusCobranca.PENDENTE.value,
-            "observacoes": data.get("observacoes"),
+            "observacoes_internas": data.get("observacoes"),
             "criado_por": user_id
         }
 
@@ -318,8 +318,8 @@ class CobrancasService:
         }
 
         if data.get("observacoes"):
-            obs_anterior = cobranca.get("observacoes") or ""
-            update_data["observacoes"] = f"{obs_anterior}\n[Pagamento] {data['observacoes']}".strip()
+            obs_anterior = cobranca.get("observacoes_internas") or ""
+            update_data["observacoes_internas"] = f"{obs_anterior}\n[Pagamento] {data['observacoes']}".strip()
 
         result = self.supabase.table("cobrancas").update(update_data).eq("id", cobranca_id).execute()
         return result.data[0]
@@ -334,7 +334,7 @@ class CobrancasService:
 
         update_data = {
             "status": StatusCobranca.CANCELADA.value,
-            "observacoes": f"{cobranca.get('observacoes') or ''}\n[Cancelado] {motivo}".strip(),
+            "observacoes_internas": f"{cobranca.get('observacoes_internas') or ''}\n[Cancelado] {motivo}".strip(),
             "atualizado_em": datetime.now().isoformat()
         }
 

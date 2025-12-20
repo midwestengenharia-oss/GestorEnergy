@@ -3,11 +3,12 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     FileX, FileText, Zap, FileEdit, CreditCard, CheckCircle, Check,
     RefreshCw, LayoutGrid, List, Search, Filter, ChevronDown, ChevronRight,
     Eye, Copy, Loader2, AlertCircle, RotateCcw, RefreshCcw, User, BarChart3,
-    Receipt, TrendingUp, CheckCircle2, AlertTriangle, XCircle, Info
+    Receipt, TrendingUp, CheckCircle2, AlertTriangle, XCircle, Info, ExternalLink
 } from 'lucide-react';
 import { faturasApi, FaturaGestao, TotaisGestao, StatusFluxo } from '../../api/faturas';
 import { usinasApi } from '../../api/usinas';
@@ -211,6 +212,8 @@ interface Usina {
 type ViewMode = 'kanban' | 'lista';
 
 export default function GestaoFaturas() {
+    const navigate = useNavigate();
+
     // Estados
     const [viewMode, setViewMode] = useState<ViewMode>('kanban');
     const [loading, setLoading] = useState(true);
@@ -510,8 +513,8 @@ export default function GestaoFaturas() {
                     </div>
                 )}
 
-                {/* Acoes */}
-                <div className="flex flex-wrap gap-1 mt-3">
+                {/* Acoes - apenas acoes primarias de fatura */}
+                <div className="flex flex-wrap gap-1 mt-3" onClick={e => e.stopPropagation()}>
                     {fatura.status_fluxo === 'PDF_RECEBIDO' && (
                         <button
                             onClick={() => handleExtrair(fatura.id)}
@@ -522,7 +525,7 @@ export default function GestaoFaturas() {
                             Extrair
                         </button>
                     )}
-                    {fatura.status_fluxo === 'EXTRAIDA' && (
+                    {fatura.status_fluxo === 'EXTRAIDA' && fatura.beneficiario && (
                         <button
                             onClick={() => handleGerarCobranca(fatura)}
                             disabled={isLoading}
@@ -532,43 +535,13 @@ export default function GestaoFaturas() {
                             Gerar
                         </button>
                     )}
-                    {fatura.status_fluxo === 'COBRANCA_RASCUNHO' && fatura.cobranca && (
+                    {['COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && fatura.cobranca && (
                         <button
-                            onClick={() => handleAprovar(fatura.cobranca!.id)}
-                            disabled={isLoading}
-                            className="text-xs px-2 py-1 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50 flex items-center gap-1"
-                        >
-                            {isLoading ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
-                            Aprovar
-                        </button>
-                    )}
-                    {fatura.status_fluxo === 'COBRANCA_EMITIDA' && fatura.cobranca && (
-                        <>
-                            <button
-                                onClick={() => handleVerRelatorio(fatura.cobranca!.id)}
-                                className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-1"
-                            >
-                                <Eye size={12} />
-                                Ver
-                            </button>
-                            {fatura.cobranca.qr_code_pix && (
-                                <button
-                                    onClick={() => handleCopiarPix(fatura.cobranca!.qr_code_pix!)}
-                                    className="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1"
-                                >
-                                    <Copy size={12} />
-                                    PIX
-                                </button>
-                            )}
-                        </>
-                    )}
-                    {(fatura.status_fluxo === 'COBRANCA_PAGA' || fatura.status_fluxo === 'FATURA_QUITADA') && fatura.cobranca && (
-                        <button
-                            onClick={() => handleVerRelatorio(fatura.cobranca!.id)}
+                            onClick={() => navigate('/app/gestor/cobrancas')}
                             className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-1"
                         >
-                            <Eye size={12} />
-                            Ver
+                            <ExternalLink size={12} />
+                            Ver Cobranca
                         </button>
                     )}
                 </div>
@@ -668,47 +641,35 @@ export default function GestaoFaturas() {
                     </td>
                     <td className="px-4 py-3">
                         <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                            {/* Acoes primarias de fatura */}
                             {fatura.status_fluxo === 'PDF_RECEBIDO' && (
                                 <button
                                     onClick={() => handleExtrair(fatura.id)}
                                     disabled={isLoading}
-                                    className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                                    className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 flex items-center gap-1"
                                 >
-                                    {isLoading ? <Loader2 size={12} className="animate-spin" /> : 'Extrair'}
+                                    {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                                    Extrair
                                 </button>
                             )}
-                            {fatura.status_fluxo === 'EXTRAIDA' && (
+                            {fatura.status_fluxo === 'EXTRAIDA' && fatura.beneficiario && (
                                 <button
                                     onClick={() => handleGerarCobranca(fatura)}
                                     disabled={isLoading}
-                                    className="text-xs px-2 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
+                                    className="text-xs px-2 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50 flex items-center gap-1"
                                 >
-                                    {isLoading ? <Loader2 size={12} className="animate-spin" /> : 'Gerar'}
+                                    {isLoading ? <Loader2 size={12} className="animate-spin" /> : <FileEdit size={12} />}
+                                    Gerar
                                 </button>
                             )}
-                            {fatura.status_fluxo === 'COBRANCA_RASCUNHO' && fatura.cobranca && (
+                            {/* Link para gestao de cobrancas */}
+                            {['COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && fatura.cobranca && (
                                 <button
-                                    onClick={() => handleAprovar(fatura.cobranca!.id)}
-                                    disabled={isLoading}
-                                    className="text-xs px-2 py-1 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
+                                    onClick={() => navigate('/app/gestor/cobrancas')}
+                                    className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-1"
                                 >
-                                    {isLoading ? <Loader2 size={12} className="animate-spin" /> : 'Aprovar'}
-                                </button>
-                            )}
-                            {fatura.cobranca?.qr_code_pix && (
-                                <button
-                                    onClick={() => handleCopiarPix(fatura.cobranca!.qr_code_pix!)}
-                                    className="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
-                                >
-                                    PIX
-                                </button>
-                            )}
-                            {fatura.cobranca && (
-                                <button
-                                    onClick={() => handleVerRelatorio(fatura.cobranca!.id)}
-                                    className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
-                                >
-                                    Ver
+                                    <ExternalLink size={12} />
+                                    Cobrancas
                                 </button>
                             )}
                         </div>
@@ -1159,10 +1120,19 @@ export default function GestaoFaturas() {
                                     {/* ==================== SECAO 6: COBRANCA EXISTENTE ==================== */}
                                     {['COBRANCA_RASCUNHO', 'COBRANCA_EMITIDA', 'COBRANCA_PAGA', 'FATURA_QUITADA'].includes(fatura.status_fluxo) && fatura.cobranca && (
                                         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-                                            <h5 className="text-sm font-medium text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-                                                <CreditCard size={16} />
-                                                Cobranca #{fatura.cobranca.id}
-                                            </h5>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h5 className="text-sm font-medium text-slate-900 dark:text-white flex items-center gap-2">
+                                                    <CreditCard size={16} />
+                                                    Cobranca #{fatura.cobranca.id}
+                                                </h5>
+                                                <button
+                                                    onClick={() => navigate('/app/gestor/cobrancas')}
+                                                    className="text-xs px-3 py-1.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 flex items-center gap-1.5"
+                                                >
+                                                    <ExternalLink size={14} />
+                                                    Gerenciar Cobranca
+                                                </button>
+                                            </div>
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                                 <div>
                                                     <span className="text-slate-500 block text-xs">Status</span>
@@ -1189,23 +1159,23 @@ export default function GestaoFaturas() {
                                                     </div>
                                                 )}
                                             </div>
-                                            {fatura.cobranca.qr_code_pix && (
-                                                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                                    <button
-                                                        onClick={() => handleCopiarPix(fatura.cobranca!.qr_code_pix!)}
-                                                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2"
-                                                    >
-                                                        <Copy size={16} />
-                                                        Copiar Codigo PIX
-                                                    </button>
-                                                </div>
-                                            )}
                                         </div>
                                     )}
 
-                                    {/* ==================== ACOES ==================== */}
-                                    <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                        {['PDF_RECEBIDO', 'EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
+                                    {/* ==================== ACOES SECUNDARIAS (correcao/retrabalho) ==================== */}
+                                    {['PDF_RECEBIDO', 'EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
+                                        <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                            <span className="text-xs text-slate-500 dark:text-slate-400 w-full mb-1">Acoes de correcao:</span>
+                                            {fatura.status_fluxo === 'PDF_RECEBIDO' && (
+                                                <button
+                                                    onClick={() => handleExtrair(fatura.id)}
+                                                    disabled={isLoading}
+                                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
+                                                >
+                                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                                                    Extrair Dados
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => handleRefazer(fatura.id)}
                                                 disabled={isLoading}
@@ -1214,37 +1184,18 @@ export default function GestaoFaturas() {
                                                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
                                                 Refazer
                                             </button>
-                                        )}
-                                        {['EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
-                                            <button
-                                                onClick={() => handleReprocessar(fatura.id)}
-                                                disabled={isLoading}
-                                                className="px-4 py-2 border border-amber-300 dark:border-amber-600 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50 flex items-center gap-2"
-                                            >
-                                                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
-                                                Reprocessar
-                                            </button>
-                                        )}
-                                        {fatura.status_fluxo === 'EXTRAIDA' && fatura.beneficiario && (
-                                            <button
-                                                onClick={() => handleGerarCobranca(fatura)}
-                                                disabled={isLoading}
-                                                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
-                                            >
-                                                {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
-                                                Gerar Cobranca
-                                            </button>
-                                        )}
-                                        {fatura.cobranca && (
-                                            <button
-                                                onClick={() => handleVerRelatorio(fatura.cobranca!.id)}
-                                                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2"
-                                            >
-                                                <Eye size={16} />
-                                                Ver Relatorio
-                                            </button>
-                                        )}
-                                    </div>
+                                            {['EXTRAIDA', 'COBRANCA_RASCUNHO'].includes(fatura.status_fluxo) && (
+                                                <button
+                                                    onClick={() => handleReprocessar(fatura.id)}
+                                                    disabled={isLoading}
+                                                    className="px-4 py-2 border border-amber-300 dark:border-amber-600 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-50 flex items-center gap-2"
+                                                >
+                                                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
+                                                    Reprocessar
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </td>
                         </tr>

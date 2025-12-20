@@ -617,6 +617,12 @@ class CobrancasService:
                     f"no período {mes_ref:02d}/{ano_ref}. Use forcar_reprocessamento=true para recriar."
                 )
 
+        # 2.2 Excluir cobranças CANCELADAS do mesmo período (para evitar violação de unique constraint)
+        # Isso permite gerar uma nova cobrança após cancelar a anterior
+        self.supabase.table("cobrancas").delete().eq(
+            "beneficiario_id", beneficiario_id
+        ).eq("mes", mes_ref).eq("ano", ano_ref).eq("status", "CANCELADA").execute()
+
         # 3. Obter tarifa ANEEL se não informada
         if not tarifa_aneel:
             # TODO: Integrar com calculadora ANEEL existente

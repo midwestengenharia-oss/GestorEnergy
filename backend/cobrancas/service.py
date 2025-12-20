@@ -588,13 +588,14 @@ class CobrancasService:
             if uc_result.data:
                 uc = uc_result.data
 
-        # 2.1 Verificar se já existe cobrança para este beneficiário/mês/ano
+        # 2.1 Verificar se já existe cobrança ATIVA para este beneficiário/mês/ano
+        # Ignora cobranças CANCELADAS - podem gerar nova cobrança normalmente
         mes_ref = fatura.get("mes_referencia")
         ano_ref = fatura.get("ano_referencia")
 
         cobranca_existente = self.supabase.table("cobrancas").select("id, status").eq(
             "beneficiario_id", beneficiario_id
-        ).eq("mes", mes_ref).eq("ano", ano_ref).execute()
+        ).eq("mes", mes_ref).eq("ano", ano_ref).neq("status", "CANCELADA").execute()
 
         if cobranca_existente.data and len(cobranca_existente.data) > 0:
             if forcar_reprocessamento:

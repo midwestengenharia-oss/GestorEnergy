@@ -139,7 +139,7 @@ class PixService:
         logger.info(f"Gerando PIX para cobrança {cobranca_id}")
 
         cobranca_query = supabase.table("cobrancas").select(
-            "*, beneficiarios(id, nome, cpf, cnpj)"
+            "*, beneficiarios(id, nome, cpf)"
         ).eq("id", cobranca_id).single().execute()
 
         if not cobranca_query.data:
@@ -176,15 +176,14 @@ class PixService:
 
         nome = beneficiario.get("nome", "")
         cpf = beneficiario.get("cpf", "")
-        cnpj = beneficiario.get("cnpj")
 
         if not nome:
             raise ValueError(f"Beneficiário sem nome para cobrança {cobranca_id}")
-        if not cpf and not cnpj:
-            raise ValueError(f"Beneficiário sem CPF/CNPJ para cobrança {cobranca_id}")
+        if not cpf:
+            raise ValueError(f"Beneficiário sem CPF para cobrança {cobranca_id}")
 
         # 3. Gerar TXID
-        documento = cnpj or cpf
+        documento = cpf
         uc = cobranca.get("uc_id")  # Fallback
         txid = gerar_txid(nome=nome, documento=documento, uc=str(uc) if uc else None)
 
@@ -197,8 +196,8 @@ class PixService:
             resultado = await client.criar_cobranca_vencimento(
                 txid=txid,
                 valor=Decimal(str(valor)),
-                cpf_devedor=cpf if not cnpj else None,
-                cnpj_devedor=cnpj,
+                cpf_devedor=cpf,
+                cnpj_devedor=None,
                 nome_devedor=nome,
                 chave_pix=settings.SANTANDER_PIX_CHAVE,
                 data_vencimento=vencimento,
@@ -214,8 +213,8 @@ class PixService:
             resultado = await client.criar_cobranca_vencimento(
                 txid=txid,
                 valor=Decimal(str(valor)),
-                cpf_devedor=cpf if not cnpj else None,
-                cnpj_devedor=cnpj,
+                cpf_devedor=cpf,
+                cnpj_devedor=None,
                 nome_devedor=nome,
                 chave_pix=settings.SANTANDER_PIX_CHAVE,
                 data_vencimento=vencimento,

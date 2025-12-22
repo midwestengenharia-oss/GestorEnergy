@@ -15,6 +15,7 @@ venv/
 # Sessions
 backend/sessions/
 sessions/
+/claude/*
 
 # Test data and mocks
 responses/

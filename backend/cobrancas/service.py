@@ -1300,26 +1300,43 @@ class CobrancasService:
                 )
                 return
 
+            # Helper para converter valores do banco para Decimal (trata listas vazias, None, etc.)
+            def safe_decimal(val, default=0):
+                if val is None or val == [] or val == "":
+                    return Decimal(str(default))
+                try:
+                    return Decimal(str(val))
+                except Exception:
+                    return Decimal(str(default))
+
+            def safe_float(val, default=0):
+                if val is None or val == [] or val == "":
+                    return default
+                try:
+                    return float(val)
+                except Exception:
+                    return default
+
             # Reconstruir CobrancaCalculada a partir dos dados salvos
             cobranca_calc = CobrancaCalculada()
             cobranca_calc.modelo_gd = cobranca.get("modelo_gd", "GDII")
             cobranca_calc.tipo_ligacao = cobranca.get("tipo_ligacao")
-            cobranca_calc.consumo_kwh = cobranca.get("consumo_kwh", 0)
-            cobranca_calc.injetada_kwh = cobranca.get("injetada_kwh", 0)
-            cobranca_calc.valor_energia_assinatura = Decimal(str(cobranca.get("valor_energia_assinatura", 0)))
-            cobranca_calc.energia_compensada_sem_desconto = Decimal(str(cobranca.get("energia_compensada_sem_desconto", 0)))
-            cobranca_calc.energia_compensada_com_desconto = Decimal(str(cobranca.get("energia_compensada_com_desconto", 0)))
-            cobranca_calc.taxa_minima_kwh = cobranca.get("taxa_minima_kwh", 0)
-            cobranca_calc.taxa_minima_valor = Decimal(str(cobranca.get("taxa_minima_valor", 0)))
-            cobranca_calc.energia_excedente_valor = Decimal(str(cobranca.get("energia_excedente_valor", 0)))
-            cobranca_calc.disponibilidade_valor = Decimal(str(cobranca.get("disponibilidade_valor", 0)))
-            cobranca_calc.bandeiras_valor = Decimal(str(cobranca.get("bandeiras_valor", 0)))
-            cobranca_calc.iluminacao_publica_valor = Decimal(str(cobranca.get("iluminacao_publica_valor", 0)))
-            cobranca_calc.servicos_valor = Decimal(str(cobranca.get("servicos_valor", 0)))
-            cobranca_calc.valor_sem_assinatura = Decimal(str(cobranca.get("valor_sem_assinatura", 0)))
-            cobranca_calc.valor_com_assinatura = Decimal(str(cobranca.get("valor_com_assinatura", 0)))
-            cobranca_calc.economia_mes = Decimal(str(cobranca.get("economia_mes", 0)))
-            cobranca_calc.valor_total = Decimal(str(cobranca.get("valor_total", 0)))
+            cobranca_calc.consumo_kwh = safe_float(cobranca.get("consumo_kwh"), 0)
+            cobranca_calc.injetada_kwh = safe_float(cobranca.get("injetada_kwh"), 0)
+            cobranca_calc.valor_energia_assinatura = safe_decimal(cobranca.get("valor_energia_assinatura"))
+            cobranca_calc.energia_compensada_sem_desconto = safe_decimal(cobranca.get("energia_compensada_sem_desconto"))
+            cobranca_calc.energia_compensada_com_desconto = safe_decimal(cobranca.get("energia_compensada_com_desconto"))
+            cobranca_calc.taxa_minima_kwh = safe_float(cobranca.get("taxa_minima_kwh"), 0)
+            cobranca_calc.taxa_minima_valor = safe_decimal(cobranca.get("taxa_minima_valor"))
+            cobranca_calc.energia_excedente_valor = safe_decimal(cobranca.get("energia_excedente_valor"))
+            cobranca_calc.disponibilidade_valor = safe_decimal(cobranca.get("disponibilidade_valor"))
+            cobranca_calc.bandeiras_valor = safe_decimal(cobranca.get("bandeiras_valor"))
+            cobranca_calc.iluminacao_publica_valor = safe_decimal(cobranca.get("iluminacao_publica_valor"))
+            cobranca_calc.servicos_valor = safe_decimal(cobranca.get("servicos_valor"))
+            cobranca_calc.valor_sem_assinatura = safe_decimal(cobranca.get("valor_sem_assinatura"))
+            cobranca_calc.valor_com_assinatura = safe_decimal(cobranca.get("valor_com_assinatura"))
+            cobranca_calc.economia_mes = safe_decimal(cobranca.get("economia_mes"))
+            cobranca_calc.valor_total = safe_decimal(cobranca.get("valor_total"))
 
             # Converter vencimento
             vencimento_str = cobranca.get("vencimento")

@@ -1077,6 +1077,9 @@ class CobrancasService:
                 pix_data = await pix_service.gerar_pix_cobranca(cobranca_id)
                 pix_gerado = True
                 logger.info(f"PIX gerado com sucesso: TXID={pix_data['txid']}")
+
+                # Regenerar HTML do relatório com o novo PIX
+                await self._regenerar_html_com_pix(cobranca_id, pix_data)
             else:
                 logger.warning(
                     f"Credenciais PIX Santander não configuradas. "
@@ -1214,6 +1217,110 @@ class CobrancasService:
         # response = sg.send(message)
 
         pass
+
+    async def _regenerar_html_com_pix(self, cobranca_id: int, pix_data: dict):
+        """
+        Regenera o HTML do relatório com o novo PIX Santander.
+
+        Args:
+            cobranca_id: ID da cobrança
+            pix_data: Dados do PIX gerado (qr_code_pix, qr_code_pix_image)
+        """
+        try:
+            from backend.cobrancas.report_generator_v3 import ReportGeneratorV3
+            from backend.cobrancas.calculator import CobrancaCalculada
+            from backend.faturas.extraction_schemas import FaturaExtraidaSchema
+
+            # Buscar cobrança com dados necessários
+            response = self.supabase.table("cobrancas").select(
+                "*, beneficiarios(id, nome, economia_acumulada), "
+                "faturas!cobrancas_fatura_id_fkey(dados_extraidos), "
+                "unidades_consumidoras(endereco, numero_imovel, cidade)"
+            ).eq("id", cobranca_id).execute()
+
+            if not response.data:
+                logger.warning(f"Cobrança {cobranca_id} não encontrada para regenerar HTML")
+                return
+
+            cobranca = response.data[0]
+            beneficiario = cobranca.get("beneficiarios") or {}
+            fatura = cobranca.get("faturas") or {}
+            uc = cobranca.get("unidades_consumidoras") or {}
+
+            # Parsear dados extraídos
+            dados_extraidos_raw = fatura.get("dados_extraidos")
+            if not dados_extraidos_raw:
+                logger.warning(f"Sem dados_extraidos para regenerar HTML da cobrança {cobranca_id}")
+                return
+
+            if isinstance(dados_extraidos_raw, str):
+                import json
+                dados_extraidos_raw = json.loads(dados_extraidos_raw)
+
+            dados_extraidos = FaturaExtraidaSchema(**dados_extraidos_raw)
+
+            # Reconstruir CobrancaCalculada a partir dos dados salvos
+            cobranca_calc = CobrancaCalculada(
+                modelo_gd=cobranca.get("modelo_gd", "GDII"),
+                tipo_ligacao=cobranca.get("tipo_ligacao"),
+                consumo_kwh=cobranca.get("consumo_kwh", 0),
+                injetada_kwh=cobranca.get("injetada_kwh", 0),
+                tarifa=cobranca.get("tarifa", 0),
+                pis_cofins=cobranca.get("pis_cofins", 0),
+                icms=cobranca.get("icms", 0),
+                valor_energia_assinatura=cobranca.get("valor_energia_assinatura", 0),
+                energia_compensada_sem_desconto=cobranca.get("energia_compensada_sem_desconto", 0),
+                energia_compensada_com_desconto=cobranca.get("energia_compensada_com_desconto", 0),
+                taxa_minima_kwh=cobranca.get("taxa_minima_kwh", 0),
+                taxa_minima_valor=cobranca.get("taxa_minima_valor", 0),
+                energia_excedente_valor=cobranca.get("energia_excedente_valor", 0),
+                disponibilidade_valor=cobranca.get("disponibilidade_valor", 0),
+                bandeiras_valor=cobranca.get("bandeiras_valor", 0),
+                iluminacao_publica_valor=cobranca.get("iluminacao_publica_valor", 0),
+                servicos_valor=cobranca.get("servicos_valor", 0),
+                valor_sem_assinatura=cobranca.get("valor_sem_assinatura", 0),
+                valor_com_assinatura=cobranca.get("valor_com_assinatura", 0),
+                economia_mes=cobranca.get("economia_mes", 0),
+                valor_total=cobranca.get("valor_total", 0),
+            )
+
+            # Converter vencimento
+            vencimento_str = cobranca.get("vencimento")
+            if vencimento_str:
+                from datetime import date as date_type
+                if isinstance(vencimento_str, str):
+                    cobranca_calc.vencimento = date_type.fromisoformat(vencimento_str)
+                else:
+                    cobranca_calc.vencimento = vencimento_str
+
+            # Gerar HTML com PIX Santander
+            report_generator = ReportGeneratorV3()
+            economia_acumulada = float(beneficiario.get("economia_acumulada") or 0)
+
+            novo_html = report_generator.gerar_html(
+                cobranca=cobranca_calc,
+                dados_fatura=dados_extraidos,
+                beneficiario={
+                    "nome": beneficiario.get("nome"),
+                    "endereco": uc.get("endereco"),
+                    "numero": uc.get("numero_imovel"),
+                    "cidade": uc.get("cidade")
+                },
+                qr_code_pix=pix_data.get("qr_code_pix_image"),  # Imagem base64 do PIX Santander
+                pix_copia_cola=pix_data.get("qr_code_pix"),     # EMV copia e cola
+                economia_acumulada=economia_acumulada
+            )
+
+            # Atualizar HTML no banco
+            self.supabase.table("cobrancas").update({
+                "html_relatorio": novo_html
+            }).eq("id", cobranca_id).execute()
+
+            logger.info(f"HTML do relatório regenerado com PIX Santander para cobrança {cobranca_id}")
+
+        except Exception as e:
+            logger.error(f"Erro ao regenerar HTML com PIX para cobrança {cobranca_id}: {e}")
+            # Não falha a aprovação por erro no HTML
 
     async def editar_campos_cobranca(
         self,

@@ -267,7 +267,7 @@ class SantanderAuth:
                 data = response.json()
 
                 self._token = data["access_token"]
-                expires_in = data.get("expires_in", 300)
+                expires_in = int(data.get("expires_in", 300))
                 self._expires_at = datetime.now() + timedelta(seconds=expires_in)
 
                 logger.info(

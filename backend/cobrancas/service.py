@@ -691,6 +691,7 @@ class CobrancasService:
         if beneficiario.get("economia_acumulada"):
             economia_acumulada = float(beneficiario.get("economia_acumulada", 0))
 
+        # Para RASCUNHO, não incluir seção PIX (será adicionada após aprovação com PIX Santander)
         html_relatorio = report_generator_v3.gerar_html(
             cobranca=cobranca_calc,
             dados_fatura=dados_extraidos,
@@ -700,9 +701,10 @@ class CobrancasService:
                 "numero": uc.get("numero_imovel") if uc else None,
                 "cidade": uc.get("cidade") if uc else None
             },
-            qr_code_pix=fatura.get("qr_code_pix_image"),
-            pix_copia_cola=fatura.get("qr_code_pix"),
-            economia_acumulada=economia_acumulada
+            qr_code_pix=None,  # Não usar QR da fatura Energisa
+            pix_copia_cola=None,
+            economia_acumulada=economia_acumulada,
+            incluir_secao_pix=False  # PIX será incluído após aprovação
         )
 
         # 7. Preparar dados para salvar
@@ -1344,7 +1346,8 @@ class CobrancasService:
                 },
                 qr_code_pix=pix_data.get("qr_code_pix_image"),  # Imagem base64 do PIX Santander
                 pix_copia_cola=pix_data.get("qr_code_pix"),     # EMV copia e cola
-                economia_acumulada=economia_acumulada
+                economia_acumulada=economia_acumulada,
+                incluir_secao_pix=True  # Incluir seção PIX após aprovação
             )
 
             # Atualizar HTML no banco
@@ -1582,6 +1585,8 @@ class CobrancasService:
             report_generator = ReportGeneratorV3()
             economia_acumulada = float(beneficiario.get("economia_acumulada") or 0)
 
+            # Só incluir seção PIX se já tiver sido aprovada (tem pix_txid)
+            tem_pix = bool(cobranca_data.get("pix_txid"))
             novo_html = report_generator.gerar_html(
                 cobranca=cobranca_calc,
                 dados_fatura=dados_extraidos,
@@ -1591,9 +1596,10 @@ class CobrancasService:
                     "numero": uc.get("numero_imovel"),
                     "cidade": uc.get("cidade")
                 },
-                qr_code_pix=cobranca_data.get("qr_code_pix_image"),
-                pix_copia_cola=cobranca_data.get("qr_code_pix"),
-                economia_acumulada=economia_acumulada
+                qr_code_pix=cobranca_data.get("qr_code_pix_image") if tem_pix else None,
+                pix_copia_cola=cobranca_data.get("qr_code_pix") if tem_pix else None,
+                economia_acumulada=economia_acumulada,
+                incluir_secao_pix=tem_pix
             )
 
             # Atualizar HTML no banco

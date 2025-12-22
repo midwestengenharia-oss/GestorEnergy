@@ -691,6 +691,7 @@ class CobrancasService:
         if beneficiario.get("economia_acumulada"):
             economia_acumulada = float(beneficiario.get("economia_acumulada", 0))
 
+        # Para RASCUNHO, não incluir seção PIX (será adicionada após aprovação com PIX Santander)
         html_relatorio = report_generator_v3.gerar_html(
             cobranca=cobranca_calc,
             dados_fatura=dados_extraidos,
@@ -700,9 +701,10 @@ class CobrancasService:
                 "numero": uc.get("numero_imovel") if uc else None,
                 "cidade": uc.get("cidade") if uc else None
             },
-            qr_code_pix=fatura.get("qr_code_pix_image"),
-            pix_copia_cola=fatura.get("qr_code_pix"),
-            economia_acumulada=economia_acumulada
+            qr_code_pix=None,  # Não usar QR da fatura Energisa
+            pix_copia_cola=None,
+            economia_acumulada=economia_acumulada,
+            incluir_secao_pix=False  # PIX será incluído após aprovação
         )
 
         # 7. Preparar dados para salvar
@@ -1232,20 +1234,42 @@ class CobrancasService:
             from backend.faturas.extraction_schemas import FaturaExtraidaSchema
 
             # Buscar cobrança com dados necessários
-            response = self.supabase.table("cobrancas").select(
-                "*, beneficiarios(id, nome), "
-                "faturas!cobrancas_fatura_id_fkey(dados_extraidos), "
-                "unidades_consumidoras(endereco, numero_imovel, cidade)"
-            ).eq("id", cobranca_id).execute()
+            # Usar queries separadas para evitar problemas com joins complexos
+            response = self.supabase.table("cobrancas").select("*").eq("id", cobranca_id).execute()
 
             if not response.data:
                 logger.warning(f"Cobrança {cobranca_id} não encontrada para regenerar HTML")
                 return
 
             cobranca = response.data[0]
-            beneficiario = cobranca.get("beneficiarios") or {}
-            fatura = cobranca.get("faturas") or {}
-            uc = cobranca.get("unidades_consumidoras") or {}
+            logger.debug(f"Cobrança encontrada: id={cobranca_id}, fatura_id={cobranca.get('fatura_id')}")
+
+            # Buscar beneficiário
+            beneficiario = {}
+            if cobranca.get("beneficiario_id"):
+                ben_resp = self.supabase.table("beneficiarios").select(
+                    "id, nome"
+                ).eq("id", cobranca["beneficiario_id"]).execute()
+                if ben_resp.data:
+                    beneficiario = ben_resp.data[0]
+
+            # Buscar fatura com dados_extraidos
+            fatura = {}
+            if cobranca.get("fatura_id"):
+                fat_resp = self.supabase.table("faturas").select(
+                    "dados_extraidos"
+                ).eq("id", cobranca["fatura_id"]).execute()
+                if fat_resp.data:
+                    fatura = fat_resp.data[0]
+
+            # Buscar UC
+            uc = {}
+            if cobranca.get("uc_id"):
+                uc_resp = self.supabase.table("unidades_consumidoras").select(
+                    "endereco, numero_imovel, cidade"
+                ).eq("id", cobranca["uc_id"]).execute()
+                if uc_resp.data:
+                    uc = uc_resp.data[0]
 
             # Parsear dados extraídos
             dados_extraidos_raw = fatura.get("dados_extraidos")
@@ -1257,7 +1281,24 @@ class CobrancasService:
                 import json
                 dados_extraidos_raw = json.loads(dados_extraidos_raw)
 
-            dados_extraidos = FaturaExtraidaSchema(**dados_extraidos_raw)
+            # Se dados veio como lista (erro de serialização), extrair primeiro item
+            if isinstance(dados_extraidos_raw, list):
+                if len(dados_extraidos_raw) > 0:
+                    logger.warning(f"dados_extraidos veio como lista, usando primeiro item")
+                    dados_extraidos_raw = dados_extraidos_raw[0]
+                else:
+                    logger.warning(f"dados_extraidos é lista vazia para cobrança {cobranca_id}")
+                    return
+
+            logger.debug(f"Tipo dados_extraidos_raw: {type(dados_extraidos_raw)}")
+            try:
+                dados_extraidos = FaturaExtraidaSchema(**dados_extraidos_raw)
+            except Exception as parse_err:
+                logger.error(
+                    f"Erro ao parsear dados_extraidos para cobrança {cobranca_id}: "
+                    f"{type(parse_err).__name__}: {parse_err}"
+                )
+                return
 
             # Reconstruir CobrancaCalculada a partir dos dados salvos
             cobranca_calc = CobrancaCalculada()
@@ -1305,7 +1346,8 @@ class CobrancasService:
                 },
                 qr_code_pix=pix_data.get("qr_code_pix_image"),  # Imagem base64 do PIX Santander
                 pix_copia_cola=pix_data.get("qr_code_pix"),     # EMV copia e cola
-                economia_acumulada=economia_acumulada
+                economia_acumulada=economia_acumulada,
+                incluir_secao_pix=True  # Incluir seção PIX após aprovação
             )
 
             # Atualizar HTML no banco
@@ -1316,7 +1358,11 @@ class CobrancasService:
             logger.info(f"HTML do relatório regenerado com PIX Santander para cobrança {cobranca_id}")
 
         except Exception as e:
-            logger.error(f"Erro ao regenerar HTML com PIX para cobrança {cobranca_id}: {e}")
+            import traceback
+            logger.error(
+                f"Erro ao regenerar HTML com PIX para cobrança {cobranca_id}: "
+                f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            )
             # Não falha a aprovação por erro no HTML
 
     async def editar_campos_cobranca(
@@ -1539,6 +1585,8 @@ class CobrancasService:
             report_generator = ReportGeneratorV3()
             economia_acumulada = float(beneficiario.get("economia_acumulada") or 0)
 
+            # Só incluir seção PIX se já tiver sido aprovada (tem pix_txid)
+            tem_pix = bool(cobranca_data.get("pix_txid"))
             novo_html = report_generator.gerar_html(
                 cobranca=cobranca_calc,
                 dados_fatura=dados_extraidos,
@@ -1548,9 +1596,10 @@ class CobrancasService:
                     "numero": uc.get("numero_imovel"),
                     "cidade": uc.get("cidade")
                 },
-                qr_code_pix=cobranca_data.get("qr_code_pix_image"),
-                pix_copia_cola=cobranca_data.get("qr_code_pix"),
-                economia_acumulada=economia_acumulada
+                qr_code_pix=cobranca_data.get("qr_code_pix_image") if tem_pix else None,
+                pix_copia_cola=cobranca_data.get("qr_code_pix") if tem_pix else None,
+                economia_acumulada=economia_acumulada,
+                incluir_secao_pix=tem_pix
             )
 
             # Atualizar HTML no banco

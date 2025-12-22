@@ -25,9 +25,15 @@ class ReportGeneratorV3:
         beneficiario: dict,
         qr_code_pix: Optional[str] = None,
         pix_copia_cola: Optional[str] = None,
-        economia_acumulada: float = 0.0
+        economia_acumulada: float = 0.0,
+        incluir_secao_pix: bool = True
     ) -> str:
-        """Gera HTML do relatório completo baseado no código n8n"""
+        """Gera HTML do relatório completo baseado no código n8n
+
+        Args:
+            incluir_secao_pix: Se False, não inclui a seção de PIX no relatório.
+                               Útil para RASCUNHO onde ainda não há PIX gerado.
+        """
 
         # Dados básicos
         titular = beneficiario.get("nome", "")
@@ -131,7 +137,7 @@ class ReportGeneratorV3:
   </div>
 
   <!-- PIX -->
-  {self._gerar_secao_pix_n8n(qr_code_pix, pix_copia_cola)}
+  {self._gerar_secao_pix_n8n(qr_code_pix, pix_copia_cola) if incluir_secao_pix else ''}
 
 </div>
 </body>

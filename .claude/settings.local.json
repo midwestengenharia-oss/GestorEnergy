@@ -74,7 +74,8 @@
       "Bash(git -C \"C:/Users/Paulo Seze/Documents/Aplicações/Nova pasta/PROJETO_ENERGISA\" show 0232cabe5afa0b220b56cb4929e78b3375b81848 --stat)",
       "Bash(git -C \"C:/Users/Paulo Seze/Documents/Aplicações/Nova pasta/PROJETO_ENERGISA\" show 0232cabe5afa0b220b56cb4929e78b3375b81848 -p)",
       "Bash(git -C \"C:/Users/Paulo Seze/Documents/Aplicações/Nova pasta/PROJETO_ENERGISA\" commit -m \"$\\(cat <<''EOF''\nfix: bandeira capitalize na comparacao API vs PDF\n\nAplica mesma formatacao de ProcessamentoCobrancas:\n- Adiciona classe CSS capitalize\n- Texto em lowercase para exibir \"Verde\" ao inves de \"VERDE\"\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git -C \"C:/Users/Paulo Seze/Documents/Aplicações/Nova pasta/PROJETO_ENERGISA\" commit -m \"$\\(cat <<''EOF''\nfeat: click no card Kanban navega para Lista com fatura expandida\n\n- Adiciona onClick no wrapper do card Kanban\n- Ao clicar, muda viewMode para ''lista'' e expande a fatura clicada\n- Adiciona cursor-pointer para indicar interatividade\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C \"C:/Users/Paulo Seze/Documents/Aplicações/Nova pasta/PROJETO_ENERGISA\" commit -m \"$\\(cat <<''EOF''\nfeat: click no card Kanban navega para Lista com fatura expandida\n\n- Adiciona onClick no wrapper do card Kanban\n- Ao clicar, muda viewMode para ''lista'' e expande a fatura clicada\n- Adiciona cursor-pointer para indicar interatividade\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Skill(skill-creator)"
     ]
   }
 }

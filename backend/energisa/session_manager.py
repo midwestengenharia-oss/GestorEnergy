@@ -10,8 +10,8 @@ from backend.core.database import db_admin
 
 logger = logging.getLogger(__name__)
 
-# Tempo máximo de validade da sessão (24 horas)
-MAX_SESSION_AGE_HOURS = 24
+# Tempo máximo de validade da sessão (7 dias - refresh token Energisa)
+MAX_SESSION_AGE_HOURS = 168  # 7 dias
 
 
 class SessionManager:
@@ -53,15 +53,17 @@ class SessionManager:
             raise
 
     @staticmethod
-    def load_session(cpf: str):
+    def load_session(cpf: str, ignore_expiry: bool = False):
         """
         Carrega sessão do banco de dados.
 
         Args:
             cpf: CPF do titular
+            ignore_expiry: Se True, retorna cookies mesmo se sessão estiver expirada
+                          (útil para tentar refresh token)
 
         Returns:
-            Dict com cookies ou None se não encontrado/expirado
+            Dict com cookies ou None se não encontrado
         """
         cpf_clean = SessionManager._clean_cpf(cpf)
 
@@ -77,6 +79,7 @@ class SessionManager:
 
             session_data = result.data[0]
             atualizado_em = session_data.get("atualizado_em")
+            is_expired = False
 
             # Verifica idade da sessão
             if atualizado_em:
@@ -94,12 +97,19 @@ class SessionManager:
                 print(f"   ⏱️ Idade: {age.total_seconds():.0f}s (Máx: {max_age.total_seconds():.0f}s)")
 
                 if age > max_age:
-                    logger.warning("   ❌ Sessão expirada!")
-                    print("   ❌ Sessão expirada!")
-                    return None
+                    is_expired = True
+                    if ignore_expiry:
+                        logger.info("   ⚠️ Sessão expirada, mas retornando cookies para tentar refresh...")
+                        print("   ⚠️ Sessão expirada, mas retornando cookies para tentar refresh...")
+                    else:
+                        logger.warning("   ❌ Sessão expirada!")
+                        print("   ❌ Sessão expirada!")
+                        return None
 
-            logger.info("   ✅ Sessão válida.")
-            print("   ✅ Sessão válida.")
+            if not is_expired:
+                logger.info("   ✅ Sessão válida.")
+                print("   ✅ Sessão válida.")
+
             return session_data.get("cookies")
 
         except Exception as e:

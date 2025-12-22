@@ -107,21 +107,26 @@ class SyncService:
             # Processa cada CPF
             for cpf, ucs_do_cpf in ucs_por_cpf.items():
                 try:
-                    # Verifica se existe sessão ativa para este CPF
-                    cookies = SessionManager.load_session(cpf)
+                    # Verifica se existe sessão para este CPF (ignora expiração para tentar refresh)
+                    cookies = SessionManager.load_session(cpf, ignore_expiry=True)
                     if not cookies:
-                        logger.debug(f"   ⏭️ CPF {cpf[:3]}***{cpf[-2:]}: sem sessão ativa")
+                        logger.debug(f"   ⏭️ CPF {cpf[:3]}***{cpf[-2:]}: sem sessão salva")
                         continue
 
+                    # Carrega cookies no serviço mesmo se expirados
                     svc = EnergisaService(cpf)
-                    if not svc.is_authenticated():
-                        logger.debug(f"   ⏭️ CPF {cpf[:3]}***{cpf[-2:]}: sessão expirada")
-                        continue
+                    svc.cookies = cookies
+                    svc._apply_cookies(cookies)
 
                     # Faz refresh token ANTES de começar a sincronizar
                     logger.info(f"   🔄 Renovando token para CPF {cpf[:3]}***{cpf[-2:]}...")
                     if not svc._refresh_token():
                         logger.warning(f"   ⏭️ CPF {cpf[:3]}***{cpf[-2:]}: falha no refresh, pulando")
+                        continue
+
+                    # Verifica se está autenticado após refresh
+                    if not svc.is_authenticated():
+                        logger.debug(f"   ⏭️ CPF {cpf[:3]}***{cpf[-2:]}: não autenticado após refresh")
                         continue
 
                     logger.info(f"   👤 Processando CPF {cpf[:3]}***{cpf[-2:]} ({len(ucs_do_cpf)} UCs)")

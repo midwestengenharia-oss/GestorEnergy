@@ -21,8 +21,8 @@ class EnergisaService:
         self.base_url = "https://servicos.energisa.com.br"
         self.session = requests.Session()
 
-        # Carrega cookies existentes se houver
-        self.cookies = SessionManager.load_session(self.cpf)
+        # Carrega cookies existentes se houver (ignora expiração para tentar refresh)
+        self.cookies = SessionManager.load_session(self.cpf, ignore_expiry=True)
         if self.cookies:
             self._apply_cookies(self.cookies)
 

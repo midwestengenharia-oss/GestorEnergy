@@ -1233,7 +1233,7 @@ class CobrancasService:
 
             # Buscar cobrança com dados necessários
             response = self.supabase.table("cobrancas").select(
-                "*, beneficiarios(id, nome, economia_acumulada), "
+                "*, beneficiarios(id, nome), "
                 "faturas!cobrancas_fatura_id_fkey(dados_extraidos), "
                 "unidades_consumidoras(endereco, numero_imovel, cidade)"
             ).eq("id", cobranca_id).execute()
@@ -1295,7 +1295,8 @@ class CobrancasService:
 
             # Gerar HTML com PIX Santander
             report_generator = ReportGeneratorV3()
-            economia_acumulada = float(beneficiario.get("economia_acumulada") or 0)
+            # Nota: economia_acumulada não está na tabela beneficiarios ainda
+            economia_acumulada = 0.0
 
             novo_html = report_generator.gerar_html(
                 cobranca=cobranca_calc,

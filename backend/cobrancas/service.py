@@ -1065,7 +1065,14 @@ class CobrancasService:
             from backend.config import settings
 
             # Só gerar PIX se as credenciais estiverem configuradas
-            if settings.SANTANDER_PIX_CLIENT_ID and settings.SANTANDER_PIX_PFX_BASE64:
+            has_client_id = bool(settings.SANTANDER_PIX_CLIENT_ID)
+            has_pfx = bool(settings.SANTANDER_PIX_PFX_BASE64)
+            logger.info(
+                f"PIX Santander config check: CLIENT_ID={'SET' if has_client_id else 'EMPTY'}, "
+                f"PFX_BASE64={'SET' if has_pfx else 'EMPTY'}"
+            )
+
+            if has_client_id and has_pfx:
                 logger.info(f"Gerando PIX Santander para cobrança {cobranca_id}")
                 pix_data = await pix_service.gerar_pix_cobranca(cobranca_id)
                 pix_gerado = True

@@ -9,7 +9,7 @@ import {
     RefreshCw, LayoutGrid, List, Search, Filter, ChevronDown, ChevronRight,
     Eye, Copy, Loader2, AlertCircle, RotateCcw, RefreshCcw, User, BarChart3,
     Receipt, TrendingUp, CheckCircle2, AlertTriangle, XCircle, Info, ExternalLink,
-    Pencil, Save, X
+    Pencil, Save, X, Calendar
 } from 'lucide-react';
 import { faturasApi, FaturaGestao, TotaisGestao, StatusFluxo } from '../../api/faturas';
 import { usinasApi } from '../../api/usinas';
@@ -1118,6 +1118,12 @@ export default function GestaoFaturas() {
                                                     {isRascunho && !isEditando && (
                                                         <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">Rascunho - Editavel</span>
                                                     )}
+                                                    {cobranca?.vencimento && !isEditando && (
+                                                        <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded flex items-center gap-1">
+                                                            <Calendar size={12} />
+                                                            Venc: {new Date(cobranca.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                                        </span>
+                                                    )}
                                                 </h5>
                                                 {isRascunho && cobranca && (
                                                     <div className="flex items-center gap-2">
@@ -1283,10 +1289,11 @@ export default function GestaoFaturas() {
                                                             <td className="py-2 text-center text-green-600">{(Number(isEditando ? previaEditada.tarifa_base ?? tarifaBase : tarifaBase) * 0.70).toFixed(6)}</td>
                                                             <td className="py-2 text-right font-medium text-green-600">{formatCurrency(energiaComDesconto)}</td>
                                                         </tr>
-                                                        {(gapKwh > 0 || valorExcedente > 0) && (
+                                                        {/* Energia Excedente: só aparece se realmente tiver valor (regra: gap > taxa_minima) */}
+                                                        {valorExcedente > 0 && (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800 bg-orange-50 dark:bg-orange-900/10">
                                                                 <td className="py-2 text-orange-700 dark:text-orange-400">Energia Excedente (nao compensada)</td>
-                                                                <td className="py-2 text-center text-orange-600">{gapKwh.toFixed(0)}</td>
+                                                                <td className="py-2 text-center text-orange-600">{(cobranca?.energia_excedente_kwh ?? gapKwh).toFixed(0)}</td>
                                                                 <td className="py-2 text-center text-orange-600">{tarifaBase.toFixed(6)}</td>
                                                                 <td className="py-2 text-right">
                                                                     {isEditando ? (

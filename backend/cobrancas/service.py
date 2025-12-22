@@ -1057,13 +1057,44 @@ class CobrancasService:
                 detail=f"Cobrança já foi aprovada (status: {cobranca['status']})"
             )
 
+        # Gerar PIX Santander antes de aprovar
+        pix_gerado = False
+        pix_erro = None
+        try:
+            from backend.pix.service import pix_service
+            from backend.config import settings
+
+            # Só gerar PIX se as credenciais estiverem configuradas
+            if settings.SANTANDER_PIX_CLIENT_ID and settings.SANTANDER_PIX_PFX_BASE64:
+                logger.info(f"Gerando PIX Santander para cobrança {cobranca_id}")
+                pix_data = await pix_service.gerar_pix_cobranca(cobranca_id)
+                pix_gerado = True
+                logger.info(f"PIX gerado com sucesso: TXID={pix_data['txid']}")
+            else:
+                logger.warning(
+                    f"Credenciais PIX Santander não configuradas. "
+                    f"Cobrança {cobranca_id} será aprovada sem PIX."
+                )
+        except Exception as e:
+            pix_erro = str(e)
+            logger.error(f"Erro ao gerar PIX para cobrança {cobranca_id}: {e}")
+            # Por ora, não bloqueia a aprovação se o PIX falhar
+            # Pode ser ajustado para raise HTTPException se quiser bloquear
+
         # Atualizar para EMITIDA
-        update_response = self.supabase.table("cobrancas").update({
+        update_data = {
             "status": "EMITIDA",
             "vencimento_editavel": False
-        }).eq("id", cobranca_id).execute()
+        }
 
-        logger.info(f"Cobrança {cobranca_id} aprovada e emitida")
+        # Adicionar observação se PIX falhou
+        if pix_erro:
+            obs_atual = cobranca.get("observacoes_internas") or ""
+            update_data["observacoes_internas"] = f"{obs_atual}\n[PIX] Erro na geração: {pix_erro}".strip()
+
+        update_response = self.supabase.table("cobrancas").update(update_data).eq("id", cobranca_id).execute()
+
+        logger.info(f"Cobrança {cobranca_id} aprovada e emitida (PIX: {'sim' if pix_gerado else 'não'})")
 
         # Atualizar economia_acumulada do beneficiário
         beneficiario_id = cobranca.get("beneficiario_id")

@@ -44,3 +44,7 @@ pytesseract>=0.3.10
 # LLM para extração com IA
 llmwhisperer-client>=0.14.0
 openai>=1.0.0
+
+# PIX Santander
+qrcode[pil]>=7.4.0
+cryptography>=42.0.0

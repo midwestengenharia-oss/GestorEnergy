@@ -1260,29 +1260,25 @@ class CobrancasService:
             dados_extraidos = FaturaExtraidaSchema(**dados_extraidos_raw)
 
             # Reconstruir CobrancaCalculada a partir dos dados salvos
-            cobranca_calc = CobrancaCalculada(
-                modelo_gd=cobranca.get("modelo_gd", "GDII"),
-                tipo_ligacao=cobranca.get("tipo_ligacao"),
-                consumo_kwh=cobranca.get("consumo_kwh", 0),
-                injetada_kwh=cobranca.get("injetada_kwh", 0),
-                tarifa=cobranca.get("tarifa", 0),
-                pis_cofins=cobranca.get("pis_cofins", 0),
-                icms=cobranca.get("icms", 0),
-                valor_energia_assinatura=cobranca.get("valor_energia_assinatura", 0),
-                energia_compensada_sem_desconto=cobranca.get("energia_compensada_sem_desconto", 0),
-                energia_compensada_com_desconto=cobranca.get("energia_compensada_com_desconto", 0),
-                taxa_minima_kwh=cobranca.get("taxa_minima_kwh", 0),
-                taxa_minima_valor=cobranca.get("taxa_minima_valor", 0),
-                energia_excedente_valor=cobranca.get("energia_excedente_valor", 0),
-                disponibilidade_valor=cobranca.get("disponibilidade_valor", 0),
-                bandeiras_valor=cobranca.get("bandeiras_valor", 0),
-                iluminacao_publica_valor=cobranca.get("iluminacao_publica_valor", 0),
-                servicos_valor=cobranca.get("servicos_valor", 0),
-                valor_sem_assinatura=cobranca.get("valor_sem_assinatura", 0),
-                valor_com_assinatura=cobranca.get("valor_com_assinatura", 0),
-                economia_mes=cobranca.get("economia_mes", 0),
-                valor_total=cobranca.get("valor_total", 0),
-            )
+            cobranca_calc = CobrancaCalculada()
+            cobranca_calc.modelo_gd = cobranca.get("modelo_gd", "GDII")
+            cobranca_calc.tipo_ligacao = cobranca.get("tipo_ligacao")
+            cobranca_calc.consumo_kwh = cobranca.get("consumo_kwh", 0)
+            cobranca_calc.injetada_kwh = cobranca.get("injetada_kwh", 0)
+            cobranca_calc.valor_energia_assinatura = Decimal(str(cobranca.get("valor_energia_assinatura", 0)))
+            cobranca_calc.energia_compensada_sem_desconto = Decimal(str(cobranca.get("energia_compensada_sem_desconto", 0)))
+            cobranca_calc.energia_compensada_com_desconto = Decimal(str(cobranca.get("energia_compensada_com_desconto", 0)))
+            cobranca_calc.taxa_minima_kwh = cobranca.get("taxa_minima_kwh", 0)
+            cobranca_calc.taxa_minima_valor = Decimal(str(cobranca.get("taxa_minima_valor", 0)))
+            cobranca_calc.energia_excedente_valor = Decimal(str(cobranca.get("energia_excedente_valor", 0)))
+            cobranca_calc.disponibilidade_valor = Decimal(str(cobranca.get("disponibilidade_valor", 0)))
+            cobranca_calc.bandeiras_valor = Decimal(str(cobranca.get("bandeiras_valor", 0)))
+            cobranca_calc.iluminacao_publica_valor = Decimal(str(cobranca.get("iluminacao_publica_valor", 0)))
+            cobranca_calc.servicos_valor = Decimal(str(cobranca.get("servicos_valor", 0)))
+            cobranca_calc.valor_sem_assinatura = Decimal(str(cobranca.get("valor_sem_assinatura", 0)))
+            cobranca_calc.valor_com_assinatura = Decimal(str(cobranca.get("valor_com_assinatura", 0)))
+            cobranca_calc.economia_mes = Decimal(str(cobranca.get("economia_mes", 0)))
+            cobranca_calc.valor_total = Decimal(str(cobranca.get("valor_total", 0)))
 
             # Converter vencimento
             vencimento_str = cobranca.get("vencimento")

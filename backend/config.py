@@ -88,6 +88,22 @@ class Settings(BaseSettings):
     # ========================
     SYNC_MAX_FATURAS_POR_UC: int = 3  # Número máximo de faturas a verificar por UC em cada sincronização
 
+    # ========================
+    # PIX Santander
+    # ========================
+    SANTANDER_PIX_CLIENT_ID: str = ""
+    SANTANDER_PIX_CLIENT_SECRET: str = ""
+    SANTANDER_PIX_PFX_BASE64: str = ""  # Certificado PFX em base64
+    SANTANDER_PIX_PFX_PASSWORD: str = ""
+    SANTANDER_PIX_CHAVE: str = "61902316000163"  # CNPJ Midwest
+    SANTANDER_PIX_RECEBEDOR_NOME: str = "MIDWEST ENERGIAS LTDA"
+    SANTANDER_PIX_RECEBEDOR_CIDADE: str = "CUIABA"
+
+    # Configurações de cobrança PIX
+    PIX_MULTA_PERCENTUAL: float = 1.00  # 1%
+    PIX_JUROS_MENSAL_PERCENTUAL: float = 1.00  # 1% ao mês
+    PIX_VALIDADE_APOS_VENCIMENTO: int = 30  # dias
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

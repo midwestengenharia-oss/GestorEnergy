@@ -1722,7 +1722,7 @@ class CobrancasService:
             update_data["valores_originais"] = None
             update_data["editado_manualmente"] = False
 
-        update_data["updated_at"] = "now()"
+        update_data["atualizado_em"] = "now()"
 
         # 7. Atualizar no banco
         self.supabase.table("cobrancas").update(update_data).eq("id", cobranca_id).execute()

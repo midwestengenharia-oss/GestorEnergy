@@ -1122,8 +1122,14 @@ class FaturasService:
                     beneficiarios.extend(benef_usinas)
 
                     # 1b. Buscar IDs de usuários das usinas gerenciadas (para incluir avulsos deles)
-                    usinas_result = self.db.table("usinas").select("proprietario_id").in_("id", usina_ids).execute()
-                    usuario_ids_usinas = list(set(u["proprietario_id"] for u in (usinas_result.data or []) if u.get("proprietario_id")))
+                    # Usinas -> uc_geradora_id -> unidades_consumidoras.usuario_id
+                    usinas_result = self.db.table("usinas").select("uc_geradora_id").in_("id", usina_ids).execute()
+                    uc_geradora_ids = [u["uc_geradora_id"] for u in (usinas_result.data or []) if u.get("uc_geradora_id")]
+
+                    usuario_ids_usinas = []
+                    if uc_geradora_ids:
+                        ucs_geradora_result = self.db.table("unidades_consumidoras").select("usuario_id").in_("id", uc_geradora_ids).execute()
+                        usuario_ids_usinas = list(set(u["usuario_id"] for u in (ucs_geradora_result.data or []) if u.get("usuario_id")))
 
                     if usuario_ids_usinas:
                         # UCs desses usuários

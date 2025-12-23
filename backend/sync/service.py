@@ -584,7 +584,16 @@ class SyncService:
             True se criou com sucesso
         """
         try:
-            # Busca dados completos da UC (pode não ter vindo todos os campos)
+            # 1. Verificar se já existe beneficiário AVULSO para esta UC
+            existing = self.db.table("beneficiarios").select("id").eq(
+                "uc_id", uc_id
+            ).eq("tipo", "AVULSO").execute()
+
+            if existing.data:
+                logger.info(f"      ℹ️ UC {cdc} já possui beneficiário AVULSO (id={existing.data[0]['id']})")
+                return True  # Já existe, não precisa criar
+
+            # 2. Buscar dados completos da UC
             uc_completa = self.db.table("unidades_consumidoras").select(
                 "id, usuario_id, nome_titular, cpf_cnpj_titular"
             ).eq("id", uc_id).single().execute()
@@ -595,25 +604,42 @@ class SyncService:
 
             uc_data = uc_completa.data
             nome_titular = uc_data.get("nome_titular") or "Titular da UC"
+            cpf_titular = uc_data.get("cpf_cnpj_titular") or ""
             usuario_id = uc_data.get("usuario_id")
 
-            # Cria beneficiário avulso
+            # 3. Criar beneficiário avulso com TODOS os campos obrigatórios
             beneficiario_data = {
+                # Campos obrigatórios (NOT NULL sem default)
                 "uc_id": uc_id,
-                "usuario_id": usuario_id,  # Vincula ao mesmo usuário da UC
+                "cpf": cpf_titular,  # CPF do titular da UC
+                "percentual_rateio": 100.00,  # 100% para avulso (não compartilha)
+                "desconto": 0.30,  # Desconto padrão de 30%
+                # Campos opcionais/com default
+                "usuario_id": usuario_id,
                 "usina_id": None,  # Avulso não tem usina
                 "tipo": "AVULSO",
                 "nome": nome_titular,
-                "cpf": "",  # CPF será preenchido manualmente depois
                 "email": None,
                 "telefone": None,
-                "percentual_rateio": 100.00,  # 100% para avulso (não compartilha)
-                "desconto": 0.30,  # Desconto padrão de 30%
                 "status": "ATIVO",
                 "ativado_em": datetime.now(timezone.utc).isoformat()
             }
 
-            self.db.table("beneficiarios").insert(beneficiario_data).execute()
+            result = self.db.table("beneficiarios").insert(beneficiario_data).execute()
+            beneficiario_id = result.data[0]["id"] if result.data else None
+
+            # 4. Criar entrada na tabela beneficiario_ucs (relação N:N)
+            if beneficiario_id:
+                try:
+                    self.db.table("beneficiario_ucs").insert({
+                        "beneficiario_id": beneficiario_id,
+                        "uc_id": uc_id,
+                        "tipo": "ATIVA",
+                        "motivo_transicao": "CRIACAO_AVULSO_AUTO"
+                    }).execute()
+                except Exception as e:
+                    logger.warning(f"      ⚠️ Erro ao criar beneficiario_ucs: {e}")
+
             logger.info(f"      ✅ Beneficiário AVULSO criado automaticamente para UC {cdc} ({nome_titular})")
             return True
 

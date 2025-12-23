@@ -780,10 +780,69 @@ class UCsService:
 
         Returns:
             True se sucesso
+
+        Raises:
+            ValidationError: Se a UC for geradora de uma usina
         """
         # Verifica se existe
         await self.buscar_por_id(uc_id)
 
+        # Verifica se é geradora de alguma usina (não pode desvincular)
+        usina_result = self.db.table("usinas").select("id, nome").eq(
+            "uc_geradora_id", uc_id
+        ).execute()
+        if usina_result.data:
+            usina = usina_result.data[0]
+            raise ValidationError(
+                f"Esta UC é geradora da usina '{usina.get('nome', usina['id'])}'. "
+                "Remova a usina primeiro."
+            )
+
+        # Remove dependências na ordem correta (devido às foreign keys)
+
+        # 1. Buscar IDs dos beneficiários dessa UC
+        benef_result = self.db.table("beneficiarios").select("id").eq(
+            "uc_id", uc_id
+        ).execute()
+        benef_ids = [b["id"] for b in (benef_result.data or [])]
+
+        # 2. Deletar cobranças dos beneficiários
+        if benef_ids:
+            self.db.table("cobrancas").delete().in_(
+                "beneficiario_id", benef_ids
+            ).execute()
+
+        # 3. Deletar cobranças vinculadas diretamente à UC (campo uc_id)
+        self.db.table("cobrancas").delete().eq("uc_id", uc_id).execute()
+
+        # 4. Deletar beneficiario_ucs (tabela N:N)
+        self.db.table("beneficiario_ucs").delete().eq("uc_id", uc_id).execute()
+
+        # 5. Deletar beneficiários
+        self.db.table("beneficiarios").delete().eq("uc_id", uc_id).execute()
+
+        # 6. Deletar faturas
+        self.db.table("faturas").delete().eq("uc_id", uc_id).execute()
+
+        # 7. Deletar histórico GD
+        self.db.table("historico_gd").delete().eq("uc_id", uc_id).execute()
+
+        # 8. Limpar referência geradora_id em outras UCs
+        self.db.unidades_consumidoras().update(
+            {"geradora_id": None}
+        ).eq("geradora_id", uc_id).execute()
+
+        # 9. Limpar referência uc_substituta_id em outras UCs
+        self.db.unidades_consumidoras().update(
+            {"uc_substituta_id": None}
+        ).eq("uc_substituta_id", uc_id).execute()
+
+        # 10. Limpar referência uc_id_origem em beneficiários
+        self.db.table("beneficiarios").update(
+            {"uc_id_origem": None}
+        ).eq("uc_id_origem", uc_id).execute()
+
+        # 11. Finalmente, deletar a UC
         self.db.unidades_consumidoras().delete().eq("id", uc_id).execute()
 
         return True

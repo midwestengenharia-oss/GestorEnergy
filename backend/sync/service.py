@@ -528,9 +528,13 @@ class SyncService:
                 # Verifica se UC é geradora ou beneficiária de usina
                 is_geradora = uc.get("is_geradora", False)
 
-                # Verifica se existe beneficiário vinculado a uma usina para esta UC
-                benef_result = self.db.table("beneficiarios").select("id, usina_id").eq("uc_id", uc_id).eq("status", "ATIVO").execute()
-                tem_usina_vinculada = any(b.get("usina_id") for b in (benef_result.data or []))
+                # Verifica se existe beneficiário ativo para esta UC (qualquer tipo)
+                benef_result = self.db.table("beneficiarios").select(
+                    "id, usina_id, tipo"
+                ).eq("uc_id", uc_id).eq("status", "ATIVO").execute()
+                beneficiarios_ativos = benef_result.data or []
+                tem_usina_vinculada = any(b.get("usina_id") for b in beneficiarios_ativos)
+                tem_beneficiario = len(beneficiarios_ativos) > 0
 
                 # Se tem saldo mas não é geradora nem beneficiária de usina = GD Avulso
                 tem_gd_avulso = saldo_atual > 0 and not is_geradora and not tem_usina_vinculada
@@ -544,6 +548,11 @@ class SyncService:
 
                     if tem_gd_avulso:
                         logger.info(f"      🔶 UC {cdc} marcada como GD Avulso (saldo: {saldo_atual} kWh)")
+
+                        # Se não tem beneficiário, cria automaticamente usando dados do titular
+                        if not tem_beneficiario:
+                            await self._criar_beneficiario_avulso_automatico(uc_id, uc, cdc)
+
                 except Exception as e:
                     logger.warning(f"      ⚠️ Erro ao atualizar saldo/avulso UC: {e}")
 
@@ -553,6 +562,64 @@ class SyncService:
         except Exception as e:
             logger.error(f"      ❌ Erro ao sincronizar GD da UC {cdc}: {e}")
             return 0
+
+    async def _criar_beneficiario_avulso_automatico(
+        self,
+        uc_id: int,
+        uc: dict,
+        cdc: int
+    ) -> bool:
+        """
+        Cria automaticamente um beneficiário AVULSO para UCs com GD por transferência.
+
+        Usa os dados do titular da UC como dados do beneficiário.
+        O CPF fica vazio pois o titular pode não ser quem paga (será preenchido depois).
+
+        Args:
+            uc_id: ID da UC
+            uc: Dados da UC do banco
+            cdc: Código da UC (para logs)
+
+        Returns:
+            True se criou com sucesso
+        """
+        try:
+            # Busca dados completos da UC (pode não ter vindo todos os campos)
+            uc_completa = self.db.table("unidades_consumidoras").select(
+                "id, usuario_id, nome_titular, cpf_cnpj_titular"
+            ).eq("id", uc_id).single().execute()
+
+            if not uc_completa.data:
+                logger.warning(f"      ⚠️ Não encontrou UC {uc_id} para criar beneficiário")
+                return False
+
+            uc_data = uc_completa.data
+            nome_titular = uc_data.get("nome_titular") or "Titular da UC"
+            usuario_id = uc_data.get("usuario_id")
+
+            # Cria beneficiário avulso
+            beneficiario_data = {
+                "uc_id": uc_id,
+                "usuario_id": usuario_id,  # Vincula ao mesmo usuário da UC
+                "usina_id": None,  # Avulso não tem usina
+                "tipo": "AVULSO",
+                "nome": nome_titular,
+                "cpf": "",  # CPF será preenchido manualmente depois
+                "email": None,
+                "telefone": None,
+                "percentual_rateio": None,
+                "desconto": Decimal("0.30"),  # Desconto padrão de 30%
+                "status": "ATIVO",
+                "ativado_em": datetime.now(timezone.utc).isoformat()
+            }
+
+            self.db.table("beneficiarios").insert(beneficiario_data).execute()
+            logger.info(f"      ✅ Beneficiário AVULSO criado automaticamente para UC {cdc} ({nome_titular})")
+            return True
+
+        except Exception as e:
+            logger.warning(f"      ⚠️ Erro ao criar beneficiário avulso para UC {cdc}: {e}")
+            return False
 
     async def sincronizar_gd_usuario(self, usuario_id: str, cpf: str) -> dict:
         """

@@ -10,7 +10,7 @@ services:
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - DEBUG=false
+      - DEBUG=${DEBUG:-false}
       - ENVIRONMENT=production
       - ALLOWED_ORIGINS=https://app.midwestengenharia.com.br
       - LLMWHISPERER_API_KEY=${LLMWHISPERER_API_KEY}

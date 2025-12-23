@@ -1097,14 +1097,30 @@ export default function GestaoFaturas() {
                                         const isRascunho = fatura.status_fluxo === 'COBRANCA_RASCUNHO';
                                         const isEditando = editandoPreviaId === fatura.id;
                                         const cobranca = fatura.cobranca;
+                                        const temCobranca = !!cobranca;
 
-                                        // Valores para exibicao (usa editados se em modo edicao, senao usa da cobranca ou calculados)
-                                        const valorTaxaMinima = isEditando ? (previaEditada.taxa_minima_valor ?? 0) : (cobranca?.taxa_minima_valor ?? taxaMinimaValor);
-                                        const valorExcedente = isEditando ? (previaEditada.energia_excedente_valor ?? 0) : (cobranca?.energia_excedente_valor ?? energiaExcedenteValor);
-                                        const valorDisponibilidade = isEditando ? (previaEditada.disponibilidade_valor ?? 0) : (cobranca?.disponibilidade_valor ?? disponibilidade);
-                                        const valorBandeiras = isEditando ? (previaEditada.bandeiras_valor ?? 0) : (cobranca?.bandeiras_valor ?? bandeirasCobranca);
-                                        const valorIluminacao = isEditando ? (previaEditada.iluminacao_publica_valor ?? 0) : (cobranca?.iluminacao_publica_valor ?? iluminacao);
-                                        const valorServicos = isEditando ? (previaEditada.servicos_valor ?? 0) : (cobranca?.servicos_valor ?? 0);
+                                        // Valores para exibicao:
+                                        // - Se editando: usa valores editados
+                                        // - Se tem cobrança: usa valores da cobrança (0 se null)
+                                        // - Se não tem cobrança (EXTRAIDA): usa cálculo local
+                                        const valorTaxaMinima = isEditando
+                                            ? (previaEditada.taxa_minima_valor ?? 0)
+                                            : (temCobranca ? (cobranca.taxa_minima_valor ?? 0) : taxaMinimaValor);
+                                        const valorExcedente = isEditando
+                                            ? (previaEditada.energia_excedente_valor ?? 0)
+                                            : (temCobranca ? (cobranca.energia_excedente_valor ?? 0) : energiaExcedenteValor);
+                                        const valorDisponibilidade = isEditando
+                                            ? (previaEditada.disponibilidade_valor ?? 0)
+                                            : (temCobranca ? (cobranca.disponibilidade_valor ?? 0) : disponibilidade);
+                                        const valorBandeiras = isEditando
+                                            ? (previaEditada.bandeiras_valor ?? 0)
+                                            : (temCobranca ? (cobranca.bandeiras_valor ?? 0) : bandeirasCobranca);
+                                        const valorIluminacao = isEditando
+                                            ? (previaEditada.iluminacao_publica_valor ?? 0)
+                                            : (temCobranca ? (cobranca.iluminacao_publica_valor ?? 0) : iluminacao);
+                                        const valorServicos = isEditando
+                                            ? (previaEditada.servicos_valor ?? 0)
+                                            : (temCobranca ? (cobranca.servicos_valor ?? 0) : 0);
 
                                         // Total calculado
                                         const totalEditado = energiaComDesconto + valorExcedente + valorDisponibilidade + valorTaxaMinima + valorBandeiras + valorIluminacao + valorServicos;

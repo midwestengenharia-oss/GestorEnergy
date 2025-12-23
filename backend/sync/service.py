@@ -608,7 +608,7 @@ class SyncService:
                 "email": None,
                 "telefone": None,
                 "percentual_rateio": None,
-                "desconto": Decimal("0.30"),  # Desconto padrão de 30%
+                "desconto": 0.30,  # Desconto padrão de 30%
                 "status": "ATIVO",
                 "ativado_em": datetime.now(timezone.utc).isoformat()
             }

@@ -1308,11 +1308,13 @@ class FaturasService:
                         logger.warning(f"Beneficiário sem id, pulando fatura {fatura_id}")
                         continue
 
-                    # Validar usina_id
+                    # Validar usina_id (AVULSO não precisa ter usina)
                     usina_data = beneficiario.get("usinas") or {}
                     usina_id_val = usina_data.get("id") or beneficiario.get("usina_id")
-                    if not usina_id_val:
-                        logger.warning(f"Beneficiário {beneficiario_id} sem usina_id, pulando fatura {fatura_id}")
+                    tipo_beneficiario = beneficiario.get("tipo") or "USINA"
+
+                    if not usina_id_val and tipo_beneficiario != "AVULSO":
+                        logger.warning(f"Beneficiário {beneficiario_id} sem usina_id (tipo={tipo_beneficiario}), pulando fatura {fatura_id}")
                         continue
 
                     # Montar resposta do beneficiário
@@ -1324,11 +1326,13 @@ class FaturasService:
                         telefone=beneficiario.get("telefone")
                     )
 
-                    # Montar resposta da usina
-                    usina_resp = UsinaGestaoResponse(
-                        id=usina_id_val,
-                        nome=usina_data.get("nome") if usina_data else None
-                    )
+                    # Montar resposta da usina (None para AVULSO)
+                    usina_resp = None
+                    if usina_id_val:
+                        usina_resp = UsinaGestaoResponse(
+                            id=usina_id_val,
+                            nome=usina_data.get("nome") if usina_data else None
+                        )
 
                     # Montar resposta da cobrança
                     cobranca_resp = None

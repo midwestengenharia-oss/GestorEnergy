@@ -307,8 +307,9 @@ async def portfolio_clientes(
     from backend.core.database import db_admin
 
     # 1. Buscar todos os beneficiários
+    # Nota: economia_acumulada não existe na tabela beneficiarios, é calculada a partir das cobranças
     query = db_admin.beneficiarios().select(
-        "id, nome, cpf, email, telefone, status, created_at, economia_acumulada",
+        "id, nome, cpf, email, telefone, status, created_at",
         "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, nome_titular, endereco, cidade, uf, apelido)",
         "usinas(id, nome)"
     )
@@ -403,9 +404,9 @@ async def portfolio_clientes(
                 "nome": usina_data.get("nome")
             } if usina_data else None,
 
-            # Métricas consolidadas
+            # Métricas consolidadas (economia calculada a partir das cobranças)
             "metricas": {
-                "economia_acumulada": b.get("economia_acumulada") or economia_total,
+                "economia_acumulada": economia_total,
                 "faturas_processadas": faturas_processadas,
                 "faturas_pendentes": faturas_pendentes,
                 "total_cobrancas": len(cobrancas),

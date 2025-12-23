@@ -686,15 +686,18 @@ class CobrancasService:
                     logger.info("Nenhum valor de bandeira disponível (PDF ou API)")
 
         # 6. Gerar relatório HTML (usando V3 baseado no código n8n)
-        # Calcular economia acumulada (soma de economia_mes de cobranças anteriores do beneficiário)
-        economia_acumulada = 0.0
+        # Calcular economia acumulada = soma das cobranças anteriores + economia deste mês
+        economia_anterior = 0.0
         try:
             cob_anteriores = self.supabase.table("cobrancas").select(
                 "economia_mes"
             ).eq("beneficiario_id", beneficiario_id).execute()
-            economia_acumulada = sum(float(c.get("economia_mes") or 0) for c in (cob_anteriores.data or []))
+            economia_anterior = sum(float(c.get("economia_mes") or 0) for c in (cob_anteriores.data or []))
         except Exception as e:
-            logger.warning(f"Erro ao calcular economia acumulada: {e}")
+            logger.warning(f"Erro ao calcular economia anterior: {e}")
+
+        # economia_acumulada = anteriores + atual (para salvar na cobrança)
+        economia_acumulada = economia_anterior + float(cobranca_calc.economia_mes)
 
         # Para RASCUNHO, não incluir seção PIX (será adicionada após aprovação com PIX Santander)
         html_relatorio = report_generator_v3.gerar_html(
@@ -761,6 +764,7 @@ class CobrancasService:
             "valor_sem_assinatura": float(cobranca_calc.valor_sem_assinatura),
             "valor_com_assinatura": float(cobranca_calc.valor_com_assinatura),
             "economia_mes": float(cobranca_calc.economia_mes),
+            "economia_acumulada": economia_acumulada,  # Soma das anteriores + atual
             "valor_total": float(cobranca_calc.valor_total),
 
             # PIX
@@ -1330,16 +1334,8 @@ class CobrancasService:
 
             # Gerar HTML com PIX Santander
             report_generator = ReportGeneratorV3()
-            # Calcular economia acumulada (soma de cobranças anteriores, excluindo a atual)
-            economia_acumulada = 0.0
-            if cobranca.get("beneficiario_id"):
-                try:
-                    cob_anteriores = self.supabase.table("cobrancas").select(
-                        "economia_mes"
-                    ).eq("beneficiario_id", cobranca["beneficiario_id"]).neq("id", cobranca_id).execute()
-                    economia_acumulada = sum(float(c.get("economia_mes") or 0) for c in (cob_anteriores.data or []))
-                except Exception as e:
-                    logger.warning(f"Erro ao calcular economia acumulada: {e}")
+            # Usar economia_acumulada salva na cobrança
+            economia_acumulada = float(cobranca.get("economia_acumulada") or 0)
 
             novo_html = report_generator.gerar_html(
                 cobranca=cobranca_calc,
@@ -1587,17 +1583,8 @@ class CobrancasService:
             uc = cobranca.get("unidades_consumidoras") or {}
             beneficiario = cobranca.get("beneficiarios") or {}
 
-            # Calcular economia acumulada (soma de economia_mes de cobranças anteriores)
-            beneficiario_id = cobranca.get("beneficiario_id")
-            economia_acumulada = 0.0
-            if beneficiario_id:
-                try:
-                    cob_anteriores = self.supabase.table("cobrancas").select(
-                        "economia_mes"
-                    ).eq("beneficiario_id", beneficiario_id).neq("id", cobranca_id).execute()
-                    economia_acumulada = sum(float(c.get("economia_mes") or 0) for c in (cob_anteriores.data or []))
-                except Exception as e:
-                    logger.warning(f"Erro ao calcular economia acumulada: {e}")
+            # Usar economia_acumulada salva na cobrança (já foi calculada na criação)
+            economia_acumulada = float(cobranca_data.get("economia_acumulada") or 0)
 
             # Gerar novo HTML
             report_generator = ReportGeneratorV3()

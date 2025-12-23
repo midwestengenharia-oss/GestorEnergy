@@ -46,9 +46,9 @@ class ReportGeneratorV3:
         # Compensação (GD I ou GD II)
         compensacao_tipo = f"GD {cobranca.modelo_gd[2:]}" if cobranca.modelo_gd != "DESCONHECIDO" else "GD"
 
-        # Economia acumulada
+        # Economia acumulada (já calculada e salva na cobrança, inclui economia_mes)
         economia_mes = float(cobranca.economia_mes)
-        acumulado_atual = economia_acumulada + economia_mes
+        acumulado_atual = economia_acumulada  # Já é o total (anteriores + atual)
 
         # Gerar itens da tabela (seguindo padrão n8n)
         itens_tabela = self._gerar_itens_tabela_n8n(cobranca, dados_fatura)

@@ -1,5 +1,8 @@
 # Plano: Incluir UCs com GD Avulso na Gestão de Faturas
 
+> **STATUS: IMPLEMENTADO** ✅
+> Commit: `137c170` - feat: implementa suporte a GD avulso (créditos por transferência)
+
 ## Problema
 
 UCs que possuem créditos GD por transferência pontual (não participam de rateio de usina) não aparecem na gestão de faturas porque:

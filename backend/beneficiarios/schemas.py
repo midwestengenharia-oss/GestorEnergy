@@ -18,6 +18,12 @@ class BeneficiarioStatus(str, Enum):
     CANCELADO = "CANCELADO"
 
 
+class BeneficiarioTipo(str, Enum):
+    """Tipo do beneficiário"""
+    USINA = "USINA"      # Participa do rateio de uma usina
+    AVULSO = "AVULSO"    # Créditos transferidos (não participa de rateio)
+
+
 # ========================
 # Request Schemas
 # ========================
@@ -72,6 +78,44 @@ class BeneficiarioUpdateRequest(BaseModel):
     percentual_rateio: Optional[Decimal] = Field(None, ge=0, le=100)
     desconto: Optional[Decimal] = Field(None, ge=0, le=1)
     status: Optional[BeneficiarioStatus] = None
+
+    @field_validator("telefone")
+    @classmethod
+    def validate_telefone(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        tel = re.sub(r'\D', '', v)
+        if len(tel) not in [10, 11]:
+            raise ValueError("Telefone deve ter 10 ou 11 dígitos")
+        if len(tel) == 11:
+            return f"({tel[:2]}) {tel[2:7]}-{tel[7:]}"
+        return f"({tel[:2]}) {tel[2:6]}-{tel[6:]}"
+
+
+class BeneficiarioAvulsoCreateRequest(BaseModel):
+    """Criar beneficiário avulso (GD por transferência de créditos)"""
+    uc_id: int = Field(..., description="ID da UC com créditos GD")
+    cpf: str = Field(..., description="CPF do cliente que vai pagar")
+    nome: Optional[str] = Field(None, max_length=200, description="Nome do cliente")
+    email: Optional[EmailStr] = Field(None, description="Email do cliente")
+    telefone: Optional[str] = Field(None, description="Telefone do cliente")
+    desconto: Decimal = Field(default=Decimal("0.30"), ge=0, le=1, description="Desconto oferecido (padrão 30%)")
+
+    @field_validator("cpf")
+    @classmethod
+    def validate_cpf(cls, v: str) -> str:
+        cpf = re.sub(r'\D', '', v)
+        if len(cpf) != 11:
+            raise ValueError("CPF deve ter 11 dígitos")
+        if cpf == cpf[0] * 11:
+            raise ValueError("CPF inválido")
+        soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
+        d1 = (soma * 10 % 11) % 10
+        soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
+        d2 = (soma * 10 % 11) % 10
+        if cpf[-2:] != f"{d1}{d2}":
+            raise ValueError("CPF inválido")
+        return f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}"
 
     @field_validator("telefone")
     @classmethod
@@ -145,8 +189,11 @@ class BeneficiarioResponse(BaseModel):
     id: int
     usuario_id: Optional[str] = None
     uc_id: int
-    usina_id: int
+    usina_id: Optional[int] = None  # NULL para beneficiários avulsos
     contrato_id: Optional[int] = None
+
+    # Tipo do beneficiário
+    tipo: str = "USINA"  # USINA ou AVULSO
 
     # Dados cadastrais
     cpf: str
@@ -155,7 +202,7 @@ class BeneficiarioResponse(BaseModel):
     telefone: Optional[str] = None
 
     # Configurações
-    percentual_rateio: Decimal
+    percentual_rateio: Optional[Decimal] = None  # NULL para avulsos
     desconto: Decimal
 
     # Status

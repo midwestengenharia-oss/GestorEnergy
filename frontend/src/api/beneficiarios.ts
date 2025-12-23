@@ -33,6 +33,16 @@ export interface BeneficiarioUpdateRequest {
     status?: 'ativo' | 'inativo' | 'pendente';
 }
 
+// Criar beneficiário avulso (GD por transferência de créditos)
+export interface BeneficiarioAvulsoCreateRequest {
+    uc_id: number;
+    cpf: string;
+    nome?: string;
+    email?: string;
+    telefone?: string;
+    desconto?: number;  // Padrão 0.30 (30%)
+}
+
 export interface PaginatedResponse<T> {
     items: T[];
     total: number;
@@ -69,6 +79,10 @@ export const beneficiariosApi = {
     // Criar novo beneficiário
     criar: (data: BeneficiarioCreateRequest) =>
         api.post<Beneficiario>('/beneficiarios', data),
+
+    // Criar beneficiário avulso (GD por transferência de créditos)
+    criarAvulso: (data: BeneficiarioAvulsoCreateRequest) =>
+        api.post<Beneficiario>('/beneficiarios/avulso', data),
 
     // Atualizar beneficiário
     atualizar: (id: number, data: BeneficiarioUpdateRequest) =>

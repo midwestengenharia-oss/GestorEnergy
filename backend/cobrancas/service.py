@@ -1522,7 +1522,7 @@ class CobrancasService:
             return await self.buscar(cobranca_id, user_id, perfis)
 
         # 5. Recalcular valor_total se algum campo monetário foi alterado
-        campos_monetarios_alterados = any(c in update_data for c in campos_monetarios)
+        campos_monetarios_alterados = any(c in update_data for c in campos_valores)
 
         if campos_monetarios_alterados:
             # Obter valores atuais e mesclar com os novos

@@ -20,5 +20,5 @@ SET economia_acumulada = COALESCE((
     SELECT SUM(COALESCE(c.economia_mes, 0))
     FROM cobrancas c
     WHERE c.beneficiario_id = b.id
-    AND c.status IN ('EMITIDA', 'PAGA', 'ENVIADA')
+    AND c.status IN ('EMITIDA', 'PAGA')
 ), 0);

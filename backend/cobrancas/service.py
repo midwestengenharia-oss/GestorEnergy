@@ -142,7 +142,7 @@ class CobrancasService:
         """Lista cobranças com filtros e paginação"""
 
         query = self.supabase.table("cobrancas").select(
-            "*, beneficiarios(id, nome, cpf, email, telefone)",
+            "*, beneficiarios(id, nome, cpf, email, telefone, usina_id, usinas(id, nome))",
             count="exact"
         )
 
@@ -199,8 +199,26 @@ class CobrancasService:
         total = result.count or 0
         total_pages = (total + per_page - 1) // per_page
 
+        # Transformar dados para o formato esperado pelo frontend
+        # Supabase retorna "beneficiarios" (plural), mas o schema espera "beneficiario" (singular)
+        cobrancas = []
+        for c in (result.data or []):
+            cobranca = dict(c)
+            # Renomear beneficiarios -> beneficiario
+            if "beneficiarios" in cobranca:
+                beneficiario = cobranca.pop("beneficiarios")
+                if beneficiario:
+                    # Extrair usina do beneficiário e colocar no nível da cobrança
+                    if "usinas" in beneficiario:
+                        cobranca["usina"] = beneficiario.pop("usinas")
+                cobranca["beneficiario"] = beneficiario
+            # Renomear faturas -> fatura (se houver)
+            if "faturas" in cobranca:
+                cobranca["fatura"] = cobranca.pop("faturas")
+            cobrancas.append(cobranca)
+
         return {
-            "cobrancas": result.data,
+            "cobrancas": cobrancas,
             "total": total,
             "page": page,
             "per_page": per_page,
@@ -211,16 +229,17 @@ class CobrancasService:
         """Busca cobrança por ID"""
 
         result = self.supabase.table("cobrancas").select(
-            "*, beneficiarios(id, nome, cpf, email, telefone, usina_id), faturas!cobrancas_fatura_id_fkey(id, mes_referencia, ano_referencia, valor_fatura, consumo)"
+            "*, beneficiarios(id, nome, cpf, email, telefone, usina_id, usinas(id, nome)), faturas!cobrancas_fatura_id_fkey(id, mes_referencia, ano_referencia, valor_fatura, consumo)"
         ).eq("id", cobranca_id).single().execute()
 
         if not result.data:
             raise NotFoundError("Cobrança não encontrada")
 
+        cobranca = dict(result.data)
+
         # Verificar permissão de acesso
         if "superadmin" not in perfis and "proprietario" not in perfis:
-            cobranca = result.data
-            # Obter usina_id através do beneficiário
+            # Obter usina_id através do beneficiário (ainda usa nome original do Supabase)
             beneficiario_data = cobranca.get("beneficiarios") or {}
             cobranca_usina_id = beneficiario_data.get("usina_id")
 
@@ -237,7 +256,19 @@ class CobrancasService:
             else:
                 raise ForbiddenError("Acesso negado")
 
-        return result.data
+        # Transformar dados para o formato esperado pelo frontend
+        # Supabase retorna "beneficiarios" (plural), mas o schema espera "beneficiario" (singular)
+        if "beneficiarios" in cobranca:
+            beneficiario = cobranca.pop("beneficiarios")
+            if beneficiario:
+                # Extrair usina do beneficiário e colocar no nível da cobrança
+                if "usinas" in beneficiario:
+                    cobranca["usina"] = beneficiario.pop("usinas")
+            cobranca["beneficiario"] = beneficiario
+        if "faturas" in cobranca:
+            cobranca["fatura"] = cobranca.pop("faturas")
+
+        return cobranca
 
     async def criar(self, data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         """Cria nova cobrança"""
@@ -494,7 +525,20 @@ class CobrancasService:
             "*, beneficiarios(id, nome, usina_id, usinas(nome))"
         ).in_("beneficiario_id", benef_ids).order("ano", desc=True).order("mes", desc=True).execute()
 
-        return result.data
+        # Transformar dados para o formato esperado pelo frontend
+        cobrancas = []
+        for c in (result.data or []):
+            cobranca = dict(c)
+            if "beneficiarios" in cobranca:
+                beneficiario = cobranca.pop("beneficiarios")
+                if beneficiario:
+                    # Extrair usina do beneficiário e colocar no nível da cobrança
+                    if "usinas" in beneficiario:
+                        cobranca["usina"] = beneficiario.pop("usinas")
+                cobranca["beneficiario"] = beneficiario
+            cobrancas.append(cobranca)
+
+        return cobrancas
 
     # ========== GERAÇÃO AUTOMÁTICA DE COBRANÇAS ==========
 

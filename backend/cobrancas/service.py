@@ -737,8 +737,6 @@ class CobrancasService:
             # Valores energia
             "valor_energia_base": float(cobranca_calc.valor_energia_base),
             "valor_energia_assinatura": float(cobranca_calc.valor_energia_assinatura),
-            "energia_compensada_sem_desconto": float(cobranca_calc.energia_compensada_sem_desconto),
-            "energia_compensada_com_desconto": float(cobranca_calc.energia_compensada_com_desconto),
 
             # GD I
             "taxa_minima_kwh": cobranca_calc.taxa_minima_kwh if cobranca_calc.taxa_minima_kwh > 0 else None,

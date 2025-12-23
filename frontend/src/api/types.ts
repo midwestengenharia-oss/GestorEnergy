@@ -297,6 +297,10 @@ export interface Cobranca {
         telefone?: string;
         uc?: UnidadeConsumidora;
     };
+    usina?: {
+        id: number;
+        nome?: string;
+    };
     fatura?: Fatura;
 }
 

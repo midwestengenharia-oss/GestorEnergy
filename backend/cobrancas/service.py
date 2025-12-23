@@ -1117,6 +1117,30 @@ class CobrancasService:
 
         logger.info(f"Cobrança {cobranca_id} aprovada e emitida (PIX: {'sim' if pix_gerado else 'não'})")
 
+        # Atualizar economia_acumulada do beneficiário
+        beneficiario_id = cobranca.get("beneficiario_id")
+        economia_mes = float(cobranca.get("economia_mes") or 0)
+
+        if beneficiario_id and economia_mes > 0:
+            try:
+                # Buscar economia atual do beneficiário
+                benef_resp = self.supabase.table("beneficiarios").select(
+                    "economia_acumulada"
+                ).eq("id", beneficiario_id).execute()
+
+                economia_atual = float(benef_resp.data[0].get("economia_acumulada") or 0) if benef_resp.data else 0
+                nova_economia = economia_atual + economia_mes
+
+                # Atualizar beneficiário
+                self.supabase.table("beneficiarios").update({
+                    "economia_acumulada": nova_economia
+                }).eq("id", beneficiario_id).execute()
+
+                logger.info(f"Economia acumulada do beneficiário {beneficiario_id} atualizada: R$ {economia_atual:.2f} -> R$ {nova_economia:.2f}")
+            except Exception as e:
+                logger.error(f"Erro ao atualizar economia_acumulada do beneficiário {beneficiario_id}: {e}")
+                # Não falha a aprovação por erro na atualização da economia
+
         # Enviar email se solicitado
         if enviar_email:
             try:

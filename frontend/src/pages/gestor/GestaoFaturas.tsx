@@ -1345,7 +1345,7 @@ export default function GestaoFaturas() {
                                                                     )}
                                                                 </td>
                                                             </tr>
-                                                        ) : fatura.tipo_gd === 'GDI' ? (
+                                                        ) : fatura.tipo_gd === 'GDI' && valorTaxaMinima > 0 && valorExcedente === 0 ? (
                                                             <tr className="border-b border-slate-100 dark:border-slate-800">
                                                                 <td className="py-2 text-slate-700 dark:text-slate-300">Taxa Minima ({tipoLigacao || '-'})</td>
                                                                 <td className="py-2 text-center">{taxaMinimaKwh}</td>

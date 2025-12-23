@@ -816,7 +816,6 @@ export default function GestaoFaturas() {
                     const ajuste = dados?.itens_fatura?.ajuste_lei_14300;
                     const tipoLigacao = fatura.tipo_ligacao || dados?.ligacao;
                     const taxaMinimaKwh = getTaxaMinima(tipoLigacao);
-                    const taxaMinimaValor = taxaMinimaKwh * consumoTarifa;
 
                     const bandeirasDetalhamento = dados?.totais?.bandeiras_detalhamento || [];
                     const bandeiras = bandeirasDetalhamento.length > 0
@@ -834,7 +833,22 @@ export default function GestaoFaturas() {
                     const energiaComDesconto = injetadaTotalKwh * tarifaBase * 0.70;
                     const disponibilidade = ajuste?.valor || 0;
                     const gapKwh = Math.max(0, consumoKwh - injetadaTotalKwh);
-                    const energiaExcedenteValor = gapKwh * tarifaBase;
+
+                    // Regra de exclusão mútua GD I: se gap > taxa_minima → energia excedente; senão → taxa mínima
+                    let taxaMinimaValor = 0;
+                    let energiaExcedenteValor = 0;
+                    if (fatura.tipo_gd === 'GDI') {
+                        if (gapKwh > taxaMinimaKwh) {
+                            energiaExcedenteValor = gapKwh * tarifaBase;
+                            taxaMinimaValor = 0;
+                        } else {
+                            taxaMinimaValor = taxaMinimaKwh * tarifaBase;
+                            energiaExcedenteValor = 0;
+                        }
+                    } else {
+                        // GD II não tem taxa mínima, apenas disponibilidade
+                        energiaExcedenteValor = gapKwh * tarifaBase;
+                    }
                     const temConsumoNaoCompensado = gapKwh > 0;
                     const bandeirasCobranca = (fatura.tipo_gd === 'GDI' || temConsumoNaoCompensado) ? bandeiras : 0;
 

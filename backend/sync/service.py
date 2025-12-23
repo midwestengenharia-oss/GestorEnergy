@@ -521,14 +521,31 @@ class SyncService:
 
             # Atualiza saldo acumulado na UC se disponível
             if registros_salvos > 0 and historico:
-                ultimo = historico[-1] if isinstance(historico, list) else historico
-                saldo_atual = ultimo.get("saldoCompensadoAnteriorConv") or ultimo.get("saldoAnteriorConv") or 0
+                # Pega o registro mais recente (primeiro da lista, que vem ordenada desc)
+                primeiro = historico[0] if isinstance(historico, list) else historico
+                saldo_atual = primeiro.get("saldoAnteriorConv") or primeiro.get("saldoCompensadoAnteriorConv") or 0
+
+                # Verifica se UC é geradora ou beneficiária de usina
+                is_geradora = uc.get("is_geradora", False)
+
+                # Verifica se existe beneficiário vinculado a uma usina para esta UC
+                benef_result = self.db.table("beneficiarios").select("id, usina_id").eq("uc_id", uc_id).eq("status", "ATIVO").execute()
+                tem_usina_vinculada = any(b.get("usina_id") for b in (benef_result.data or []))
+
+                # Se tem saldo mas não é geradora nem beneficiária de usina = GD Avulso
+                tem_gd_avulso = saldo_atual > 0 and not is_geradora and not tem_usina_vinculada
+
                 try:
                     self.db.table("unidades_consumidoras").update({
-                        "saldo_acumulado": saldo_atual
+                        "saldo_acumulado": saldo_atual,
+                        "saldo_creditos_gd": saldo_atual,
+                        "tem_gd_avulso": tem_gd_avulso
                     }).eq("id", uc_id).execute()
+
+                    if tem_gd_avulso:
+                        logger.info(f"      🔶 UC {cdc} marcada como GD Avulso (saldo: {saldo_atual} kWh)")
                 except Exception as e:
-                    logger.warning(f"      ⚠️ Erro ao atualizar saldo UC: {e}")
+                    logger.warning(f"      ⚠️ Erro ao atualizar saldo/avulso UC: {e}")
 
             logger.debug(f"      ✅ {registros_salvos} registros GD sincronizados para UC {cdc}")
             return registros_salvos

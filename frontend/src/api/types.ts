@@ -122,17 +122,20 @@ export interface Usina {
 // Beneficiários
 // ========================
 
+export type BeneficiarioTipo = 'USINA' | 'AVULSO';
+
 export interface Beneficiario {
     id: number;
     usuario_id?: string;
     uc_id: number;
-    usina_id: number;
+    usina_id?: number;  // NULL para beneficiários avulsos
     contrato_id?: number;
+    tipo?: BeneficiarioTipo;  // USINA (rateio) ou AVULSO (créditos transferidos)
     cpf: string;
     nome?: string;
     email?: string;
     telefone?: string;
-    percentual_rateio: number;
+    percentual_rateio?: number;  // NULL para avulsos
     desconto: number;
     status: string;
     convite_enviado_em?: string;

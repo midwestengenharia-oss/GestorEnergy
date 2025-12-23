@@ -1080,34 +1080,72 @@ class FaturasService:
             logger.info(f"listar_gestao: user_id={user_id}, perfis={perfis}, usina_id={usina_id}, mes={mes_referencia}, ano={ano_referencia}")
 
             # 1. Buscar beneficiários do gestor (para filtrar faturas)
-            # Usa LEFT JOIN (sem !inner) para não excluir beneficiários sem UC ou usina
-            # Especifica FK explícita pois há duas relações: uc_id e uc_id_origem
-            beneficiarios_query = self.db.table("beneficiarios").select(
-                "id, usuario_id, uc_id, usina_id, cpf, nome, email, telefone, status, "
-                "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, tipo_ligacao), "
-                "usinas(id, nome)"
-            ).eq("status", "ATIVO")
-
-            # Filtrar por permissões
+            # Inclui beneficiários de usinas E beneficiários avulsos (GD por transferência)
             is_admin = "superadmin" in perfis or "proprietario" in perfis
-            if not is_admin:
-                # Gestor só vê beneficiários das usinas que gerencia
+
+            beneficiarios = []
+
+            if is_admin:
+                # Admin/proprietário vê todos os beneficiários ativos
+                beneficiarios_query = self.db.table("beneficiarios").select(
+                    "id, usuario_id, uc_id, usina_id, tipo, cpf, nome, email, telefone, status, "
+                    "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, tipo_ligacao), "
+                    "usinas(id, nome)"
+                ).eq("status", "ATIVO")
+
+                if usina_id:
+                    beneficiarios_query = beneficiarios_query.eq("usina_id", usina_id)
+                if beneficiario_id:
+                    beneficiarios_query = beneficiarios_query.eq("id", beneficiario_id)
+
+                beneficiarios_result = beneficiarios_query.execute()
+                beneficiarios = beneficiarios_result.data or []
+            else:
+                # Gestor: beneficiários das usinas que gerencia + avulsos de usuários gerenciados
                 gestoes_result = self.db.table("gestores_usina").select("usina_id").eq("gestor_id", user_id).eq("ativo", True).execute()
                 usina_ids = [g["usina_id"] for g in (gestoes_result.data or [])]
+
                 if usina_ids:
-                    beneficiarios_query = beneficiarios_query.in_("usina_id", usina_ids)
+                    # 1a. Beneficiários de usinas gerenciadas (tipo USINA)
+                    benef_usinas_query = self.db.table("beneficiarios").select(
+                        "id, usuario_id, uc_id, usina_id, tipo, cpf, nome, email, telefone, status, "
+                        "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, tipo_ligacao, usuario_id), "
+                        "usinas(id, nome)"
+                    ).eq("status", "ATIVO").in_("usina_id", usina_ids)
+
+                    if usina_id:
+                        benef_usinas_query = benef_usinas_query.eq("usina_id", usina_id)
+                    if beneficiario_id:
+                        benef_usinas_query = benef_usinas_query.eq("id", beneficiario_id)
+
+                    benef_usinas = benef_usinas_query.execute().data or []
+                    beneficiarios.extend(benef_usinas)
+
+                    # 1b. Buscar IDs de usuários das usinas gerenciadas (para incluir avulsos deles)
+                    usinas_result = self.db.table("usinas").select("proprietario_id").in_("id", usina_ids).execute()
+                    usuario_ids_usinas = list(set(u["proprietario_id"] for u in (usinas_result.data or []) if u.get("proprietario_id")))
+
+                    if usuario_ids_usinas:
+                        # UCs desses usuários
+                        ucs_usuarios = self.db.table("unidades_consumidoras").select("id").in_("usuario_id", usuario_ids_usinas).execute()
+                        uc_ids_usuarios = [u["id"] for u in (ucs_usuarios.data or [])]
+
+                        if uc_ids_usuarios:
+                            # 1c. Beneficiários AVULSO dessas UCs
+                            benef_avulsos_query = self.db.table("beneficiarios").select(
+                                "id, usuario_id, uc_id, usina_id, tipo, cpf, nome, email, telefone, status, "
+                                "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, endereco, numero_imovel, tipo_ligacao), "
+                                "usinas(id, nome)"
+                            ).eq("status", "ATIVO").eq("tipo", "AVULSO").in_("uc_id", uc_ids_usuarios)
+
+                            if beneficiario_id:
+                                benef_avulsos_query = benef_avulsos_query.eq("id", beneficiario_id)
+
+                            benef_avulsos = benef_avulsos_query.execute().data or []
+                            beneficiarios.extend(benef_avulsos)
                 else:
                     # Sem usinas, retorna vazio
                     return GestaoFaturasResponse(faturas=[], totais=TotaisGestaoResponse())
-
-            # Aplicar filtros de usina e beneficiário
-            if usina_id:
-                beneficiarios_query = beneficiarios_query.eq("usina_id", usina_id)
-            if beneficiario_id:
-                beneficiarios_query = beneficiarios_query.eq("id", beneficiario_id)
-
-            beneficiarios_result = beneficiarios_query.execute()
-            beneficiarios = beneficiarios_result.data or []
 
             if not beneficiarios:
                 return GestaoFaturasResponse(faturas=[], totais=TotaisGestaoResponse())

@@ -13,6 +13,7 @@ from backend.core.exceptions import NotFoundError, ConflictError, ValidationErro
 from backend.config import settings
 from backend.beneficiarios.schemas import (
     BeneficiarioCreateRequest,
+    BeneficiarioAvulsoCreateRequest,
     BeneficiarioUpdateRequest,
     BeneficiarioResponse,
     BeneficiarioFiltros,
@@ -141,17 +142,22 @@ class BeneficiariosService:
                 vigencia_fim=contrato_data.get("vigencia_fim")
             )
 
+        # Trata percentual_rateio que pode ser None para avulsos
+        percentual = b.get("percentual_rateio")
+        percentual_rateio = Decimal(str(percentual)) if percentual is not None else None
+
         return BeneficiarioResponse(
             id=b["id"],
             usuario_id=b.get("usuario_id"),
             uc_id=b["uc_id"],
-            usina_id=b["usina_id"],
+            usina_id=b.get("usina_id"),  # Pode ser None para avulsos
             contrato_id=b.get("contrato_id"),
+            tipo=b.get("tipo", "USINA"),  # Tipo do beneficiário
             cpf=b["cpf"],
             nome=b.get("nome"),
             email=b.get("email"),
             telefone=b.get("telefone"),
-            percentual_rateio=Decimal(str(b.get("percentual_rateio", 0))),
+            percentual_rateio=percentual_rateio,
             desconto=Decimal(str(b.get("desconto", 0))),
             status=b.get("status", "PENDENTE"),
             convite_enviado_em=b.get("convite_enviado_em"),
@@ -283,6 +289,84 @@ class BeneficiariosService:
                 "geradora_id": usina.data["uc_geradora_id"],
                 "percentual_rateio": float(data.percentual_rateio)
             }).eq("id", data.uc_id).execute()
+
+        return await self.buscar_por_id(result.data[0]["id"])
+
+    async def criar_avulso(
+        self,
+        data: BeneficiarioAvulsoCreateRequest,
+        gestor_id: str
+    ) -> BeneficiarioResponse:
+        """
+        Cria beneficiário avulso (GD por transferência de créditos).
+
+        Args:
+            data: Dados do beneficiário avulso
+            gestor_id: ID do gestor que está criando
+
+        Returns:
+            BeneficiarioResponse
+
+        Raises:
+            NotFoundError: Se UC não encontrada
+            ValidationError: Se UC não tem GD avulso
+            ConflictError: Se já existe beneficiário para esta UC
+        """
+        # Verifica se UC existe
+        uc_result = self.db.unidades_consumidoras().select(
+            "id, tem_gd_avulso, saldo_creditos_gd, saldo_acumulado"
+        ).eq("id", data.uc_id).single().execute()
+
+        if not uc_result.data:
+            raise NotFoundError("Unidade Consumidora")
+
+        uc = uc_result.data
+
+        # Verifica se UC tem GD avulso ou saldo de créditos
+        tem_gd_avulso = uc.get("tem_gd_avulso", False)
+        saldo = uc.get("saldo_creditos_gd") or uc.get("saldo_acumulado") or 0
+
+        # Se não tem flag mas tem histórico de GD, também é válido
+        if not tem_gd_avulso and saldo <= 0:
+            # Verifica se tem registros em historico_gd
+            historico = self.db.table("historico_gd").select("id").eq(
+                "uc_id", data.uc_id
+            ).limit(1).execute()
+
+            if not historico.data:
+                raise ValidationError(
+                    "UC não possui créditos GD. Sincronize os dados primeiro."
+                )
+
+        # Verifica se já existe beneficiário ativo para esta UC
+        existing = self.db.beneficiarios().select("id, tipo, status").eq(
+            "uc_id", data.uc_id
+        ).eq("status", "ATIVO").execute()
+
+        if existing.data:
+            raise ConflictError("Já existe beneficiário ativo para esta UC")
+
+        # Cria beneficiário avulso
+        beneficiario_data = {
+            "uc_id": data.uc_id,
+            "usina_id": None,  # Avulso não tem usina
+            "tipo": "AVULSO",
+            "cpf": data.cpf,
+            "nome": data.nome,
+            "email": data.email,
+            "telefone": data.telefone,
+            "percentual_rateio": None,  # Avulso não tem percentual de rateio
+            "desconto": float(data.desconto),
+            "status": "ATIVO",  # Avulso já nasce ativo
+            "ativado_em": datetime.now(timezone.utc).isoformat()
+        }
+
+        result = self.db.beneficiarios().insert(beneficiario_data).execute()
+
+        if not result.data:
+            raise ValidationError("Erro ao criar beneficiário avulso")
+
+        logger.info(f"Beneficiário avulso criado: UC {data.uc_id}, CPF {data.cpf}")
 
         return await self.buscar_por_id(result.data[0]["id"])
 

@@ -8,6 +8,7 @@ import math
 
 from backend.beneficiarios.schemas import (
     BeneficiarioCreateRequest,
+    BeneficiarioAvulsoCreateRequest,
     BeneficiarioUpdateRequest,
     ConviteEnviarRequest,
     BeneficiarioResponse,
@@ -94,6 +95,34 @@ async def criar_beneficiario(
     O beneficiário precisa ter uma UC vinculada e estar associado a uma usina.
     """
     return await beneficiarios_service.criar(data)
+
+
+@router.post(
+    "/avulso",
+    response_model=BeneficiarioResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Criar beneficiário avulso",
+    description="Cadastra beneficiário para UC com GD por transferência de créditos",
+    dependencies=[Depends(require_perfil("superadmin", "gestor", "proprietario"))]
+)
+async def criar_beneficiario_avulso(
+    data: BeneficiarioAvulsoCreateRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+):
+    """
+    Cadastra um beneficiário avulso (GD por transferência de créditos).
+
+    Usado quando uma UC possui créditos GD mas não participa do rateio de uma usina.
+    Exemplo: créditos adquiridos por transferência de titularidade.
+
+    - Não requer usina_id
+    - tipo = 'AVULSO'
+    - A UC deve ter flag tem_gd_avulso = true ou ter histórico em historico_gd
+    """
+    return await beneficiarios_service.criar_avulso(
+        data=data,
+        gestor_id=str(current_user.id)
+    )
 
 
 @router.get(

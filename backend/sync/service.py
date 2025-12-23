@@ -607,7 +607,7 @@ class SyncService:
                 "cpf": "",  # CPF será preenchido manualmente depois
                 "email": None,
                 "telefone": None,
-                "percentual_rateio": None,
+                "percentual_rateio": 100.00,  # 100% para avulso (não compartilha)
                 "desconto": 0.30,  # Desconto padrão de 30%
                 "status": "ATIVO",
                 "ativado_em": datetime.now(timezone.utc).isoformat()

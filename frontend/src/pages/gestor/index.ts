@@ -10,3 +10,4 @@ export { LeadDetail } from './LeadDetail';
 export { KanbanLeads } from './KanbanLeads';
 export { GestaoClientes } from './GestaoClientes';
 export { default as GestaoFaturas } from './GestaoFaturas';
+export { FaturasGestor } from './FaturasGestor';

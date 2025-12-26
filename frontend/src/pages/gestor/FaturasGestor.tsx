@@ -123,6 +123,38 @@ export function FaturasGestor() {
         return `${mesesAbrev[fatura.mes_referencia - 1]}/${fatura.ano_referencia}`;
     };
 
+    // Garantir que UC seja formatada corretamente (nunca #ID)
+    const getUCFormatada = (fatura: FaturaGestao) => {
+        if (fatura.uc_formatada && !fatura.uc_formatada.startsWith('UC #') && !fatura.uc_formatada.startsWith('#')) {
+            return fatura.uc_formatada;
+        }
+        // Fallback: tentar montar a partir do uc_id
+        return `UC #${fatura.uc_id}`;
+    };
+
+    // Extrair dados do dados_extraidos
+    const getDadosExtraidos = (fatura: FaturaGestao) => {
+        const dados = fatura.dados_extraidos as any;
+        if (!dados?.itens_fatura) return null;
+
+        const itens = dados.itens_fatura;
+        const consumoObj = itens.consumo_kwh || {};
+        const ouc = itens['energia_injetada oUC'] || itens['energia_injetada_ouc'] || [];
+        const muc = itens['energia_injetada mUC'] || itens['energia_injetada_muc'] || [];
+
+        const injetadaOUC = Array.isArray(ouc) ? ouc.reduce((sum: number, item: any) => sum + (item?.quantidade || 0), 0) : 0;
+        const injetadaMUC = Array.isArray(muc) ? muc.reduce((sum: number, item: any) => sum + (item?.quantidade || 0), 0) : 0;
+
+        return {
+            consumo_kwh: consumoObj.quantidade,
+            injetada_ouc: injetadaOUC,
+            injetada_muc: injetadaMUC,
+            injetada_total: injetadaOUC + injetadaMUC,
+            bandeira: dados.bandeira_tarifaria || dados.totais?.adicionais_bandeira,
+            total_a_pagar: dados.total_a_pagar
+        };
+    };
+
     // Formatar referência completa
     const formatarReferenciaCompleta = (fatura: FaturaGestao) => {
         const mesesNome = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -459,7 +491,7 @@ export function FaturasGestor() {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
-                                                    {fatura.uc_formatada || '-'}
+                                                    {getUCFormatada(fatura)}
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2">
@@ -548,7 +580,7 @@ export function FaturasGestor() {
                                                 <User size={14} />
                                                 {fatura.beneficiario?.nome || '-'}
                                             </p>
-                                            <p>UC: {fatura.uc_formatada}</p>
+                                            <p>UC: {getUCFormatada(fatura)}</p>
                                             <p>Vencimento: {formatarData(fatura.data_vencimento)}</p>
                                         </div>
                                         <div className="mt-2 text-lg font-bold text-slate-900 dark:text-white">
@@ -609,7 +641,7 @@ export function FaturasGestor() {
                                 <div>
                                     <p className="text-sm text-slate-500 dark:text-slate-400">UC</p>
                                     <p className="font-medium text-slate-900 dark:text-white">
-                                        {faturaDetalhe.uc_formatada}
+                                        {getUCFormatada(faturaDetalhe)}
                                     </p>
                                 </div>
                             </div>
@@ -630,27 +662,95 @@ export function FaturasGestor() {
                                 </div>
                             </div>
 
-                            {/* Consumo e GD */}
-                            {(faturaDetalhe.consumo || faturaDetalhe.tipo_gd) && (
+                            {/* Consumo, Leitura, Dias */}
+                            <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                                <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3">Dados de Consumo</p>
                                 <div className="grid grid-cols-2 gap-4">
-                                    {faturaDetalhe.consumo && (
-                                        <div>
-                                            <p className="text-sm text-slate-500 dark:text-slate-400">Consumo</p>
-                                            <p className="font-medium text-slate-900 dark:text-white">
-                                                {faturaDetalhe.consumo} kWh
-                                            </p>
-                                        </div>
-                                    )}
-                                    {faturaDetalhe.tipo_gd && (
-                                        <div>
-                                            <p className="text-sm text-slate-500 dark:text-slate-400">Tipo GD</p>
-                                            <p className="font-medium text-slate-900 dark:text-white">
-                                                {faturaDetalhe.tipo_gd}
-                                            </p>
-                                        </div>
-                                    )}
+                                    <div>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">Consumo (API)</p>
+                                        <p className="font-medium text-slate-900 dark:text-white">
+                                            {faturaDetalhe.consumo ? `${faturaDetalhe.consumo} kWh` : '-'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">Qtd. Dias</p>
+                                        <p className="font-medium text-slate-900 dark:text-white">
+                                            {faturaDetalhe.quantidade_dias || '-'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">Leitura Anterior</p>
+                                        <p className="font-medium text-slate-900 dark:text-white">
+                                            {faturaDetalhe.leitura_anterior || '-'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">Leitura Atual</p>
+                                        <p className="font-medium text-slate-900 dark:text-white">
+                                            {faturaDetalhe.leitura_atual || '-'}
+                                        </p>
+                                    </div>
                                 </div>
-                            )}
+                            </div>
+
+                            {/* Energia Injetada e GD (dados extraídos) */}
+                            {(() => {
+                                const dadosExt = getDadosExtraidos(faturaDetalhe);
+                                if (!dadosExt && !faturaDetalhe.tipo_gd && !faturaDetalhe.bandeira_tarifaria) return null;
+                                return (
+                                    <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3">Geração Distribuída</p>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {faturaDetalhe.tipo_gd && (
+                                                <div>
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">Tipo GD</p>
+                                                    <p className="font-medium text-slate-900 dark:text-white">
+                                                        {faturaDetalhe.tipo_gd}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {faturaDetalhe.tipo_ligacao && (
+                                                <div>
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">Tipo Ligação</p>
+                                                    <p className="font-medium text-slate-900 dark:text-white">
+                                                        {faturaDetalhe.tipo_ligacao}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {dadosExt?.injetada_ouc !== undefined && dadosExt.injetada_ouc > 0 && (
+                                                <div>
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">Injetada oUC</p>
+                                                    <p className="font-medium text-green-600 dark:text-green-400">
+                                                        {dadosExt.injetada_ouc} kWh
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {dadosExt?.injetada_muc !== undefined && dadosExt.injetada_muc > 0 && (
+                                                <div>
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">Injetada mUC</p>
+                                                    <p className="font-medium text-green-600 dark:text-green-400">
+                                                        {dadosExt.injetada_muc} kWh
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {faturaDetalhe.bandeira_tarifaria && (
+                                                <div>
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400">Bandeira</p>
+                                                    <span className={`inline-block px-2 py-1 rounded text-xs capitalize ${
+                                                        faturaDetalhe.bandeira_tarifaria.toLowerCase().includes('verde')
+                                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-600'
+                                                            : faturaDetalhe.bandeira_tarifaria.toLowerCase().includes('amarela')
+                                                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600'
+                                                            : 'bg-red-100 dark:bg-red-900/30 text-red-600'
+                                                    }`}>
+                                                        {faturaDetalhe.bandeira_tarifaria.toLowerCase()}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             {/* Cobrança */}
                             {faturaDetalhe.cobranca && (

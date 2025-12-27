@@ -101,9 +101,9 @@ export const cobrancasApi = {
     porUsina: (usinaId: number) =>
         api.get<Cobranca[]>(`/cobrancas/usina/${usinaId}`),
 
-    // Cobranças por beneficiário
+    // Cobranças por beneficiário (retorna paginado)
     porBeneficiario: (beneficiarioId: number) =>
-        api.get<Cobranca[]>(`/cobrancas/beneficiario/${beneficiarioId}`),
+        api.get<CobrancasPaginatedResponse>(`/cobrancas/beneficiario/${beneficiarioId}`),
 
     // ========== NOVOS ENDPOINTS AUTOMÁTICOS ==========
 

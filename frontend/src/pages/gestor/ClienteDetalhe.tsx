@@ -86,9 +86,9 @@ export function ClienteDetalhe() {
             const benefResponse = await beneficiariosApi.buscar(Number(id));
             setBeneficiario(benefResponse.data);
 
-            // Buscar cobranças do beneficiário
+            // Buscar cobranças do beneficiário (retorna paginado)
             const cobrancasResponse = await cobrancasApi.porBeneficiario(Number(id));
-            setCobrancas(cobrancasResponse.data || []);
+            setCobrancas(cobrancasResponse.data?.cobrancas || []);
 
             // Tentar buscar documentos se vier de lead (precisamos verificar no portfolio)
             // Por ora, deixamos vazio - será preenchido se houver lead_id

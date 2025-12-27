@@ -13,3 +13,4 @@ export { default as GestaoFaturas } from './GestaoFaturas';
 export { FaturasGestor } from './FaturasGestor';
 export { UCsGestor } from './UCsGestor';
 export { UCDetalheGestor } from './UCDetalheGestor';
+export { ClienteDetalhe } from './ClienteDetalhe';

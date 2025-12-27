@@ -17,7 +17,7 @@ import { SignInPage, SignUpPage } from '../pages/auth';
 // Dashboards
 import { DashboardAdmin, SyncStatus, GestaoUsuarios, GestaoLeads, LeadDetail, LogsAuditoria, Impostos } from '../pages/admin';
 import { DashboardProprietario, NovaUsina } from '../pages/proprietario';
-import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor, GestaoLeads as GestaoLeadsGestor, LeadDetail as LeadDetailGestor, KanbanLeads as KanbanLeadsGestor, GestaoClientes, GestaoFaturas, FaturasGestor, UCsGestor, UCDetalheGestor } from '../pages/gestor';
+import { DashboardGestor, UsinasGestor, BeneficiariosGestor, CobrancasGestor, RateioGestor, FinanceiroGestor, ContratosGestor, GestaoLeads as GestaoLeadsGestor, LeadDetail as LeadDetailGestor, KanbanLeads as KanbanLeadsGestor, GestaoClientes, GestaoFaturas, FaturasGestor, UCsGestor, UCDetalheGestor, ClienteDetalhe } from '../pages/gestor';
 import { DashboardBeneficiario } from '../pages/beneficiario';
 import { DashboardUsuario, MinhasUCs, FaturasUsuario, DetalheUC, ConectarEnergisa, GeracaoDistribuida } from '../pages/usuario';
 import { DashboardParceiro } from '../pages/parceiro';
@@ -286,6 +286,11 @@ export function AppRoutes() {
                 <Route path="gestor/ucs/:id" element={
                     <ProtectedRoute allowedPerfis={['gestor', 'superadmin', 'proprietario']}>
                         <UCDetalheGestor />
+                    </ProtectedRoute>
+                } />
+                <Route path="gestor/clientes/:id" element={
+                    <ProtectedRoute allowedPerfis={['gestor', 'superadmin', 'proprietario']}>
+                        <ClienteDetalhe />
                     </ProtectedRoute>
                 } />
 

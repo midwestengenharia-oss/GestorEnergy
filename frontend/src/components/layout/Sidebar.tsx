@@ -105,7 +105,7 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
             title: 'Gestão',
             items: [
                 { label: 'Usinas', path: '/app/gestor/usinas', icon: Building2 },
-                { label: 'UCs Gerenciadas', path: '/app/usuario/ucs', icon: Zap },
+                { label: 'UCs Gerenciadas', path: '/app/gestor/ucs', icon: Zap },
                 { label: 'Clientes', path: '/app/gestor/clientes', icon: Users },
                 { label: 'Beneficiários', path: '/app/gestor/beneficiarios', icon: Users },
                 { label: 'Rateio', path: '/app/gestor/rateio', icon: PieChart },
@@ -114,6 +114,7 @@ const MENUS: Record<PerfilTipo, MenuSection[]> = {
         {
             title: 'Financeiro',
             items: [
+                { label: 'Faturas', path: '/app/gestor/faturas', icon: FileText },
                 { label: 'Gestão de Faturas', path: '/app/gestor/gestao-faturas', icon: Kanban },
                 { label: 'Cobranças', path: '/app/gestor/cobrancas', icon: Wallet },
                 { label: 'Financeiro', path: '/app/gestor/financeiro', icon: DollarSign },

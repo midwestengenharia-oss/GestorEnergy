@@ -13,7 +13,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { beneficiariosApi } from '../../api/beneficiarios';
 import { cobrancasApi } from '../../api/cobrancas';
 import { leadsApi, LeadDocumento } from '../../api/leads';
-import type { Beneficiario, Cobranca, UnidadeConsumidora } from '../../api/types';
+import type { Cobranca } from '../../api/types';
 import {
     ArrowLeft,
     User,
@@ -58,6 +58,55 @@ const tabs: TabConfig[] = [
     { id: 'financeiro', label: 'Financeiro', icon: <DollarSign className="h-4 w-4" /> },
 ];
 
+// Interface para o beneficiário retornado pela API (diferente do tipo Beneficiario geral)
+interface BeneficiarioDetalhe {
+    id: number;
+    usuario_id?: string;
+    uc_id: number;
+    usina_id?: number;
+    contrato_id?: number;
+    tipo?: string;
+    cpf: string;
+    nome?: string;
+    email?: string;
+    telefone?: string;
+    percentual_rateio?: number;
+    desconto: number;
+    status: string;
+    convite_enviado_em?: string;
+    ativado_em?: string;
+    criado_em?: string;
+    atualizado_em?: string;
+    // UC simplificada (UCBeneficiarioResponse do backend)
+    uc?: {
+        id: number;
+        uc_formatada: string;
+        nome_titular?: string;
+        endereco?: string;
+        cidade?: string;
+        uf?: string;
+    };
+    // Usina resumida
+    usina?: {
+        id: number;
+        nome: string;
+        desconto_padrao?: number;
+    };
+    // Usuário resumido
+    usuario?: {
+        id: string;
+        nome_completo: string;
+        email: string;
+    };
+    // Contrato resumido
+    contrato?: {
+        id: number;
+        status: string;
+        vigencia_inicio?: string;
+        vigencia_fim?: string;
+    };
+}
+
 export function ClienteDetalhe() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -66,7 +115,7 @@ export function ClienteDetalhe() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [beneficiario, setBeneficiario] = useState<Beneficiario | null>(null);
+    const [beneficiario, setBeneficiario] = useState<BeneficiarioDetalhe | null>(null);
     const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
     const [documentos, setDocumentos] = useState<LeadDocumento[]>([]);
     const [leadId, setLeadId] = useState<number | null>(null);
@@ -84,14 +133,13 @@ export function ClienteDetalhe() {
 
             // Buscar beneficiário
             const benefResponse = await beneficiariosApi.buscar(Number(id));
-            setBeneficiario(benefResponse.data);
+            setBeneficiario(benefResponse.data as BeneficiarioDetalhe);
 
             // Buscar cobranças do beneficiário (retorna paginado)
             const cobrancasResponse = await cobrancasApi.porBeneficiario(Number(id));
             setCobrancas(cobrancasResponse.data?.cobrancas || []);
 
             // Tentar buscar documentos se vier de lead (precisamos verificar no portfolio)
-            // Por ora, deixamos vazio - será preenchido se houver lead_id
             try {
                 const portfolioResponse = await beneficiariosApi.portfolio({ busca: benefResponse.data.cpf });
                 const cliente = portfolioResponse.data?.clientes?.find(c => c.id === Number(id));
@@ -133,14 +181,6 @@ export function ClienteDetalhe() {
         return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
     };
 
-    const formatUC = (uc?: UnidadeConsumidora) => {
-        if (!uc) return '-';
-        const cod = String(uc.cod_empresa || '').padStart(1, '0');
-        const cdc = String(uc.cdc || '').padStart(8, '0');
-        const dv = uc.digito_verificador || 0;
-        return `${cod}/${cdc}-${dv}`;
-    };
-
     const getStatusBadge = (status: string) => {
         const statusMap: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
             'ATIVO': { label: 'Ativo', className: 'bg-green-100 text-green-800', icon: <CheckCircle className="h-3 w-3" /> },
@@ -159,6 +199,7 @@ export function ClienteDetalhe() {
 
     const getCobrancaStatusBadge = (status: string) => {
         const statusMap: Record<string, { label: string; className: string }> = {
+            'RASCUNHO': { label: 'Rascunho', className: 'bg-gray-100 text-gray-800' },
             'PENDENTE': { label: 'Pendente', className: 'bg-yellow-100 text-yellow-800' },
             'EMITIDA': { label: 'Emitida', className: 'bg-blue-100 text-blue-800' },
             'PAGA': { label: 'Paga', className: 'bg-green-100 text-green-800' },
@@ -174,16 +215,14 @@ export function ClienteDetalhe() {
     };
 
     const getDocumentoIcon = (tipo: string) => {
-        const hasDoc = true; // Simplificado - assumimos que se está na lista, existe
-        return hasDoc ? <FileCheck className="h-4 w-4 text-green-500" /> : <FileX className="h-4 w-4 text-gray-400" />;
+        return <FileCheck className="h-4 w-4 text-green-500" />;
     };
 
     // Calcular métricas financeiras
     const economiaTotal = cobrancas.reduce((acc, c) => acc + (c.economia_mes || c.economia || 0), 0);
     const totalCobrancas = cobrancas.length;
     const cobrancasPagas = cobrancas.filter(c => c.status === 'PAGA').length;
-    const cobrancasPendentes = cobrancas.filter(c => c.status === 'PENDENTE' || c.status === 'EMITIDA').length;
-    const valorTotalPago = cobrancas.filter(c => c.status === 'PAGA').reduce((acc, c) => acc + (c.valor_pago || c.valor_total || 0), 0);
+    const cobrancasPendentes = cobrancas.filter(c => ['PENDENTE', 'EMITIDA', 'RASCUNHO'].includes(c.status)).length;
 
     if (loading) {
         return (
@@ -226,7 +265,7 @@ export function ClienteDetalhe() {
                     <div>
                         <div className="flex items-center gap-3">
                             <h1 className="text-2xl font-bold text-gray-900">
-                                {beneficiario.nome || 'Cliente sem nome'}
+                                {beneficiario.nome || beneficiario.uc?.nome_titular || 'Cliente sem nome'}
                             </h1>
                             {getStatusBadge(beneficiario.status)}
                             {leadId ? (
@@ -242,7 +281,7 @@ export function ClienteDetalhe() {
                             )}
                         </div>
                         <p className="text-gray-500 mt-1">
-                            CPF: {formatCPF(beneficiario.cpf)} • UC: {formatUC(beneficiario.uc)}
+                            CPF: {formatCPF(beneficiario.cpf)} • UC: {beneficiario.uc?.uc_formatada || '-'}
                         </p>
                     </div>
                 </div>
@@ -282,7 +321,9 @@ export function ClienteDetalhe() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <div className="bg-gray-50 rounded-lg p-4">
                                     <p className="text-xs text-gray-500 uppercase tracking-wide">Nome Completo</p>
-                                    <p className="font-medium text-gray-900 mt-1">{beneficiario.nome || '-'}</p>
+                                    <p className="font-medium text-gray-900 mt-1">
+                                        {beneficiario.nome || beneficiario.uc?.nome_titular || '-'}
+                                    </p>
                                 </div>
                                 <div className="bg-gray-50 rounded-lg p-4">
                                     <p className="text-xs text-gray-500 uppercase tracking-wide">CPF</p>
@@ -387,7 +428,7 @@ export function ClienteDetalhe() {
                                         to={`/app/gestor/ucs/${beneficiario.uc.id}`}
                                         className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm"
                                     >
-                                        Ver detalhes da UC
+                                        Ver detalhes completos da UC
                                         <ExternalLink className="h-4 w-4" />
                                     </Link>
                                 </div>
@@ -395,30 +436,19 @@ export function ClienteDetalhe() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     <div className="bg-gray-50 rounded-lg p-4">
                                         <p className="text-xs text-gray-500 uppercase tracking-wide">Código UC</p>
-                                        <p className="font-medium text-gray-900 mt-1 text-lg">{formatUC(beneficiario.uc)}</p>
+                                        <p className="font-medium text-gray-900 mt-1 text-lg">
+                                            {beneficiario.uc.uc_formatada}
+                                        </p>
                                     </div>
                                     <div className="bg-gray-50 rounded-lg p-4">
                                         <p className="text-xs text-gray-500 uppercase tracking-wide">Titular</p>
-                                        <p className="font-medium text-gray-900 mt-1">{beneficiario.uc.nome_titular || '-'}</p>
+                                        <p className="font-medium text-gray-900 mt-1">
+                                            {beneficiario.uc.nome_titular || '-'}
+                                        </p>
                                     </div>
                                     <div className="bg-gray-50 rounded-lg p-4">
-                                        <p className="text-xs text-gray-500 uppercase tracking-wide">Status</p>
-                                        <div className="mt-1">
-                                            {beneficiario.uc.uc_ativa ? (
-                                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                                                    Ativa
-                                                </span>
-                                            ) : (
-                                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
-                                                    Inativa
-                                                </span>
-                                            )}
-                                            {beneficiario.uc.is_geradora && (
-                                                <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
-                                                    Geradora
-                                                </span>
-                                            )}
-                                        </div>
+                                        <p className="text-xs text-gray-500 uppercase tracking-wide">ID</p>
+                                        <p className="font-medium text-gray-900 mt-1">#{beneficiario.uc.id}</p>
                                     </div>
                                 </div>
 
@@ -431,34 +461,21 @@ export function ClienteDetalhe() {
                                     <div className="bg-gray-50 rounded-lg p-4">
                                         <p className="text-gray-900">
                                             {beneficiario.uc.endereco || 'Endereço não cadastrado'}
-                                            {beneficiario.uc.numero_imovel && `, ${beneficiario.uc.numero_imovel}`}
-                                            {beneficiario.uc.complemento && ` - ${beneficiario.uc.complemento}`}
                                         </p>
-                                        <p className="text-gray-600 mt-1">
-                                            {beneficiario.uc.bairro && `${beneficiario.uc.bairro} - `}
-                                            {beneficiario.uc.cidade || ''}{beneficiario.uc.uf && ` / ${beneficiario.uc.uf}`}
-                                            {beneficiario.uc.cep && ` - CEP: ${beneficiario.uc.cep}`}
-                                        </p>
+                                        {(beneficiario.uc.cidade || beneficiario.uc.uf) && (
+                                            <p className="text-gray-600 mt-1">
+                                                {beneficiario.uc.cidade || ''}{beneficiario.uc.uf && ` / ${beneficiario.uc.uf}`}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
-                                {/* Dados Técnicos */}
-                                <div>
-                                    <h4 className="font-medium text-gray-900 mb-3">Dados Técnicos</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="bg-gray-50 rounded-lg p-4">
-                                            <p className="text-xs text-gray-500 uppercase tracking-wide">Tipo de Ligação</p>
-                                            <p className="font-medium text-gray-900 mt-1">{beneficiario.uc.tipo_ligacao || '-'}</p>
-                                        </div>
-                                        <div className="bg-gray-50 rounded-lg p-4">
-                                            <p className="text-xs text-gray-500 uppercase tracking-wide">Classe</p>
-                                            <p className="font-medium text-gray-900 mt-1">{beneficiario.uc.classe_leitura || '-'}</p>
-                                        </div>
-                                        <div className="bg-gray-50 rounded-lg p-4">
-                                            <p className="text-xs text-gray-500 uppercase tracking-wide">Saldo Acumulado</p>
-                                            <p className="font-medium text-green-600 mt-1">{beneficiario.uc.saldo_acumulado?.toFixed(2) || '0.00'} kWh</p>
-                                        </div>
-                                    </div>
+                                {/* Info adicional */}
+                                <div className="bg-blue-50 rounded-lg p-4">
+                                    <p className="text-sm text-blue-700">
+                                        Para ver mais detalhes técnicos da UC (tipo de ligação, classe, saldo acumulado, histórico de faturas),
+                                        clique em "Ver detalhes completos da UC" acima.
+                                    </p>
                                 </div>
                             </>
                         ) : (
@@ -490,7 +507,9 @@ export function ClienteDetalhe() {
                                     <Percent className="h-3 w-3" /> Rateio
                                 </p>
                                 <p className="font-medium text-gray-900 mt-1">
-                                    {beneficiario.percentual_rateio ? `${(beneficiario.percentual_rateio * 100).toFixed(1)}%` : '-'}
+                                    {beneficiario.percentual_rateio != null
+                                        ? `${(beneficiario.percentual_rateio * 100).toFixed(1)}%`
+                                        : 'N/A (Avulso)'}
                                 </p>
                             </div>
                             <div className="bg-gray-50 rounded-lg p-4">
@@ -508,23 +527,42 @@ export function ClienteDetalhe() {
                         </div>
 
                         {/* Status do Contrato */}
-                        <div className="bg-blue-50 rounded-lg p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-blue-100 rounded-lg">
-                                    <FileCheck className="h-5 w-5 text-blue-600" />
-                                </div>
-                                <div>
-                                    <p className="font-medium text-blue-900">
-                                        {beneficiario.contrato_id ? 'Contrato Ativo' : 'Sem Contrato Formal'}
-                                    </p>
-                                    <p className="text-sm text-blue-700">
-                                        {beneficiario.contrato_id
-                                            ? `Contrato #${beneficiario.contrato_id}`
-                                            : 'Este beneficiário não possui contrato formalizado no sistema'}
-                                    </p>
+                        {beneficiario.contrato ? (
+                            <div className="bg-green-50 rounded-lg p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-green-100 rounded-lg">
+                                        <FileCheck className="h-5 w-5 text-green-600" />
+                                    </div>
+                                    <div>
+                                        <p className="font-medium text-green-900">
+                                            Contrato #{beneficiario.contrato.id} - {beneficiario.contrato.status}
+                                        </p>
+                                        <p className="text-sm text-green-700">
+                                            {beneficiario.contrato.vigencia_inicio && (
+                                                <>Vigência: {formatDate(beneficiario.contrato.vigencia_inicio)}</>
+                                            )}
+                                            {beneficiario.contrato.vigencia_fim && (
+                                                <> até {formatDate(beneficiario.contrato.vigencia_fim)}</>
+                                            )}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="bg-yellow-50 rounded-lg p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-yellow-100 rounded-lg">
+                                        <AlertCircle className="h-5 w-5 text-yellow-600" />
+                                    </div>
+                                    <div>
+                                        <p className="font-medium text-yellow-900">Sem Contrato Formal</p>
+                                        <p className="text-sm text-yellow-700">
+                                            Este beneficiário não possui contrato formalizado no sistema
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Convite */}
                         {beneficiario.convite_enviado_em && (

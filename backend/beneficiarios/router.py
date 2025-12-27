@@ -337,7 +337,7 @@ async def portfolio_clientes(
 
     # 1. Buscar todos os beneficiários
     query = db_admin.beneficiarios().select(
-        "id, nome, cpf, email, telefone, status, created_at, economia_acumulada",
+        "id, nome, cpf, email, telefone, status, criado_em, economia_acumulada",
         "unidades_consumidoras!beneficiarios_uc_id_fkey(id, cod_empresa, cdc, digito_verificador, nome_titular, endereco, cidade, uf, apelido)",
         "usinas(id, nome)"
     )
@@ -371,7 +371,7 @@ async def portfolio_clientes(
 
     # 3. Buscar cobranças para métricas (agrupadas por beneficiário)
     cobrancas_response = db_admin.cobrancas().select(
-        "id, beneficiario_id, status, economia_mes, valor_total, created_at"
+        "id, beneficiario_id, status, economia_mes, valor_total, criado_em"
     ).in_("beneficiario_id", beneficiario_ids).execute()
 
     # Agrupar cobranças por beneficiário
@@ -394,7 +394,7 @@ async def portfolio_clientes(
         economia_total = sum(float(c.get("economia_mes") or 0) for c in cobrancas)
         faturas_processadas = len([c for c in cobrancas if c.get("status") in ["ENVIADA", "PAGA"]])
         faturas_pendentes = len([c for c in cobrancas if c.get("status") == "PENDENTE"])
-        ultima_cobranca = max([c.get("created_at") for c in cobrancas], default=None) if cobrancas else None
+        ultima_cobranca = max([c.get("criado_em") for c in cobrancas], default=None) if cobrancas else None
 
         # Formatar UC
         uc_formatada = None
@@ -408,7 +408,7 @@ async def portfolio_clientes(
             "email": b.get("email"),
             "telefone": b.get("telefone"),
             "status": b.get("status"),
-            "created_at": b.get("created_at"),
+            "created_at": b.get("criado_em"),
 
             # Origem do cliente
             "origem": "LEAD" if lead_info else "LEGADO",

@@ -1,7 +1,7 @@
 """
 Debug Router - Endpoints de diagnóstico e documentação da API
 
-ATENÇÃO: Endpoints sensíveis, apenas para superadmin
+ATENÇÃO: Endpoints sensíveis, restritos a gestores
 """
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
-from backend.core.security import get_current_active_user, CurrentUser
+from backend.core.security import get_current_active_user, CurrentUser, require_perfil
 from backend.debug.sampler import capturar_amostras_api
 
 router = APIRouter()
@@ -31,12 +31,12 @@ class CaptureResponse(BaseModel):
 @router.post("/capture-api-samples", summary="Capturar amostras das APIs Energisa")
 async def capture_api_samples(
     req: CaptureRequest,
-    current_user: CurrentUser = Depends(get_current_active_user)
+    current_user: CurrentUser = Depends(require_perfil("gestor"))
 ):
     """
     Captura amostras representativas de cada tipo de UC para documentação.
     
-    **REQUER: Usuário superadmin**
+    **REQUER: Usuário gestor ou superadmin**
     
     Classifica UCs por:
     - Tipo de GD: sem_gd, gd_beneficiaria, gd_geradora
@@ -51,13 +51,6 @@ async def capture_api_samples(
     
     **Dados sensíveis são removidos automaticamente.**
     """
-    
-    # Verifica se é superadmin
-    if current_user.perfil != "superadmin":
-        raise HTTPException(
-            status_code=403, 
-            detail="Apenas superadmin pode executar captura de amostras"
-        )
     
     try:
         cpf_clean = req.cpf.replace(".", "").replace("-", "")
@@ -97,16 +90,13 @@ async def capture_api_samples(
 
 @router.get("/api-samples-status", summary="Status das amostras capturadas")
 async def get_samples_status(
-    current_user: CurrentUser = Depends(get_current_active_user)
+    current_user: CurrentUser = Depends(require_perfil("gestor"))
 ):
     """
     Retorna status das amostras já capturadas.
     
     Lista arquivos existentes em docs/api-samples/
     """
-    
-    if current_user.perfil != "superadmin":
-        raise HTTPException(status_code=403, detail="Apenas superadmin")
     
     import os
     import glob
@@ -144,16 +134,13 @@ async def get_samples_status(
 @router.get("/session-status/{cpf}", summary="Verificar status da sessão Energisa")
 async def check_session_status(
     cpf: str,
-    current_user: CurrentUser = Depends(get_current_active_user)
+    current_user: CurrentUser = Depends(require_perfil("gestor"))
 ):
     """
     Verifica se existe sessão válida para o CPF na Energisa.
     
     Útil para diagnóstico antes de capturar amostras.
     """
-    
-    if current_user.perfil != "superadmin":
-        raise HTTPException(status_code=403, detail="Apenas superadmin")
     
     from backend.energisa.service import EnergisaService
     from backend.energisa.session_manager import SessionManager

@@ -463,16 +463,61 @@ class EnergisaService:
         raise Exception(f"Erro API Energisa: {resp.status_code} - {resp.text}")
 
     def _enriquecer_ucs(self, ucs):
-        """Enriquece lista de UCs com informações de GD e badges de status."""
+        """Enriquece lista de UCs com informações de GD e badges de status.
+        
+        Estratégia de identificação de GD (conforme documentação API_ENERGISA.md):
+        
+        1. geracaoDistribuida == numeroUc → UC é GERADORA (100% confiável)
+           - Chamar /gd/info para obter listaBeneficiarias e saldo
+        
+        2. geracaoDistribuida == null → Chamar /gd/details e verificar:
+           - consumoRecebidoConv > 0 → BENEFICIÁRIA ATIVA
+           - saldoAnteriorConv > 0 e consumoRecebidoConv = 0 → SALDO HERDADO  
+           - Sem dados ou zerado → SEM GD
+        
+        O campo discriminacaoEnergiaInjetadas[].numUcMovimento indica a geradora.
+        """
         ucs_enriquecidas = []
-
+        
+        # Primeiro: Identificar GERADORAS
+        geradoras_info = {}  # cdc -> gd_info objeto
+        geradoras_count = 0
+        
         for uc in ucs:
+            numero_uc = uc.get('numeroUc')
+            geracao_distribuida = uc.get('geracaoDistribuida')
+            
+            if geracao_distribuida is not None and geracao_distribuida == numero_uc:
+                geradoras_count += 1
+                # Busca /gd/info para detalhes da geradora
+                try:
+                    uc_data = {
+                        'codigoEmpresaWeb': uc.get('codigoEmpresaWeb', 6),
+                        'cdc': numero_uc,
+                        'digitoVerificadorCdc': uc.get('digitoVerificador')
+                    }
+                    gd_info = self.get_gd_info(uc_data)
+                    
+                    if gd_info and not gd_info.get('errored'):
+                        infos = gd_info.get('infos', {})
+                        objeto = infos.get('objeto', {})
+                        geradoras_info[numero_uc] = objeto
+                except Exception as e:
+                    print(f"   ⚠️ Erro ao buscar gd/info da geradora {numero_uc}: {e}")
+        
+        print(f"   🔍 Identificadas {geradoras_count} UCs geradoras")
+        
+        # Agora enriquece todas as UCs
+        ucs_com_gd_null = 0
+        beneficiarias_ativas = 0
+        saldo_herdado = 0
+        
+        for uc in ucs:
+            numero_uc = uc.get('numeroUc')
             uc_copia = uc.copy()
-
+            
             # Verifica se UC está ativa
             uc_ativa = uc.get('ucAtiva', True)
-
-            # Adiciona badge de status
             if not uc_ativa:
                 uc_copia['badge'] = {
                     "tipo": "inativa",
@@ -480,62 +525,138 @@ class EnergisaService:
                     "cor": "gray"
                 }
 
-            # Verifica se é GD (Geração Distribuída)
+            # Inicializa campos de GD
             uc_copia['isGD'] = False
             uc_copia['gdInfo'] = None
-
-            try:
-                uc_data = {
-                    'codigoEmpresaWeb': uc.get('codigoEmpresaWeb', 6),
-                    'cdc': uc.get('numeroUc'),
-                    'digitoVerificadorCdc': uc.get('digitoVerificador')
+            
+            geracao_distribuida = uc.get('geracaoDistribuida')
+            
+            # === CASO 1: É GERADORA ===
+            if geracao_distribuida is not None and geracao_distribuida == numero_uc:
+                uc_copia['isGD'] = True
+                uc_copia['gdInfo'] = {
+                    "possuiGD": True,
+                    "ucGeradora": True,
+                    "ucBeneficiaria": False,
+                    "ucGeradoraVinculada": None,
+                    "tipoGD": None
                 }
+                
+                # Adiciona detalhes do gd_info se disponível
+                gd_objeto = geradoras_info.get(numero_uc)
+                if gd_objeto:
+                    uc_copia['gdInfo'].update({
+                        "tipoGD": gd_objeto.get('tipoCompartilhamento'),
+                        "tipoGeracao": gd_objeto.get('tipoGeracao'),
+                        "percentualCompensacao": gd_objeto.get('percentualCompensacao'),
+                        "qtdKwhSaldo": gd_objeto.get('qtdKwhSaldo'),
+                        "qtdKwhGeracaoEnergia": gd_objeto.get('qtdKwhGeracaoEnergia'),
+                        "listaBeneficiarias": gd_objeto.get('listaBeneficiarias')
+                    })
 
-                gd_info = self.get_gd_info(uc_data)
-
-                if gd_info and not gd_info.get('errored'):
-                    infos = gd_info.get('infos', {})
-                    # Os dados de GD estão dentro de 'objeto'
-                    objeto = infos.get('objeto', {})
+                # Badge de geradora
+                badge_gd = {
+                    "tipo": "gd_geradora",
+                    "texto": "Usina Geradora",
+                    "cor": "green"
+                }
+                self._adicionar_badge(uc_copia, badge_gd)
+            
+            # === CASO 2: geracaoDistribuida == null → Verificar via /gd/details ===
+            elif geracao_distribuida is None:
+                ucs_com_gd_null += 1
+                
+                try:
+                    uc_data = {
+                        'codigoEmpresaWeb': uc.get('codigoEmpresaWeb', 6),
+                        'cdc': numero_uc,
+                        'digitoVerificadorCdc': uc.get('digitoVerificador')
+                    }
+                    gd_details = self.get_gd_details(uc_data)
                     
-                    # Verifica se possui GD ativa
-                    is_geradora = objeto.get('ucGeradora', False)
-                    is_beneficiaria = objeto.get('ucBeneficiaria', False)
-                    
-                    if is_geradora or is_beneficiaria:
-                        uc_copia['isGD'] = True
-                        uc_copia['gdInfo'] = {
-                            "possuiGD": is_geradora or is_beneficiaria,
-                            "ucGeradora": is_geradora,
-                            "ucBeneficiaria": is_beneficiaria,
-                            "tipoGD": objeto.get('tipoCompartilhamento'),
-                            "tipoGeracao": objeto.get('tipoGeracao'),
-                            "percentualCompensacao": objeto.get('percentualCompensacao')
-                        }
-
-                        # Adiciona badge de GD
-                        if not uc_copia.get('badge'):  # Só adiciona se não tiver badge de inativa
-                            uc_copia['badge'] = {
-                                "tipo": "gd",
-                                "texto": "Geração Distribuída",
-                                "cor": "green"
-                            }
-                        else:
-                            # Se já tem badge de inativa, adiciona GD como segundo badge
-                            uc_copia['badges'] = [
-                                uc_copia['badge'],
-                                {
-                                    "tipo": "gd",
-                                    "texto": "GD",
-                                    "cor": "green"
+                    if gd_details and not gd_details.get('errored'):
+                        infos = gd_details.get('infos', [])
+                        
+                        if infos and len(infos) > 0:
+                            # Pega o mês mais recente
+                            ultimo_mes = infos[0]
+                            
+                            consumo_recebido = ultimo_mes.get('consumoRecebidoConv', 0) or 0
+                            saldo_anterior = ultimo_mes.get('saldoAnteriorConv', 0) or 0
+                            discriminacao = ultimo_mes.get('discriminacaoEnergiaInjetadas', []) or []
+                            
+                            # BENEFICIÁRIA ATIVA: consumoRecebidoConv > 0
+                            if consumo_recebido > 0:
+                                beneficiarias_ativas += 1
+                                
+                                # Encontra a geradora pelo discriminacaoEnergiaInjetadas
+                                geradora_vinculada = None
+                                for disc in discriminacao:
+                                    # consumoRecebidoOuTransferido: 1 = RECEBEU, -1 = ENVIOU
+                                    if disc.get('consumoRecebidoOuTransferido') == 1:
+                                        geradora_vinculada = disc.get('numUcMovimento')
+                                        break
+                                
+                                uc_copia['isGD'] = True
+                                uc_copia['gdInfo'] = {
+                                    "possuiGD": True,
+                                    "ucGeradora": False,
+                                    "ucBeneficiaria": True,
+                                    "ucGeradoraVinculada": geradora_vinculada,
+                                    "tipoGD": "Beneficiária Ativa",
+                                    "consumoRecebidoConv": consumo_recebido,
+                                    "saldoAnteriorConv": saldo_anterior
                                 }
-                            ]
-            except Exception as e:
-                print(f"   ⚠️ Erro ao verificar GD para UC {uc.get('numeroUc')}: {e}")
+                                
+                                badge_gd = {
+                                    "tipo": "gd_beneficiaria",
+                                    "texto": "Beneficiária GD",
+                                    "cor": "blue"
+                                }
+                                self._adicionar_badge(uc_copia, badge_gd)
+                            
+                            # SALDO HERDADO: saldoAnteriorConv > 0 mas consumoRecebidoConv = 0
+                            elif saldo_anterior > 0 and consumo_recebido == 0:
+                                saldo_herdado += 1
+                                
+                                uc_copia['isGD'] = True
+                                uc_copia['gdInfo'] = {
+                                    "possuiGD": True,
+                                    "ucGeradora": False,
+                                    "ucBeneficiaria": False,
+                                    "ucGeradoraVinculada": None,
+                                    "tipoGD": "Saldo Herdado",
+                                    "saldoAnteriorConv": saldo_anterior,
+                                    "saldoHerdado": True
+                                }
+                                
+                                badge_gd = {
+                                    "tipo": "gd_saldo_herdado",
+                                    "texto": "Saldo Herdado",
+                                    "cor": "purple"
+                                }
+                                self._adicionar_badge(uc_copia, badge_gd)
+                            
+                            # Se tem dados mas zerados → SEM GD
+                            # (não precisa fazer nada, já está inicializado como False)
+                            
+                except Exception as e:
+                    print(f"   ⚠️ Erro ao verificar gd/details da UC {numero_uc}: {e}")
 
             ucs_enriquecidas.append(uc_copia)
-
+        
+        print(f"   📋 Resultado GD: {geradoras_count} geradoras, {beneficiarias_ativas} beneficiárias ativas, {saldo_herdado} saldo herdado, {ucs_com_gd_null - beneficiarias_ativas - saldo_herdado} sem GD")
+        
         return ucs_enriquecidas
+    
+    def _adicionar_badge(self, uc, badge):
+        """Adiciona badge à UC, criando lista de badges se já houver uma."""
+        if not uc.get('badge'):
+            uc['badge'] = badge
+        else:
+            if 'badges' not in uc:
+                uc['badges'] = [uc['badge']]
+            uc['badges'].append(badge)
 
     def listar_faturas(self, uc_data: dict):
         try:

@@ -116,7 +116,7 @@ Finaliza o login com o código SMS recebido.
 
 ### POST `/energisa/ucs`
 
-Lista todas as UCs vinculadas ao CPF com informações enriquecidas de GD.
+Lista todas as UCs vinculadas ao CPF.
 
 **Request Body:**
 ```json
@@ -126,40 +126,76 @@ Lista todas as UCs vinculadas ao CPF com informações enriquecidas de GD.
 }
 ```
 
-**Response 200:**
+**Response 200 (dados reais da API Energisa):**
 ```json
 [
   {
-    "numeroUc": 1234567,
-    "digitoVerificador": 8,
     "codigoEmpresaWeb": 6,
-    "endereco": "RUA EXEMPLO, 123",
-    "cidade": "CUIABÁ",
+    "numeroUc": 2711600,
+    "digitoVerificador": 3,
     "ucAtiva": true,
+    "ucCortada": false,
+    "ucDesligada": false,
+    "contratoAtivo": true,
+    "dataEncerramentoContrato": null,
+    "codigoMunicipio": 59,
+    "nomeMunicipio": "SINOP",
+    "uf": "MT",
+    "codigoLocalidade": 59,
+    "localidade": "SINOP",
+    "bairro": "AQUARELA DAS ARTES",
+    "codigoEndereco": 24894,
+    "endereco": "RUA PRINCIPAL",
+    "numeroImovel": "0",
+    "complemento": "QD 37 LT 23",
+    "descricao": null,
+    "dataProximaLeitura": "15/01/2026 00:00:00",
+    "dataProximaLeituraISO": "2026-01-15T00:00:00",
+    "medidorInstalado": true,
+    "indicadorCorte": false,
+    "baixaRenda": false,
+    "tarifaBranca": false,
+    "clienteIrrigante": false,
+    "atividadeEssencial": false,
+    "usuarioTitular": false,
+    "imovelAlugado": false,
+    "indicadorVisitaImprodutiva": false,
+    "indicadorDco": false,
+    "faturaEmail": true,
+    "nomeTitular": "DIRCEU SEZE",
+    "latitude": -11.831585,
+    "longitude": -55.547806,
+    "aptoBonusCriseHidrica": false,
+    "ultimaLeituraReal": 10075,
+    "dataUltimaLeitura": "2025-12-15T00:00:00",
+    "grupoLeitura": "B",
+    "classeLeitura": "RESIDENCIAL",
+    "geracaoDistribuida": 2711600,
     "isGD": true,
     "gdInfo": {
       "possuiGD": true,
-      "ucGeradora": false,
-      "tipoGD": "BENEFICIARIA",
+      "ucGeradora": true,
+      "ucBeneficiaria": false,
+      "ucGeradoraVinculada": null,
+      "tipoGD": "Autoconsumo Remoto",
+      "tipoGeracao": "Micro Geração",
       "percentualCompensacao": 100
-    },
-    "badge": {
-      "tipo": "gd",
-      "texto": "Geração Distribuída",
-      "cor": "green"
     }
   }
 ]
 ```
 
-**Campos Enriquecidos:**
+**Campo Crítico: `geracaoDistribuida`**
 
-| Campo | Tipo | Descrição |
-|-------|------|-----------|
-| `isGD` | boolean | Se a UC participa de Geração Distribuída |
-| `gdInfo` | object | Detalhes da GD (se aplicável) |
-| `badge` | object | Badge de status visual |
-| `badges` | array | Múltiplos badges (quando aplicável) |
+Este campo determina a participação em Geração Distribuída:
+
+| Valor | Significado |
+|-------|-------------|
+| `== numeroUc` | UC é **GERADORA** (usina solar nesta UC) |
+| `!= numeroUc` (outro CDC) | UC é **BENEFICIÁRIA** (recebe de outra geradora) |
+| `null` | Pode ser SEM GD, beneficiária, ou saldo herdado* |
+
+> *Para UCs com `geracaoDistribuida: null`, é necessário verificar `/gd/details` para determinar se possui saldo de créditos.
 
 ---
 
@@ -172,34 +208,89 @@ Busca informações cadastrais detalhadas de uma UC específica.
 {
   "cpf": "12345678900",
   "codigoEmpresaWeb": 6,
-  "cdc": 1234567,
-  "digitoVerificadorCdc": 8
+  "cdc": 2711600,
+  "digitoVerificadorCdc": 3
 }
 ```
 
-**Response 200:**
+**Response 200 (dados reais):**
 ```json
 {
-  "errored": false,
   "infos": {
+    "dadosUc": {
+      "cpfCnpj": 30821282115,
+      "codigoEmpresaWeb": 6,
+      "numeroCdc": 2711600,
+      "numeroUCAneel": 133984701777,
+      "digitoVerificador": 3,
+      "ucAtiva": true,
+      "medidorInstalado": true,
+      "indicadorCorte": false,
+      "ucCortada": false,
+      "ucDesligada": false,
+      "baixaRenda": false,
+      "tarifaBranca": false,
+      "clienteIrrigante": false,
+      "atividadeEssencial": false,
+      "nomeTitular": "DIRCEU SEZE",
+      "usuarioTitular": false,
+      "dataLigacao": "21/12/2018 10:21:05",
+      "dataLigacaoISO": "2018-12-21T10:21:05",
+      "dataDesligamento": null,
+      "dataReligacao": null,
+      "numeroContrato": 523,
+      "indicadorContratoAtivo": true,
+      "contratoAtivo": true,
+      "optinPixAtivo": true,
+      "email": "phseze@gmail.com",
+      "telefone1": 66984422688,
+      "tipoTelefone1": "C",
+      "telefone2": 66996350491,
+      "tipoTelefone2": "C",
+      "enviaFaturaEmail": true,
+      "indicadorDebitoEmConta": false,
+      "diaVencimento": null,
+      "valorMedioKWH": 320,
+      "valorMedioKW": 0,
+      "valorMedioKVA": 0
+    },
     "dadosInstalacao": {
-      "tipoLigacao": "BIFASICO",
+      "classeLeitura": "RESIDENCIAL",
       "grupoLeitura": "B",
-      "classeConsumo": "RESIDENCIAL"
+      "tipoLigacao": "BIFASICO",
+      "numeroMedidor": "N6164890568",
+      "areaRural": true,
+      "indicadorRotaRural": false,
+      "faturamentoLis": true,
+      "indicadorSandboxTarifario": false
     },
-    "dadosTitular": {
-      "nome": "FULANO DE TAL",
-      "cpfCnpj": "***456789**"
-    },
-    "endereco": {
-      "logradouro": "RUA EXEMPLO",
-      "numero": "123",
-      "cidade": "CUIABÁ",
-      "uf": "MT"
+    "dadosEndereco": {
+      "codigoMunicipio": 59,
+      "nomeMunicipio": "SINOP",
+      "uf": "MT",
+      "codigoLocalidade": 59,
+      "localidade": "SINOP",
+      "bairro": "AQUARELA DAS ARTES",
+      "codigoEndereco": 24894,
+      "endereco": "RUA PRINCIPAL",
+      "numeroImovel": "0",
+      "complemento": "QD 37 LT 23",
+      "cep": "78550000",
+      "longitude": -55.547806,
+      "latitude": -11.831585
     }
-  }
+  },
+  "errored": false
 }
 ```
+
+**Campos importantes de `dadosInstalacao`:**
+
+| Campo | Valores | Uso |
+|-------|---------|-----|
+| `tipoLigacao` | MONOFASICO, BIFASICO, TRIFASICO | Taxa mínima, cálculo economia |
+| `grupoLeitura` | A, B | Grupo tarifário |
+| `classeLeitura` | RESIDENCIAL, COMERCIAL, etc | Classe de consumo |
 
 ---
 
@@ -270,6 +361,17 @@ Baixa o PDF de uma fatura específica.
 
 ## 4. Geração Distribuída (GD)
 
+### Tipos de UC na Geração Distribuída
+
+| Tipo | Descrição | Como Identificar |
+|------|-----------|------------------|
+| **GERADORA** | Possui usina solar instalada | `geracaoDistribuida == numeroUc` |
+| **BENEFICIÁRIA ATIVA** | Recebe créditos de uma geradora | `/gd/details.consumoRecebidoConv > 0` |
+| **SALDO HERDADO** | Tem créditos mas não está vinculada | `/gd/details.saldoAnteriorConv > 0` sem recebimento |
+| **SEM GD** | UC comum sem participação | Nenhum dado de GD |
+
+---
+
 ### POST `/energisa/gd/info`
 
 Busca informações de Geração Distribuída da UC.
@@ -279,58 +381,366 @@ Busca informações de Geração Distribuída da UC.
 {
   "cpf": "12345678900",
   "codigoEmpresaWeb": 6,
-  "cdc": 1234567,
-  "digitoVerificadorCdc": 8
+  "cdc": 2711600,
+  "digitoVerificadorCdc": 3
 }
 ```
 
-**Response 200:**
+**Response 200 - UC GERADORA (dados reais):**
 ```json
 {
-  "errored": false,
   "infos": {
-    "possuiGD": true,
-    "ucGeradora": true,
-    "tipoGD": "AUTOCONSUMO_REMOTO",
-    "percentualCompensacao": 100,
-    "tipoCompartilhamento": "AR"
-  }
+    "objeto": {
+      "codigoEmpresaWeb": 6,
+      "numeroUc": 2711600,
+      "digitoVerificador": 3,
+      "ucAtiva": true,
+      "ucGeradora": true,
+      "ucBeneficiaria": false,
+      "tipoPessoa": "F",
+      "grupoLeitura": "B",
+      "grupoFaturamento": "GD_I",
+      "tipoGeracao": "Micro Geração",
+      "indicadorTipoCompartilhamento": "AR",
+      "tipoCompartilhamento": "Autoconsumo Remoto",
+      "percentualCompensacao": 100,
+      "kwhExcedente": 314,
+      "qtdKwhSaldo": 1707,
+      "qtdKwhGeracaoEnergia": 566,
+      "qtdKwhCompensacaoInjetado": 248,
+      "ultimoConsumo": null,
+      "endereco": "RUA PRINCIPAL",
+      "numero": "0",
+      "complemento": "QD 37 LT 23",
+      "bairro": "AQUARELA DAS ARTES",
+      "cidade": "SINOP",
+      "uf": "MT",
+      "listaBeneficiarias": [
+        {
+          "codigoEmpresaWeb": 6,
+          "cdc": 4950311,
+          "digitoVerificador": 3,
+          "nome": "DIRCEU SEZE",
+          "tipoPessoa": "F",
+          "percentualRecebido": 99,
+          "qtdKwhRecebido": 314,
+          "grupoLeitura": "B",
+          "endereco": "RUA PROJETADA 14",
+          "numero": "581",
+          "complemento": "CASA 2",
+          "bairro": "RESIDENCIAL PARIS",
+          "cidade": "SINOP",
+          "uf": "MT",
+          "existeOS723ou724": false
+        }
+      ],
+      "listaGeradoras": null,
+      "geracaoDistribuida": 2711600,
+      "existeOs747Aberta": false,
+      "demonstrativoGD": {
+        "cdc": 2711600,
+        "anoReferencia": 2025,
+        "mesReferencia": 11,
+        "saldoAnteriorConv": 1703,
+        "injetadoConv": 0,
+        "totalRecebidoRede": 0,
+        "consumoRecebidoConv": 0,
+        "consumoInjetadoCompensadoConv": 0,
+        "consumoRecebidoCompensadoConv": 0,
+        "saldoCompensadoAnteriorConv": 0,
+        "consumoTransferidoConv": 0,
+        "consumoCompensadoConv": 0,
+        "estornoConvecional": 0,
+        "composicaoEnergiaInjetadas": [
+          {
+            "cdc": 2711600,
+            "anoReferencia": 2023,
+            "mesReferencia": 11,
+            "saldoAnteriorConv": 230
+          }
+        ]
+      }
+    },
+    "codigo": "OK",
+    "mensagem": "Consulta realizada com sucesso",
+    "categoria": "OK"
+  },
+  "errored": false
 }
 ```
+
+**Response - UC BENEFICIÁRIA ou SEM GD:**
+```json
+null
+```
+
+**Campos importantes de `/gd/info`:**
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `ucGeradora` | boolean | Se a UC é geradora (dentro do objeto) |
+| `ucBeneficiaria` | boolean | Se a UC é beneficiária (dentro do objeto) |
+| `tipoGeracao` | string | "Micro Geração" ou "Mini Geração" |
+| `tipoCompartilhamento` | string | "Autoconsumo Remoto", "Geração Compartilhada", etc |
+| `percentualCompensacao` | int | Percentual de compensação (geralmente 100) |
+| `qtdKwhSaldo` | int | Saldo atual de créditos em kWh |
+| `qtdKwhGeracaoEnergia` | int | kWh gerados no período |
+| `listaBeneficiarias` | array | Lista de UCs que recebem créditos desta geradora |
+| `listaGeradoras` | array | Lista de geradoras (se for beneficiária) |
+| `demonstrativoGD` | object | Demonstrativo resumido do último mês |
 
 ---
 
 ### POST `/energisa/gd/details`
 
-Busca histórico detalhado de créditos e geração (últimos 13 meses).
+Busca histórico detalhado de créditos (últimos 12 meses).
 
 **Request Body:**
 ```json
 {
   "cpf": "12345678900",
   "codigoEmpresaWeb": 6,
-  "cdc": 1234567,
-  "digitoVerificadorCdc": 8
+  "cdc": 2711600,
+  "digitoVerificadorCdc": 3
 }
 ```
 
-**Response 200:**
+**Response 200 - UC GERADORA (dados reais):**
 ```json
 {
-  "errored": false,
   "infos": [
     {
-      "mesReferencia": "12/2024",
-      "energiaInjetada": 450.5,
-      "energiaConsumida": 320.0,
-      "creditoGerado": 130.5,
-      "creditoUtilizado": 100.0,
-      "saldoCreditos": 500.0,
-      "creditoExpirar60Dias": 50.0
+      "cdc": 2711600,
+      "anoReferencia": 2025,
+      "mesReferencia": 10,
+      "saldoAnteriorConv": 1703,
+      "injetadoConv": 485,
+      "totalRecebidoRede": 0,
+      "consumoRecebidoConv": 0,
+      "consumoInjetadoCompensadoConv": 324,
+      "consumoRecebidoCompensadoConv": 0,
+      "saldoCompensadoAnteriorConv": 0,
+      "consumoTransferidoConv": 161,
+      "consumoCompensadoConv": 324,
+      "estornoConvecional": 0,
+      "composicaoEnergiaInjetadas": [
+        {
+          "cdc": 2711600,
+          "anoReferencia": 2023,
+          "mesReferencia": 11,
+          "saldoAnteriorConv": 230
+        },
+        {
+          "cdc": 2711600,
+          "anoReferencia": 2024,
+          "mesReferencia": 5,
+          "saldoAnteriorConv": 307
+        }
+      ],
+      "discriminacaoEnergiaInjetadas": [
+        {
+          "cdc": 2711600,
+          "anoReferencia": 2025,
+          "mesReferencia": 10,
+          "numUcMovimento": 4950311,
+          "consumoRecebidoOuTransferido": -1,
+          "consumoConvMovimentado": 161,
+          "consumoConvMovimentadoRecebidoOuTranferido": -161,
+          "consumoConvMovimentadoTransferidoPercentual": 100,
+          "endereco": "RUA PRINCIPAL",
+          "numeroImovel": "0",
+          "complemento": "QD 37 LT 23",
+          "uf": "MT",
+          "nomeMunicipio": "SINOP",
+          "bairro": "AQUARELA DAS ARTES",
+          "codigoEmpresaWeb": 6,
+          "digitoVerificador": 3
+        }
+      ],
+      "chavePrimaria": "2711600.2025.10"
     }
-  ]
+  ],
+  "errored": false
 }
 ```
+
+**Response 200 - UC BENEFICIÁRIA (dados reais):**
+```json
+{
+  "infos": [
+    {
+      "cdc": 5036150,
+      "anoReferencia": 2025,
+      "mesReferencia": 10,
+      "saldoAnteriorConv": 454,
+      "injetadoConv": 0,
+      "totalRecebidoRede": 0,
+      "consumoRecebidoConv": 392,
+      "consumoInjetadoCompensadoConv": 0,
+      "consumoRecebidoCompensadoConv": 0,
+      "saldoCompensadoAnteriorConv": 454,
+      "consumoTransferidoConv": 0,
+      "consumoCompensadoConv": 0,
+      "estornoConvecional": 0,
+      "composicaoEnergiaInjetadas": [
+        {
+          "cdc": 5036150,
+          "anoReferencia": 2025,
+          "mesReferencia": 8,
+          "saldoAnteriorConv": 30
+        },
+        {
+          "cdc": 5036150,
+          "anoReferencia": 2025,
+          "mesReferencia": 9,
+          "saldoAnteriorConv": 424
+        }
+      ],
+      "discriminacaoEnergiaInjetadas": [
+        {
+          "cdc": 5036150,
+          "anoReferencia": 2025,
+          "mesReferencia": 10,
+          "numUcMovimento": 4076540,
+          "consumoRecebidoOuTransferido": 1,
+          "consumoConvMovimentado": 392,
+          "consumoConvMovimentadoRecebidoOuTranferido": 392,
+          "consumoConvMovimentadoTransferidoPercentual": null,
+          "endereco": "AV DAS ITAUBAS",
+          "numeroImovel": "2237",
+          "uf": "MT",
+          "nomeMunicipio": "SINOP",
+          "bairro": "CENTRO",
+          "codigoEmpresaWeb": 6,
+          "digitoVerificador": 0
+        }
+      ],
+      "chavePrimaria": "5036150.2025.10"
+    }
+  ],
+  "errored": false
+}
+```
+
+**Response 200 - UC SALDO HERDADO (dados reais):**
+```json
+{
+  "infos": [
+    {
+      "cdc": 4859946,
+      "anoReferencia": 2025,
+      "mesReferencia": 12,
+      "saldoAnteriorConv": 46062,
+      "injetadoConv": 0,
+      "totalRecebidoRede": -491,
+      "consumoRecebidoConv": 0,
+      "consumoInjetadoCompensadoConv": 0,
+      "consumoRecebidoCompensadoConv": 0,
+      "saldoCompensadoAnteriorConv": 491,
+      "consumoTransferidoConv": 0,
+      "consumoCompensadoConv": 0,
+      "estornoConvecional": 0,
+      "composicaoEnergiaInjetadas": [
+        {
+          "cdc": 4859946,
+          "anoReferencia": 2025,
+          "mesReferencia": 1,
+          "saldoAnteriorConv": 46062
+        }
+      ],
+      "discriminacaoEnergiaInjetadas": [],
+      "chavePrimaria": "4859946.2025.12"
+    }
+  ],
+  "errored": false
+}
+```
+
+**Campos do `/gd/details` - Explicação Detalhada:**
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `saldoAnteriorConv` | int | Saldo de créditos no início do mês |
+| `injetadoConv` | int | kWh gerados (injetados na rede) no mês - só > 0 para GERADORAS |
+| `consumoInjetadoCompensadoConv` | int | kWh compensados na própria UC geradora |
+| `consumoTransferidoConv` | int | kWh transferidos para beneficiárias - só > 0 para GERADORAS |
+| `consumoRecebidoConv` | int | kWh recebidos de uma geradora - só > 0 para BENEFICIÁRIAS |
+| `totalRecebidoRede` | int | Saldo líquido (positivo = recebeu, negativo = consumiu do saldo) |
+| `saldoCompensadoAnteriorConv` | int | kWh compensados do saldo anterior |
+| `composicaoEnergiaInjetadas` | array | **Origem dos créditos por mês (para cálculo de expiração 60 meses)** |
+| `discriminacaoEnergiaInjetadas` | array | **Detalhes das transferências entre UCs** |
+
+**Campos de `discriminacaoEnergiaInjetadas[]`:**
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `numUcMovimento` | int | CDC da outra UC envolvida na transferência |
+| `consumoRecebidoOuTransferido` | int | **-1 = ENVIOU** (geradora), **1 = RECEBEU** (beneficiária) |
+| `consumoConvMovimentado` | int | Quantidade em kWh movimentada |
+| `consumoConvMovimentadoTransferidoPercentual` | int/null | Percentual da transferência (só para geradora) |
+
+---
+
+### Estratégia de Identificação de GD
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    FLUXO DE IDENTIFICAÇÃO                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. Verificar campo `geracaoDistribuida` em /ucs                │
+│     │                                                           │
+│     ├─► geracaoDistribuida == numeroUc                          │
+│     │   └─► UC é GERADORA ✓                                     │
+│     │       └─► Chamar /gd/info para listaBeneficiarias         │
+│     │                                                           │
+│     └─► geracaoDistribuida == null                              │
+│         │                                                       │
+│         └─► 2. Chamar /gd/details                               │
+│             │                                                   │
+│             ├─► consumoRecebidoConv > 0                         │
+│             │   └─► UC é BENEFICIÁRIA ATIVA ✓                   │
+│             │       (discriminacaoEnergiaInjetadas.             │
+│             │        numUcMovimento = geradora)                 │
+│             │                                                   │
+│             ├─► saldoAnteriorConv > 0 e consumoRecebidoConv = 0 │
+│             │   └─► UC tem SALDO HERDADO ✓                      │
+│             │                                                   │
+│             └─► Sem dados ou zerado                             │
+│                 └─► UC SEM GD ✓                                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Expiração de Créditos (Lei 14.300/2022)
+
+Os créditos expiram em **60 meses** a partir da injeção na rede.
+
+O campo `composicaoEnergiaInjetadas[]` mostra a origem dos créditos por mês/ano:
+
+```json
+"composicaoEnergiaInjetadas": [
+  {
+    "cdc": 2711600,
+    "anoReferencia": 2023,
+    "mesReferencia": 11,
+    "saldoAnteriorConv": 230
+  },
+  {
+    "cdc": 2711600,
+    "anoReferencia": 2024,
+    "mesReferencia": 5,
+    "saldoAnteriorConv": 307
+  }
+]
+```
+
+**Cálculo da expiração:**
+- Crédito de 11/2023: expira em 11/2028
+- Crédito de 05/2024: expira em 05/2029
+- Créditos mais antigos são consumidos primeiro (FIFO)
 
 ---
 
@@ -557,8 +967,8 @@ Calcula economia mensal comparando conta atual vs Midwest.
 **Retorno:**
 ```python
 {
-    "custo_energisa_consumo": 280.00,      # Apenas consumo × tarifa
-    "valor_midwest_consumo": 196.00,       # Consumo × tarifa com 30% desconto
+    "custo_energisa_consumo": 280.00,
+    "valor_midwest_consumo": 196.00,
     "economia": {
         "mensal": 84.00,
         "anual": 1008.00,
@@ -726,7 +1136,7 @@ Verifica se existe sessão válida.
 ```
 backend/energisa/
 ├── __init__.py          # Exports
-├── router.py            # Endpoints FastAPI (este arquivo)
+├── router.py            # Endpoints FastAPI
 ├── service.py           # EnergisaService - lógica de integração
 ├── session_manager.py   # Gerenciamento de sessões
 ├── calculadora.py       # Cálculos de economia
@@ -795,5 +1205,5 @@ POST /energisa/faturas/pdf
 
 ---
 
-*Documentação gerada automaticamente pelo Claude Code*
-*Última atualização: Dezembro 2024*
+*Documentação atualizada com dados reais da API Energisa*
+*Última atualização: Janeiro 2026*

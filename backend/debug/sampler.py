@@ -27,6 +27,9 @@ class EnergisaSampler:
         "gd_geradora_monofasico",
         "gd_geradora_bifasico",
         "gd_geradora_trifasico",
+        "gd_saldo_herdado_monofasico",
+        "gd_saldo_herdado_bifasico",
+        "gd_saldo_herdado_trifasico",
     ]
     
     def __init__(self, cpf: str):
@@ -35,38 +38,54 @@ class EnergisaSampler:
         self.amostras: Dict[str, Any] = {}
         self.erros: List[str] = []
         
-    def _classificar_uc(self, uc: dict, uc_info: Optional[dict], gd_info_raw: Optional[dict] = None) -> str:
+    def _classificar_uc(self, uc: dict, uc_info: Optional[dict], gd_details: Optional[dict] = None) -> str:
         """
         Classifica uma UC baseado em suas características.
+        
+        Estratégia de identificação de GD (conforme documentação API_ENERGISA.md):
+        
+        1. geracaoDistribuida == numeroUc → UC é GERADORA (100% confiável)
+        
+        2. geracaoDistribuida == null → Verificar via /gd/details:
+           - consumoRecebidoConv > 0 → BENEFICIÁRIA ATIVA
+           - saldoAnteriorConv > 0 e consumoRecebidoConv = 0 → SALDO HERDADO
+           - Sem dados ou zerado → SEM GD
+        
+        Args:
+            uc: Dados da UC
+            uc_info: Info detalhada da UC (para tipo de ligação)
+            gd_details: Detalhes de GD da UC (para identificar beneficiárias)
         
         Returns:
             String identificando a categoria (ex: "gd_beneficiaria_bifasico")
         """
-        # Determina tipo de GD - verifica tanto no uc quanto no gd_info_raw
-        is_gd = uc.get("isGD", False)
-        gd_info = uc.get("gdInfo", {})
+        tipo_gd = "sem_gd"
         
-        # Se tiver gd_info_raw, pega os dados de lá (mais confiável)
-        if gd_info_raw and not gd_info_raw.get('errored'):
-            infos = gd_info_raw.get('infos', {})
-            objeto = infos.get('objeto', {})
-            is_geradora = objeto.get('ucGeradora', False)
-            is_beneficiaria = objeto.get('ucBeneficiaria', False)
-            
-            if is_geradora:
-                tipo_gd = "gd_geradora"
-            elif is_beneficiaria:
-                tipo_gd = "gd_beneficiaria"
-            else:
-                tipo_gd = "sem_gd"
-        elif not is_gd:
-            tipo_gd = "sem_gd"
-        elif gd_info and gd_info.get("ucGeradora"):
+        numero_uc = uc.get("numeroUc")
+        geracao_distribuida = uc.get("geracaoDistribuida")
+        
+        # CASO 1: É GERADORA
+        if geracao_distribuida is not None and geracao_distribuida == numero_uc:
             tipo_gd = "gd_geradora"
-        elif gd_info and gd_info.get("ucBeneficiaria"):
-            tipo_gd = "gd_beneficiaria"
-        else:
-            tipo_gd = "sem_gd"
+        
+        # CASO 2: geracaoDistribuida == null → Verificar via gd_details
+        elif geracao_distribuida is None and gd_details:
+            if not gd_details.get("errored"):
+                infos = gd_details.get("infos", [])
+                
+                if infos and len(infos) > 0:
+                    ultimo_mes = infos[0]
+                    
+                    consumo_recebido = ultimo_mes.get("consumoRecebidoConv", 0) or 0
+                    saldo_anterior = ultimo_mes.get("saldoAnteriorConv", 0) or 0
+                    
+                    # BENEFICIÁRIA ATIVA: consumoRecebidoConv > 0
+                    if consumo_recebido > 0:
+                        tipo_gd = "gd_beneficiaria"
+                    
+                    # SALDO HERDADO: saldoAnteriorConv > 0 mas consumoRecebidoConv = 0
+                    elif saldo_anterior > 0 and consumo_recebido == 0:
+                        tipo_gd = "gd_saldo_herdado"
         
         # Determina tipo de ligação
         tipo_ligacao = "bifasico"  # default
@@ -214,12 +233,19 @@ class EnergisaSampler:
         categorias_preenchidas = set()
         ucs_por_categoria: Dict[str, List[dict]] = {}
         
-        print(f"   🔍 Classificando {len(todas_ucs)} UCs...")
+        print(f"   📊 Classificando todas as UCs...")
+        
+        geradoras_count = 0
+        beneficiarias_count = 0
+        saldo_herdado_count = 0
         
         for idx, uc in enumerate(todas_ucs):
+            numero_uc = uc.get("numeroUc")
+            geracao_distribuida = uc.get("geracaoDistribuida")
+            
             # Pega UC info para classificar tipo de ligação
             uc_data = {
-                "cdc": uc.get("numeroUc"),
+                "cdc": numero_uc,
                 "digitoVerificadorCdc": uc.get("digitoVerificador"),
                 "codigoEmpresaWeb": uc.get("codigoEmpresaWeb", 6)
             }
@@ -229,28 +255,49 @@ class EnergisaSampler:
             except:
                 uc_info = None
             
-            # Busca GD info para classificação correta
-            try:
-                gd_info_raw = self.service.get_gd_info(uc_data)
-            except:
-                gd_info_raw = None
+            # Se é geradora, não precisa chamar gd_details
+            gd_details = None
+            if geracao_distribuida is not None and geracao_distribuida == numero_uc:
+                geradoras_count += 1
+            # Se geracaoDistribuida == null, chama gd_details para classificar
+            elif geracao_distribuida is None:
+                try:
+                    gd_details = self.service.get_gd_details(uc_data)
+                    
+                    # Conta tipo de GD identificado
+                    if gd_details and not gd_details.get("errored"):
+                        infos = gd_details.get("infos", [])
+                        if infos and len(infos) > 0:
+                            ultimo_mes = infos[0]
+                            consumo_recebido = ultimo_mes.get("consumoRecebidoConv", 0) or 0
+                            saldo_anterior = ultimo_mes.get("saldoAnteriorConv", 0) or 0
+                            
+                            if consumo_recebido > 0:
+                                beneficiarias_count += 1
+                            elif saldo_anterior > 0 and consumo_recebido == 0:
+                                saldo_herdado_count += 1
+                except Exception as e:
+                    print(f"      ⚠️ Erro ao buscar gd_details da UC {numero_uc}: {e}")
             
-            categoria = self._classificar_uc(uc, uc_info, gd_info_raw)
+            # Classificação usando gd_details
+            categoria = self._classificar_uc(uc, uc_info, gd_details)
             
             if categoria not in ucs_por_categoria:
                 ucs_por_categoria[categoria] = []
                 print(f"      ✅ Nova categoria encontrada: {categoria}")
             
-            # Armazena UC com seu info já capturado
+            # Armazena UC com seus dados já capturados
             ucs_por_categoria[categoria].append({
                 "uc": uc,
                 "uc_info": uc_info,
-                "gd_info_raw": gd_info_raw
+                "gd_details": gd_details
             })
             
             # Progress log a cada 20 UCs
             if (idx + 1) % 20 == 0:
                 print(f"      ... {idx + 1}/{len(todas_ucs)} UCs classificadas")
+        
+        print(f"   📋 Resultado: {geradoras_count} geradoras, {beneficiarias_count} beneficiárias, {saldo_herdado_count} saldo herdado")
         
         # 3. Captura dados completos de 1 UC de cada categoria
         for categoria, ucs_lista in ucs_por_categoria.items():
@@ -270,10 +317,6 @@ class EnergisaSampler:
                 if uc_selecionada.get("uc_info") and not dados_completos.get("uc_info"):
                     dados_completos["uc_info"] = self._sanitizar_dados(uc_selecionada["uc_info"])
                 
-                # Usa o gd_info já capturado na classificação
-                if uc_selecionada.get("gd_info_raw") and not dados_completos.get("gd_info"):
-                    dados_completos["gd_info"] = self._sanitizar_dados(uc_selecionada["gd_info_raw"])
-                
                 resultado_final["amostras"][categoria] = dados_completos
                 categorias_preenchidas.add(categoria)
                 resultado_final["amostras_capturadas"] += 1
@@ -281,7 +324,7 @@ class EnergisaSampler:
             except Exception as e:
                 resultado_final["erros_globais"].append(f"Erro capturando {categoria}: {str(e)}")
         
-        # 4. Resumo final
+        # 5. Resumo final
         resultado_final["categorias_encontradas"] = list(categorias_preenchidas)
         resultado_final["categorias_faltando"] = [
             cat for cat in self.CATEGORIAS_DESEJADAS 

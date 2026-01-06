@@ -1,0 +1,5 @@
+# Ignorar arquivos de amostras (contém dados reais)
+*.json
+
+# Manter o README
+!README.md

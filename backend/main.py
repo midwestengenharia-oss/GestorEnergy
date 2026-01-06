@@ -250,6 +250,9 @@ app.include_router(configuracoes_router, prefix="/api", tags=["Configurações"]
 from backend.sync.router import router as sync_router
 app.include_router(sync_router, prefix="/api/sync", tags=["Sync"])
 
+# Debug - Ferramentas de diagnóstico (apenas superadmin)
+from backend.debug.router import router as debug_router
+app.include_router(debug_router, prefix="/api/debug", tags=["Debug"])
 
 if __name__ == "__main__":
     import uvicorn

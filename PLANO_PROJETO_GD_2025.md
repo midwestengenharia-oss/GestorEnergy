@@ -327,6 +327,7 @@ Claude pode ler este documento para entender o contexto e continuar de onde para
 | 2025-12-16 | Correcoes exibicao faturas GD (7 itens) | Concluido |
 | 2025-12-16 | Reorganizacao arquivos de plano | Concluido |
 | 2025-12-16 | Correcoes adicionais mapeamento energia injetada | Concluido |
+| 2026-01-06 | Nova arquitetura de paginas do gestor (GD, Clientes, UCs) | Planejado |
 
 ### Detalhes Sessao 16/12/2025 (Manha)
 
@@ -360,6 +361,21 @@ Claude pode ler este documento para entender o contexto e continuar de onde para
 5. Corrigido label taxa minima vs energia excedente (GD1) - mostra label correto baseado no consumo liquido
 6. Economia GD agora calcula corretamente usando os novos helpers
 
+### Detalhes Sessao 06/01/2026
+
+**Nova Arquitetura de Paginas do Gestor:**
+- Criado plano `.claude/plans/arquitetura-paginas-gestor.md`
+- Substitui plano `unificacao-clientes-ucs.md`
+- Estrutura de 3 paginas:
+  1. **GD (Geracao Distribuida)** - Usinas + Beneficiarias + Avulsas em abas
+  2. **Clientes** - Relacionamento comercial (mantido)
+  3. **UCs Gerenciadas** - Todas as UCs (corrigido para mostrar todas)
+- Depreca pagina Beneficiarios (redundante com Clientes)
+- Corrige problema: UCsGestor mostrava apenas 8 de 19 UCs
+
 ---
 
-**Proximo passo sugerido:** Fase 1 (Verificacao Automatica de Impostos) ou Fase 2 (Envio de Email)
+**Proximo passo sugerido:**
+- Arquitetura de Paginas (`.claude/plans/arquitetura-paginas-gestor.md`)
+- OU Fase 1 (Verificacao Automatica de Impostos)
+- OU Fase 2 (Envio de Email)

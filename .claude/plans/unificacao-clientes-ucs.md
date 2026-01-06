@@ -1,5 +1,11 @@
 # Plano: Unificação Clientes/Beneficiários e Melhorias UCs
 
+> **STATUS: SUBSTITUÍDO** ⚠️
+> Este plano foi substituído por `arquitetura-paginas-gestor.md`
+> Data: 2026-01-06
+
+---
+
 ## Contexto
 
 Atualmente existem 3 páginas com sobreposição:

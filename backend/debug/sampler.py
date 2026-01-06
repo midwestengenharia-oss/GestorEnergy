@@ -35,23 +35,38 @@ class EnergisaSampler:
         self.amostras: Dict[str, Any] = {}
         self.erros: List[str] = []
         
-    def _classificar_uc(self, uc: dict, uc_info: Optional[dict]) -> str:
+    def _classificar_uc(self, uc: dict, uc_info: Optional[dict], gd_info_raw: Optional[dict] = None) -> str:
         """
         Classifica uma UC baseado em suas características.
         
         Returns:
             String identificando a categoria (ex: "gd_beneficiaria_bifasico")
         """
-        # Determina tipo de GD
+        # Determina tipo de GD - verifica tanto no uc quanto no gd_info_raw
         is_gd = uc.get("isGD", False)
         gd_info = uc.get("gdInfo", {})
         
-        if not is_gd:
+        # Se tiver gd_info_raw, pega os dados de lá (mais confiável)
+        if gd_info_raw and not gd_info_raw.get('errored'):
+            infos = gd_info_raw.get('infos', {})
+            objeto = infos.get('objeto', {})
+            is_geradora = objeto.get('ucGeradora', False)
+            is_beneficiaria = objeto.get('ucBeneficiaria', False)
+            
+            if is_geradora:
+                tipo_gd = "gd_geradora"
+            elif is_beneficiaria:
+                tipo_gd = "gd_beneficiaria"
+            else:
+                tipo_gd = "sem_gd"
+        elif not is_gd:
             tipo_gd = "sem_gd"
         elif gd_info and gd_info.get("ucGeradora"):
             tipo_gd = "gd_geradora"
-        else:
+        elif gd_info and gd_info.get("ucBeneficiaria"):
             tipo_gd = "gd_beneficiaria"
+        else:
+            tipo_gd = "sem_gd"
         
         # Determina tipo de ligação
         tipo_ligacao = "bifasico"  # default
@@ -199,7 +214,9 @@ class EnergisaSampler:
         categorias_preenchidas = set()
         ucs_por_categoria: Dict[str, List[dict]] = {}
         
-        for uc in todas_ucs:
+        print(f"   🔍 Classificando {len(todas_ucs)} UCs...")
+        
+        for idx, uc in enumerate(todas_ucs):
             # Pega UC info para classificar tipo de ligação
             uc_data = {
                 "cdc": uc.get("numeroUc"),
@@ -212,16 +229,28 @@ class EnergisaSampler:
             except:
                 uc_info = None
             
-            categoria = self._classificar_uc(uc, uc_info)
+            # Busca GD info para classificação correta
+            try:
+                gd_info_raw = self.service.get_gd_info(uc_data)
+            except:
+                gd_info_raw = None
+            
+            categoria = self._classificar_uc(uc, uc_info, gd_info_raw)
             
             if categoria not in ucs_por_categoria:
                 ucs_por_categoria[categoria] = []
+                print(f"      ✅ Nova categoria encontrada: {categoria}")
             
             # Armazena UC com seu info já capturado
             ucs_por_categoria[categoria].append({
                 "uc": uc,
-                "uc_info": uc_info
+                "uc_info": uc_info,
+                "gd_info_raw": gd_info_raw
             })
+            
+            # Progress log a cada 20 UCs
+            if (idx + 1) % 20 == 0:
+                print(f"      ... {idx + 1}/{len(todas_ucs)} UCs classificadas")
         
         # 3. Captura dados completos de 1 UC de cada categoria
         for categoria, ucs_lista in ucs_por_categoria.items():
@@ -236,9 +265,14 @@ class EnergisaSampler:
             
             try:
                 dados_completos = self._capturar_dados_uc(uc)
+                
                 # Usa o uc_info já capturado na classificação
                 if uc_selecionada.get("uc_info") and not dados_completos.get("uc_info"):
                     dados_completos["uc_info"] = self._sanitizar_dados(uc_selecionada["uc_info"])
+                
+                # Usa o gd_info já capturado na classificação
+                if uc_selecionada.get("gd_info_raw") and not dados_completos.get("gd_info"):
+                    dados_completos["gd_info"] = self._sanitizar_dados(uc_selecionada["gd_info_raw"])
                 
                 resultado_final["amostras"][categoria] = dados_completos
                 categorias_preenchidas.add(categoria)

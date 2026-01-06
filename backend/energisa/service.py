@@ -495,14 +495,22 @@ class EnergisaService:
 
                 if gd_info and not gd_info.get('errored'):
                     infos = gd_info.get('infos', {})
+                    # Os dados de GD estão dentro de 'objeto'
+                    objeto = infos.get('objeto', {})
+                    
                     # Verifica se possui GD ativa
-                    if infos.get('possuiGD') or infos.get('ucGeradora'):
+                    is_geradora = objeto.get('ucGeradora', False)
+                    is_beneficiaria = objeto.get('ucBeneficiaria', False)
+                    
+                    if is_geradora or is_beneficiaria:
                         uc_copia['isGD'] = True
                         uc_copia['gdInfo'] = {
-                            "possuiGD": infos.get('possuiGD', False),
-                            "ucGeradora": infos.get('ucGeradora', False),
-                            "tipoGD": infos.get('tipoGD'),
-                            "percentualCompensacao": infos.get('percentualCompensacao')
+                            "possuiGD": is_geradora or is_beneficiaria,
+                            "ucGeradora": is_geradora,
+                            "ucBeneficiaria": is_beneficiaria,
+                            "tipoGD": objeto.get('tipoCompartilhamento'),
+                            "tipoGeracao": objeto.get('tipoGeracao'),
+                            "percentualCompensacao": objeto.get('percentualCompensacao')
                         }
 
                         # Adiciona badge de GD

@@ -276,7 +276,7 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
         page = context.new_page()
 
         print("   [Web] Acessando pagina de login...")
-        page.goto("https://servicos.energisa.com.br/login", wait_until="networkidle", timeout=60000)
+        page.goto("https://servicos.energisa.com.br/login", wait_until="domcontentloaded", timeout=60000)
 
         print(f"   [Debug] URL apos goto: {page.url}")
 

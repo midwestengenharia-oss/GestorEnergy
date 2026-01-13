@@ -111,23 +111,15 @@ class PublicSimulationSms(BaseModel):
 def _has_display_available() -> bool:
     """Verifica se há um display X disponível (real ou xvfb)"""
     import os
-    import subprocess
 
-    # Verifica variável DISPLAY
+    # Se DISPLAY está definido, assume que xvfb está rodando
+    # O Dockerfile configura DISPLAY=:99 e inicia xvfb automaticamente
     display = os.environ.get('DISPLAY')
-    if not display:
-        return False
+    if display:
+        print(f"   [Display] DISPLAY={display} detectado")
+        return True
 
-    # Tenta verificar se o display está acessível
-    try:
-        result = subprocess.run(
-            ['xdpyinfo'],
-            capture_output=True,
-            timeout=2
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+    return False
 
 
 def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Queue):

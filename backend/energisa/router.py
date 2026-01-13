@@ -111,23 +111,15 @@ class PublicSimulationSms(BaseModel):
 def _has_display_available() -> bool:
     """Verifica se há um display X disponível (real ou xvfb)"""
     import os
-    import subprocess
 
-    # Verifica variável DISPLAY
+    # Se DISPLAY está definido, assume que xvfb está rodando
+    # O Dockerfile configura DISPLAY=:99 e inicia xvfb automaticamente
     display = os.environ.get('DISPLAY')
-    if not display:
-        return False
+    if display:
+        print(f"   [Display] DISPLAY={display} detectado")
+        return True
 
-    # Tenta verificar se o display está acessível
-    try:
-        result = subprocess.run(
-            ['xdpyinfo'],
-            capture_output=True,
-            timeout=2
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+    return False
 
 
 def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Queue):
@@ -146,17 +138,33 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
 
         playwright_instance = sync_playwright().start()
 
-        args = [
-            "--no-sandbox", "--disable-infobars", "--start-maximized",
-            "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", "--disable-gpu"
-        ]
-
         # Detecta automaticamente se há display disponível
         # Se houver xvfb/X server, usa headed para melhor bypass do Akamai
         # Caso contrário, usa headless como fallback
         use_headless = not _has_display_available()
+
+        # Argumentos do Chrome para parecer mais humano
+        args = [
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-blink-features=AutomationControlled",
+            "--disable-infobars",
+            "--disable-gpu",
+            "--window-size=1280,1024",
+            "--start-maximized",
+            # Argumentos adicionais para bypass de detecção
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-site-isolation-trials",
+            "--disable-web-security",
+            "--allow-running-insecure-content",
+        ]
+
         if use_headless:
             print("   [Browser] Modo headless (sem display X disponível)")
+            print("   [WARN] Modo headless pode ser bloqueado pelo Akamai!")
+            print("   [WARN] Para melhor funcionamento, instale xvfb: apt-get install xvfb")
+            # Usa o novo headless do Chrome que é mais difícil de detectar
+            args.append("--headless=new")
         else:
             print("   [Browser] Modo headed (display X detectado)")
 
@@ -174,7 +182,19 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
             locale='pt-BR',
             user_agent=user_agent,
             java_script_enabled=True,
-            bypass_csp=True
+            bypass_csp=True,
+            extra_http_headers={
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Cache-Control': 'max-age=0',
+            }
         )
 
         # Script stealth mais completo para bypass de detecção
@@ -192,9 +212,17 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
                 app: {}
             };
 
-            // Plugins
+            // Plugins - simula plugins reais
             Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
+                get: () => {
+                    const plugins = [
+                        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+                        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+                        { name: 'Native Client', filename: 'internal-nacl-plugin' }
+                    ];
+                    plugins.length = 3;
+                    return plugins;
+                }
             });
 
             // Languages
@@ -207,6 +235,26 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
                 get: () => 'Win32'
             });
 
+            // Hardware concurrency
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 8
+            });
+
+            // Device memory
+            Object.defineProperty(navigator, 'deviceMemory', {
+                get: () => 8
+            });
+
+            // Connection
+            Object.defineProperty(navigator, 'connection', {
+                get: () => ({
+                    effectiveType: '4g',
+                    rtt: 50,
+                    downlink: 10,
+                    saveData: false
+                })
+            });
+
             // Permissions
             const originalQuery = window.navigator.permissions.query;
             window.navigator.permissions.query = (parameters) => (
@@ -214,6 +262,14 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
                     Promise.resolve({ state: Notification.permission }) :
                     originalQuery(parameters)
             );
+
+            // WebGL vendor/renderer
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                if (parameter === 37445) return 'Intel Inc.';
+                if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+                return getParameter.call(this, parameter);
+            };
         }
         """)
 
@@ -223,6 +279,20 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
         page.goto("https://servicos.energisa.com.br/login", wait_until="networkidle", timeout=60000)
 
         print(f"   [Debug] URL apos goto: {page.url}")
+
+        # Verifica bloqueio Akamai imediatamente após carregar
+        html_inicial = page.content()
+        if "Access Denied" in html_inicial or len(html_inicial) < 500:
+            print("   [ERROR] Bloqueio Akamai detectado!")
+            print(f"   [ERROR] Tamanho do HTML: {len(html_inicial)} chars")
+            if use_headless:
+                raise Exception(
+                    "Acesso bloqueado pelo Akamai em modo headless. "
+                    "O servidor precisa de xvfb instalado para usar modo headed. "
+                    "Execute: apt-get install xvfb && Xvfb :99 -screen 0 1280x1024x24 & export DISPLAY=:99"
+                )
+            else:
+                raise Exception("Acesso bloqueado pelo Akamai. O IP pode estar bloqueado temporariamente.")
 
         # Validação Akamai - tempo aumentado para headless
         print("   [Security] Aguardando validacao de seguranca...")

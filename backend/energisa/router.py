@@ -166,26 +166,70 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
             ignore_default_args=["--enable-automation"]
         )
 
-        context = browser.new_context(viewport={'width': 1280, 'height': 1024}, locale='pt-BR')
+        # User-agent realista para evitar detecção
+        user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+        context = browser.new_context(
+            viewport={'width': 1280, 'height': 1024},
+            locale='pt-BR',
+            user_agent=user_agent,
+            java_script_enabled=True,
+            bypass_csp=True
+        )
+
+        # Script stealth mais completo para bypass de detecção
         context.add_init_script("""
         () => {
+            // Remove webdriver flag
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            window.chrome = { runtime: {} };
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            delete navigator.__proto__.webdriver;
+
+            // Chrome runtime
+            window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {}
+            };
+
+            // Plugins
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5]
+            });
+
+            // Languages
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['pt-BR', 'pt', 'en-US', 'en']
+            });
+
+            // Platform
+            Object.defineProperty(navigator, 'platform', {
+                get: () => 'Win32'
+            });
+
+            // Permissions
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
         }
         """)
 
         page = context.new_page()
 
         print("   [Web] Acessando pagina de login...")
-        page.goto("https://servicos.energisa.com.br/login", wait_until="domcontentloaded", timeout=60000)
+        page.goto("https://servicos.energisa.com.br/login", wait_until="networkidle", timeout=60000)
 
-        # Validação Akamai
+        print(f"   [Debug] URL apos goto: {page.url}")
+
+        # Validação Akamai - tempo aumentado para headless
         print("   [Security] Aguardando validacao de seguranca...")
         start_time = time.time()
+        akamai_timeout = 30 if use_headless else 20
 
-        while time.time() - start_time < 20:
+        while time.time() - start_time < akamai_timeout:
             cookies = context.cookies()
             abck = next((c['value'] for c in cookies if c['name'] == '_abck'), None)
 
@@ -193,28 +237,63 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
                 print(f"   [OK] Cookie de seguranca validado!")
                 break
 
+            # Simula movimento humano
             x, y = random.randint(100, 800), random.randint(100, 600)
-            page.mouse.move(x, y, steps=10)
-            if random.random() > 0.8:
+            page.mouse.move(x, y, steps=random.randint(5, 15))
+            time.sleep(random.uniform(0.3, 0.8))
+
+            if random.random() > 0.7:
                 page.mouse.click(x, y)
-            time.sleep(1.0)
+                time.sleep(random.uniform(0.2, 0.5))
+
+            # Scroll ocasional
+            if random.random() > 0.9:
+                page.mouse.wheel(0, random.randint(-100, 100))
+
+            time.sleep(random.uniform(0.5, 1.5))
+
+        # Verifica se foi bloqueado ou redirecionado
+        current_url = page.url
+        print(f"   [Debug] URL atual: {current_url}")
+
+        if "challenge" in current_url.lower() or "captcha" in current_url.lower():
+            print("   [WARN] Detectada pagina de challenge/captcha")
 
         # Aguarda a página carregar completamente
         print("   [Page] Aguardando carregamento completo da pagina...")
-        time.sleep(3)
+        time.sleep(5 if use_headless else 3)
+
+        # Aguarda que o React/SPA renderize
+        try:
+            page.wait_for_load_state("networkidle", timeout=10000)
+        except:
+            pass
 
         # Tenta aguardar por um input na página
         try:
-            page.wait_for_selector('input', timeout=15000)
+            page.wait_for_selector('input', timeout=20000)
             print("   [Page] Input encontrado na pagina")
         except Exception as e:
             print(f"   [WARN] Timeout esperando input: {e}")
             # Tira screenshot para debug
             try:
-                page.screenshot(path="/app/backend/sessions/page_state.png")
-                print("   [Debug] Screenshot salvo em sessions/page_state.png")
+                page.screenshot(path="/tmp/page_state.png")
+                print("   [Debug] Screenshot salvo em /tmp/page_state.png")
             except:
                 pass
+
+        # Log de debug do conteúdo da página
+        try:
+            html_content = page.content()
+            print(f"   [Debug] Tamanho do HTML: {len(html_content)} chars")
+
+            # Verifica se há indícios de bloqueio
+            if "Access Denied" in html_content or "blocked" in html_content.lower():
+                print("   [WARN] Possível bloqueio detectado no conteúdo")
+            if "captcha" in html_content.lower():
+                print("   [WARN] Captcha detectado no conteúdo")
+        except:
+            pass
 
         # Preenchimento CPF - múltiplos seletores para compatibilidade
         cpf_selectors = [
@@ -228,12 +307,18 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
             'input[data-testid*="cpf"]',
             'input[aria-label*="CPF"]',
             'input[aria-label*="cpf"]',
+            'input[formcontrolname="cpf"]',
+            'input[id*="cpf"]',
+            'input[class*="cpf"]',
+            'input[autocomplete="username"]',
         ]
 
         cpf_input_found = False
+
+        # Primeira tentativa: seletores específicos
         for selector in cpf_selectors:
             try:
-                if page.is_visible(selector, timeout=2000):
+                if page.is_visible(selector, timeout=1500):
                     page.click(selector)
                     cpf_input_found = True
                     print(f"   [CPF] Campo encontrado com seletor: {selector}")
@@ -241,21 +326,53 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
             except:
                 continue
 
+        # Segunda tentativa: busca dentro de iframes
         if not cpf_input_found:
-            # Tenta encontrar qualquer input visível na página
+            print("   [CPF] Verificando iframes...")
+            try:
+                frames = page.frames
+                print(f"   [CPF] Encontrados {len(frames)} frames")
+                for frame in frames:
+                    if frame == page.main_frame:
+                        continue
+                    try:
+                        for selector in cpf_selectors[:5]:  # Testa os principais
+                            if frame.is_visible(selector, timeout=1000):
+                                frame.click(selector)
+                                cpf_input_found = True
+                                print(f"   [CPF] Campo encontrado em iframe com: {selector}")
+                                page = frame  # Usa o frame para as próximas operações
+                                break
+                        if cpf_input_found:
+                            break
+                    except:
+                        continue
+            except Exception as e:
+                print(f"   [CPF] Erro verificando iframes: {e}")
+
+        # Terceira tentativa: busca genérica
+        if not cpf_input_found:
             print("   [CPF] Tentando busca generica de inputs...")
             try:
                 time.sleep(2)
                 inputs = page.locator('input').all()
                 print(f"   [CPF] Encontrados {len(inputs)} inputs na pagina")
+
                 for idx, inp in enumerate(inputs):
                     try:
+                        # Log do input para debug
+                        attrs = inp.evaluate("el => ({ type: el.type, name: el.name, id: el.id, placeholder: el.placeholder })")
+                        print(f"   [CPF] Input {idx}: {attrs}")
+
                         if inp.is_visible():
-                            print(f"   [CPF] Input {idx} visivel, clicando...")
-                            inp.click()
-                            cpf_input_found = True
-                            print("   [CPF] Campo encontrado via busca generica")
-                            break
+                            # Prioriza inputs de texto/tel sem type password
+                            input_type = attrs.get('type', '')
+                            if input_type not in ['hidden', 'password', 'submit', 'button', 'checkbox', 'radio']:
+                                print(f"   [CPF] Input {idx} visivel, clicando...")
+                                inp.click()
+                                cpf_input_found = True
+                                print("   [CPF] Campo encontrado via busca generica")
+                                break
                     except Exception as inp_err:
                         print(f"   [CPF] Input {idx} erro: {inp_err}")
                         continue
@@ -264,12 +381,14 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
 
         if not cpf_input_found:
             try:
-                page.screenshot(path="/app/backend/sessions/cpf_not_found.png")
-                print("   [Debug] Screenshot salvo em sessions/cpf_not_found.png")
-                # Log do HTML da página para debug
+                page.screenshot(path="/tmp/cpf_not_found.png")
+                print("   [Debug] Screenshot salvo em /tmp/cpf_not_found.png")
                 html_content = page.content()
                 print(f"   [Debug] Tamanho do HTML: {len(html_content)} chars")
                 print(f"   [Debug] URL atual: {page.url}")
+
+                # Log dos primeiros 2000 chars do HTML para debug
+                print(f"   [Debug] HTML preview: {html_content[:2000]}")
             except Exception as e:
                 print(f"   [Debug] Erro ao salvar debug: {e}")
             raise Exception("Campo CPF não encontrado. O layout da Energisa pode ter mudado.")

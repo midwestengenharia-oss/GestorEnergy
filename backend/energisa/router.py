@@ -108,6 +108,28 @@ class PublicSimulationSms(BaseModel):
 # Worker Thread para Login
 # ========================
 
+def _has_display_available() -> bool:
+    """Verifica se há um display X disponível (real ou xvfb)"""
+    import os
+    import subprocess
+
+    # Verifica variável DISPLAY
+    display = os.environ.get('DISPLAY')
+    if not display:
+        return False
+
+    # Tenta verificar se o display está acessível
+    try:
+        result = subprocess.run(
+            ['xdpyinfo'],
+            capture_output=True,
+            timeout=2
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
 def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Queue):
     """Worker para processo de login com Playwright"""
     from playwright.sync_api import sync_playwright
@@ -129,8 +151,17 @@ def _login_worker_thread(cpf: str, cmd_queue: queue.Queue, result_queue: queue.Q
             "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", "--disable-gpu"
         ]
 
+        # Detecta automaticamente se há display disponível
+        # Se houver xvfb/X server, usa headed para melhor bypass do Akamai
+        # Caso contrário, usa headless como fallback
+        use_headless = not _has_display_available()
+        if use_headless:
+            print("   [Browser] Modo headless (sem display X disponível)")
+        else:
+            print("   [Browser] Modo headed (display X detectado)")
+
         browser = playwright_instance.chromium.launch(
-            headless=False,  # IMPORTANTE: False para bypass do Akamai (usa xvfb)
+            headless=use_headless,
             args=args,
             ignore_default_args=["--enable-automation"]
         )
